@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import axios from 'axios';
 import config from '../config';
+import { Platform } from 'react-native';
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
     color: '#000000',
     marginBottom: 4,
   },
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     marginBottom: 12,
-    fontSize: 14,
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
   },
   loginButton: {
     backgroundColor: '#000',
@@ -154,26 +155,27 @@ const styles = StyleSheet.create({
   },
   loginText: {
     color: '#ffffffff',
-    fontSize: 16,
+    fontSize: Platform.OS === 'ios' ? 16 : 12,
     fontWeight: '400',
   },
   forgotPassword: {
     color: '#000',
     marginTop: 12,
     textDecorationLine: 'underline',
+    fontSize: Platform.OS === 'ios' ? 15 : 12,
   },
   createAccountButton: {
     borderColor: '#000',
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingVertical:12 ,
     borderRadius: 25,
     width: '100%',
     alignItems: 'center',
-    marginTop:170,
+    marginTop: Platform.OS === 'ios' ? 170 : 155,
   },
   createText: {
     color: '#000',
-    fontSize: 15,
+    fontSize: Platform.OS === 'ios' ? 15 : 12,
   },
   bottomLogoContainer: {
     position: 'absolute',
@@ -181,12 +183,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoBottom: {
-    width: 80,
-    height: 80,
+    width: Platform.OS === 'ios' ? 80 : 70,
+    height: Platform.OS === 'ios' ? 80 : 70,
     resizeMode: 'contain',
   },
   message: {
+    fontSize: Platform.OS === 'ios' ? 15 : 12,
     color: '#A27571',
-    marginTop: 15,
+    marginTop: Platform.OS === 'ios' ? 15 : 7,
   },
 });

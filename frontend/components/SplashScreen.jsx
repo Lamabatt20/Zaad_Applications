@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Animated, TouchableOpacity } from 'react-native';
+import { Platform } from 'react-native';
 
 export default function SplashScreen({ navigation }) { 
   const logo1Opacity = useRef(new Animated.Value(1)).current;
@@ -52,6 +53,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#EBE1D7', justifyContent: 'center', alignItems: 'center' ,paddingHorizontal: 20},
   logo: { width: 410, height: 410, marginBottom: 10, marginRight: 55 },
   logo1: { width: 150, height: 150 },
-  subtitle: { fontSize: 18, color: '#A27571', textAlign: 'center' },
-  title: { fontWeight: 'bold', fontSize: 18 },
+  subtitle: { fontSize: Platform.OS === 'ios' ? 18 : 15, color: '#A27571', textAlign: 'center' },
+  title: { fontWeight: 'bold', fontSize: Platform.OS === 'ios' ? 18 : 15 },
 });
