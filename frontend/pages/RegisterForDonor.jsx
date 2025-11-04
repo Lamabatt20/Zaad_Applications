@@ -75,7 +75,7 @@ export default function RegisterForDonor({ navigation }) {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 30, paddingVertical: 20, alignItems: 'center', justifyContent: 'center' }}>
+    <ScrollView contentContainerStyle={{backgroundColor: '#EBE1D7', flexGrow: 1, paddingHorizontal: 30, paddingVertical: 70, alignItems: 'center', justifyContent: 'center' }}>
       <Image source={require('../assets/images/logo1.png')} style={styles.logoTop} />
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Username</Text>

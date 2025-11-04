@@ -35,7 +35,24 @@ async function ensureAddressColumn() {
 }
 
 
+
 ensureAddressColumn();
+async function ensureAssociationColumns() {
+  try {
+    const alterQuery = `
+      ALTER TABLE associations
+      ADD COLUMN IF NOT EXISTS description TEXT,
+      ADD COLUMN IF NOT EXISTS food BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS clothes BOOLEAN DEFAULT FALSE;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ Association columns verified/added successfully.');
+  } catch (error) {
+    console.error('❌ Error adding association columns:', error);
+  }
+}
+
+ensureAssociationColumns();
 async function changeAssociationAuthToText() {
   try {
     const alterQuery = `
@@ -238,7 +255,7 @@ app.post('/associations', upload.fields([
   { name: 'association_logo', maxCount: 1 },
   { name: 'association_authentication', maxCount: 1 }
 ]), async (req, res) => {
-  const { user_id, name } = req.body;
+  const { user_id, name, description, food, clothes } = req.body;
   try {
     const logoFile = req.files['association_logo'] ? req.files['association_logo'][0].filename : null;
     const authFile = req.files['association_authentication'] ? req.files['association_authentication'][0].filename : null;
@@ -247,9 +264,10 @@ app.post('/associations', upload.fields([
     const authPath = authFile ? `/uploads/${authFile}` : null;
 
     const result = await pool.query(
-      `INSERT INTO associations (user_id, name, association_authentication, association_logo)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [user_id, name, authPath, logoPath]
+      `INSERT INTO associations 
+        (user_id, name, association_authentication, association_logo, description, food, clothes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [user_id, name, authPath, logoPath, description, food === 'true', clothes === 'true']
     );
 
     res.json(result.rows[0]);
@@ -258,6 +276,7 @@ app.post('/associations', upload.fields([
     res.status(500).send('Server error');
   }
 });
+
 
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
