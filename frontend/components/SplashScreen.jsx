@@ -51,8 +51,8 @@ export default function SplashScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#EBE1D7', justifyContent: 'center', alignItems: 'center' ,paddingHorizontal: 20},
-  logo: { width: 410, height: 410, marginBottom: 10, marginRight: 55 },
+  logo: { width: 410, height: 100, marginBottom: 10, marginRight: 55 },
   logo1: { width: 150, height: 150 },
-  subtitle: { fontSize: Platform.OS === 'ios' ? 18 : 15, color: '#A27571', textAlign: 'center' },
+  subtitle: {fontWeight: 'bold', fontSize: Platform.OS === 'ios' ? 18 : 15, color: '#A27571', textAlign: 'center' },
   title: { fontWeight: 'bold', fontSize: Platform.OS === 'ios' ? 18 : 15 },
 });

@@ -1,10 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import SplashScreen from './components/SplashScreen';
 import LoginScreen from './pages/Login';
 import SelectUserType from './components/UserType';
+import RegisterForDonor from './pages/RegisterForDonor';
+import RegisterForAssociation from './pages/RegisterForAssociation';
+import ForgotPassword from './pages/ForgotPassword';
+
+
 
 const Stack = createNativeStackNavigator();
 
@@ -15,6 +20,9 @@ export default function App() {
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="UserType" component={SelectUserType} />
+        <Stack.Screen name="RegisterForDonor" component={RegisterForDonor} />
+        <Stack.Screen name="RegisterForAssociation" component={RegisterForAssociation} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
       </Stack.Navigator>
     </NavigationContainer>
   );
