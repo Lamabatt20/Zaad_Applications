@@ -12,8 +12,11 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import config from '../config';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function ForgotPassword({ navigation }) {
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -102,15 +105,25 @@ export default function ForgotPassword({ navigation }) {
           </View>
         )}
 
-        <Text style={styles.label}>New Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="new password"
-          placeholderTextColor="#555"
-          secureTextEntry
-          value={newPassword}
-          onChangeText={setNewPassword}
-        />
+       <Text style={styles.label}>New Password</Text>
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="new password"
+            placeholderTextColor="#555"
+            secureTextEntry={!showNewPassword}
+            value={newPassword}
+            onChangeText={setNewPassword}
+          />
+          <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
+            <MaterialIcons
+              name={showNewPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
+        </View>
+
         {errors.newPassword && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{errors.newPassword}</Text>
@@ -118,21 +131,33 @@ export default function ForgotPassword({ navigation }) {
           </View>
         )}
 
-        <Text style={styles.label}>Confirm New Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="confirm new password"
-          placeholderTextColor="#555"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
+
+       <Text style={styles.label}>Confirm New Password</Text>
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="confirm new password"
+            placeholderTextColor="#555"
+            secureTextEntry={!showConfirmPassword}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+          />
+          <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+            <MaterialIcons
+              name={showConfirmPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
+        </View>
+
         {errors.confirmPassword && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{errors.confirmPassword}</Text>
             <View style={styles.errorArrow} />
           </View>
         )}
+
 
         {errors.general && (
           <Text style={[styles.error, { alignSelf: 'flex-start' }]}>
@@ -226,4 +251,20 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'ios' ? 12 : 10,
     marginBottom: 6,
   },
+  passwordContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#000',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  marginBottom: 6,
+},
+inputPassword: {
+  flex: 1,
+  fontSize: Platform.OS === 'ios' ? 14 : 12,
+  paddingVertical: 10,
+  color: '#000',
+},
+
 });

@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import axios from 'axios';
 import config from '../config';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function RegisterForDonor({ navigation }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -87,20 +90,42 @@ export default function RegisterForDonor({ navigation }) {
         )}
 
         <Text style={styles.label}>Password</Text>
-        <TextInput style={styles.input} placeholder="password" value={password} onChangeText={setPassword} secureTextEntry />
-        {errors.password && (<View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errors.password}</Text>
-            <View style={styles.errorArrow} />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <MaterialIcons
+              name={showPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
         </View>
-        )}
+
 
         <Text style={styles.label}>Confirm Password</Text>
-        <TextInput style={styles.input} placeholder="confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
-        {errors.confirmPassword && (<View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-            <View style={styles.errorArrow} />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="confirm password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry={!showConfirmPassword}
+          />
+          <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+            <MaterialIcons
+              name={showConfirmPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
         </View>
-        )}
+
 
         <Text style={styles.label}>Full Name</Text>
         <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
@@ -222,5 +247,20 @@ errorArrow: {
   borderLeftColor: 'transparent',
   borderRightColor: 'transparent',
   borderBottomColor: 'red',
+},
+passwordContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#000',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  marginBottom: 6,
+},
+inputPassword: {
+  flex: 1,
+  fontSize: Platform.OS === 'ios' ? 14 : 12,
+  paddingVertical: 10,
+  color: '#000',
 },
 });

@@ -11,8 +11,11 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import config from '../config';
+import { MaterialIcons } from '@expo/vector-icons';
+
 
 export default function LoginScreen({ navigation }) {
+  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [usernameError, setUsernameError] = useState('');
@@ -96,13 +99,23 @@ export default function LoginScreen({ navigation }) {
         )}
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <MaterialIcons
+              name={showPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
+        </View>
+
         {passwordError !== '' && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{passwordError}</Text>
@@ -251,4 +264,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
   },
+  passwordContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#000',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  marginBottom: 6,
+},
+inputPassword: {
+  flex: 1,
+  fontSize: Platform.OS === 'ios' ? 14 : 12,
+  paddingVertical: 10,
+},
+
 });

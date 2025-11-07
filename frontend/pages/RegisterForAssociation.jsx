@@ -7,8 +7,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 export default function RegisterForAssociation({ navigation }) {
   const [step, setStep] = useState(1);
-
-  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -160,12 +160,35 @@ export default function RegisterForAssociation({ navigation }) {
           {errors.username && renderError(errors.username)}
 
           <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} placeholder="password" value={password} onChangeText={setPassword} secureTextEntry />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.inputPassword}
+              placeholder="password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color="gray" />
+            </TouchableOpacity>
+          </View>
           {errors.password && renderError(errors.password)}
 
           <Text style={styles.label}>Confirm Password</Text>
-          <TextInput style={styles.input} placeholder="confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.inputPassword}
+              placeholder="confirm password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showConfirmPassword}
+            />
+            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+              <MaterialIcons name={showConfirmPassword ? "visibility" : "visibility-off"} size={20} color="gray" />
+            </TouchableOpacity>
+          </View>
           {errors.confirmPassword && renderError(errors.confirmPassword)}
+
 
           <Text style={styles.label}>Full Name</Text>
           <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
@@ -256,4 +279,19 @@ const styles = StyleSheet.create({
   inputWithIcon: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#000', borderRadius: 6, paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 12 : 8, marginBottom: 6 },
   inputText: { fontSize: Platform.OS === 'ios' ? 14 : 12, color: '#000', flexShrink: 1 },
   checkbox: { width: 20, height: 20, borderWidth: 1, borderColor: '#000', borderRadius: 4 },
+  passwordContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#000',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  marginBottom: 6,
+},
+inputPassword: {
+  flex: 1,
+  paddingVertical: 8,
+  fontSize: Platform.OS === 'ios' ? 14 : 12,
+},
+
 });
