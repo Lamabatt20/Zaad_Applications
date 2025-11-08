@@ -9,13 +9,11 @@ import RegisterForAssociation from './pages/RegisterForAssociation';
 import ForgotPassword from './pages/ForgotPassword';
 
 
-import { LanguageProvider } from './context/LanguageContext';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <LanguageProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Splash" component={SplashScreen} />
@@ -26,6 +24,5 @@ export default function App() {
           <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
         </Stack.Navigator>
       </NavigationContainer>
-    </LanguageProvider>
   );
 }
