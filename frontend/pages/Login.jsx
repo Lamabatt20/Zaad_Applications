@@ -1,66 +1,88 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import axios from 'axios';
 import config from '../config';
-import { Platform } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+
 
 export default function LoginScreen({ navigation }) {
+  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-  if (!username || !password) {
-    setMessage('Please enter username and password');
-    return;
-  }
+  const validateFields = () => {
+    let valid = true;
+    setUsernameError('');
+    setPasswordError('');
+    setGeneralError('');
 
-  setLoading(true);
-  setMessage('');
-   const API = axios.create({
-  baseURL: config.API_URL,
-});
-
-  try {
-    const res = await API.post('/login', {
-      username,
-      password,
-    });
-
-    if (res.data.success) {
-      const role = res.data.role;
-      const name = res.data.username;
-
-      if (role === 'admin') {
-        setMessage(`Welcome Admin ${name}!`);
-      } else if (role === 'donor') {
-        setMessage(`Welcome Donor ${name}!`);
-      } else if (role === 'association') {
-        setMessage(`Welcome Association ${name}!`);
-      } else {
-        setMessage(`Welcome ${name}!`);
-      }
-    } else {
-      setMessage(res.data.message || 'Invalid username or password');
+    if (!username) {
+      setUsernameError('Username is required');
+      valid = false;
     }
-  } catch (error) {
-    console.error(error);
-    setMessage('Server error. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+    if (!password) {
+      setPasswordError('Password is required');
+      valid = false;
+    }
+
+    return valid;
+  };
+
+  const handleLogin = async () => {
+    if (!validateFields()) return;
+
+    setLoading(true);
+    setGeneralError('');
+    const API = axios.create({ baseURL: config.API_URL });
+
+    try {
+      const res = await API.post('/login', { username, password });
+
+      if (res.data.success) {
+        setUsernameError('');
+        setPasswordError('');
+      switch (res.data.role) {
+        case 'association':
+          //navigation.navigate('AssociationDashboard');
+          break;
+        case 'admin':
+          //navigation.navigate('AdminDashboard');
+          break;
+        case 'donor':
+          //navigation.navigate('DonorDashboard');
+          break;
+        default:
+          setGeneralError('Unknown role');
+      }
+      } 
+      else {
+        if (res.data.usernameIncorrect) setUsernameError('Username is incorrect');
+      if (res.data.passwordIncorrect) setPasswordError('Password is incorrect');
+      }
+    } catch (error) {
+
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      
-      <Image
-        source={require('../assets/images/logo3.png')}
-        style={styles.logoTop}
-      />
+      <Image source={require('../assets/images/logo3.png')} style={styles.logoTop} />
 
-      
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Username</Text>
         <TextInput
@@ -69,27 +91,55 @@ export default function LoginScreen({ navigation }) {
           value={username}
           onChangeText={setUsername}
         />
+        {usernameError !== '' && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{usernameError}</Text>
+            <View style={styles.errorArrow} />
+          </View>
+        )}
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.inputPassword}
+            placeholder="password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <MaterialIcons
+              name={showPassword ? 'visibility' : 'visibility-off'}
+              size={22}
+              color="gray"
+            />
+          </TouchableOpacity>
+        </View>
+
+        {passwordError !== '' && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{passwordError}</Text>
+            <View style={styles.errorArrow} />
+          </View>
+        )}
       </View>
 
-      
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.loginText}>Log in</Text>
-        )}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginText}>Log in</Text>}
       </TouchableOpacity>
 
-     
+      
+      {generalError !== '' && (
+        <Text
+          style={[
+            styles.generalErrorText,
+            { color: generalError.includes('successful') ? 'green' : 'red' },
+          ]}
+        >
+          {generalError}
+        </Text>
+      )}
+
       <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
         <Text style={styles.forgotPassword}>Forgot Password?</Text>
       </TouchableOpacity>
@@ -101,19 +151,13 @@ export default function LoginScreen({ navigation }) {
         <Text style={styles.createText}>Create new Account</Text>
       </TouchableOpacity>
 
-     
       <View style={styles.bottomLogoContainer}>
-        <Image
-          source={require('../assets/images/Z A A D.png')}
-          style={styles.logoBottom}
-        />
+        <Image source={require('../assets/images/Z A A D.png')} style={styles.logoBottom} />
       </View>
-
-      
-      {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -143,7 +187,7 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     borderRadius: 6,
     padding: 10,
-    marginBottom: 12,
+    marginBottom: 6,
     fontSize: Platform.OS === 'ios' ? 14 : 12,
   },
   loginButton: {
@@ -154,7 +198,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginText: {
-    color: '#ffffffff',
+    color: '#fff',
     fontSize: Platform.OS === 'ios' ? 16 : 12,
     fontWeight: '400',
   },
@@ -167,7 +211,7 @@ const styles = StyleSheet.create({
   createAccountButton: {
     borderColor: '#000',
     borderWidth: 1,
-    paddingVertical:12 ,
+    paddingVertical: 12,
     borderRadius: 25,
     width: '100%',
     alignItems: 'center',
@@ -187,9 +231,52 @@ const styles = StyleSheet.create({
     height: Platform.OS === 'ios' ? 80 : 70,
     resizeMode: 'contain',
   },
-  message: {
-    fontSize: Platform.OS === 'ios' ? 15 : 12,
-    color: '#A27571',
-    marginTop: Platform.OS === 'ios' ? 15 : 7,
+  errorContainer: {
+    backgroundColor: 'red',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    position: 'relative',
   },
+  errorText: {
+    color: '#fff',
+    fontSize: Platform.OS === 'ios' ? 12 : 10,
+  },
+  errorArrow: {
+    position: 'absolute',
+    top: -6,
+    left: 10,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderBottomWidth: 6,
+    borderStyle: 'solid',
+    backgroundColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'red',
+  },
+  generalErrorText: {
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  passwordContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderWidth: 1,
+  borderColor: '#000',
+  borderRadius: 6,
+  paddingHorizontal: 10,
+  marginBottom: 6,
+},
+inputPassword: {
+  flex: 1,
+  fontSize: Platform.OS === 'ios' ? 14 : 12,
+  paddingVertical: 10,
+},
+
 });

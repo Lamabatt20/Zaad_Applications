@@ -1,6 +1,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -18,6 +21,71 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
+async function ensureAddressColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE accounts
+      ADD COLUMN IF NOT EXISTS address VARCHAR(255);
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ Address column verified/added successfully in accounts table.');
+  } catch (error) {
+    console.error('❌ Error adding address column:', error);
+  }
+}
+
+
+
+ensureAddressColumn();
+async function ensureAssociationColumns() {
+  try {
+    const alterQuery = `
+      ALTER TABLE associations
+      ADD COLUMN IF NOT EXISTS description TEXT,
+      ADD COLUMN IF NOT EXISTS food BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS clothes BOOLEAN DEFAULT FALSE;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ Association columns verified/added successfully.');
+  } catch (error) {
+    console.error('❌ Error adding association columns:', error);
+  }
+}
+
+ensureAssociationColumns();
+async function changeAssociationAuthToText() {
+  try {
+    const alterQuery = `
+      ALTER TABLE associations
+      ALTER COLUMN association_authentication
+      TYPE TEXT
+      USING association_authentication::TEXT;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ association_authentication column changed from JSONB to TEXT successfully.');
+  } catch (error) {
+    console.error('❌ Error changing column type:', error);
+  }
+}
+
+changeAssociationAuthToText();
+
+const uploadDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + "-" + file.originalname;
+    cb(null, uniqueName);
+  },
+});
+
+const upload = multer({ storage });
 
 app.get('/accounts', async (req, res) => {
   try {
@@ -29,41 +97,43 @@ app.get('/accounts', async (req, res) => {
 });
 
 app.post('/accounts', async (req, res) => {
-  const { username, password, role, email, phone, full_name } = req.body;
-
+  const { username, password, role, email, phone, full_name, address } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const result = await pool.query(
-      `INSERT INTO accounts (username, password_hash, role, email, phone, full_name)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [username, hashedPassword, role, email, phone, full_name]
+      `INSERT INTO accounts (username, password_hash, role, email, phone, full_name, address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [username, hashedPassword, role, email, phone, full_name, address]
     );
-
     res.json({ success: true, account: result.rows[0] });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-
   try {
     const result = await pool.query('SELECT * FROM accounts WHERE username = $1', [username]);
-
+    let usernameIncorrect = false;
+    let passwordIncorrect = false;
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Username not found' });
+      usernameIncorrect = true;
     }
-
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
-
-    if (!match) {
-      return res.status(401).json({ success: false, message: 'Incorrect password' });
+    let user = result.rows[0];
+    if (!usernameIncorrect) {
+      const match = await bcrypt.compare(password, user.password_hash);
+      if (!match) {
+        passwordIncorrect = true;
+      }
     }
-
+    if (usernameIncorrect || passwordIncorrect) {
+      return res.json({
+        success: false,
+        usernameIncorrect,
+        passwordIncorrect
+      });
+    }
     res.json({
       success: true,
       role: user.role,
@@ -71,11 +141,40 @@ app.post('/login', async (req, res) => {
       username: user.username
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
+app.post('/reset-password', async (req, res) => {
+  const { usernameOrEmail, newPassword } = req.body;
+
+  if (!usernameOrEmail || !newPassword) {
+    return res.status(400).json({ success: false, message: "All fields are required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM accounts WHERE username = $1 OR email = $1`,
+      [usernameOrEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const user = result.rows[0];
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      `UPDATE accounts SET password_hash = $1 WHERE account_id = $2`,
+      [hashedPassword, user.account_id]
+    );
+
+    res.json({ success: true, message: "Password reset successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 app.get('/users', async (req, res) => {
   try {
@@ -93,12 +192,11 @@ app.post('/users', async (req, res) => {
       'INSERT INTO users (account_id) VALUES ($1) RETURNING *',
       [account_id]
     );
-    res.json(result.rows[0]);
+    res.json({ success: true, user: result.rows[0] });
   } catch (err) {
-    res.status(500).send('Server error');
+    res.status(500).json({ success: false, message: err.message });
   }
 });
-
 
 app.get('/admins', async (req, res) => {
   try {
@@ -122,7 +220,6 @@ app.post('/admins', async (req, res) => {
   }
 });
 
-
 app.get('/donors', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM donors');
@@ -145,7 +242,6 @@ app.post('/donors', async (req, res) => {
   }
 });
 
-
 app.get('/associations', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM associations');
@@ -155,20 +251,35 @@ app.get('/associations', async (req, res) => {
   }
 });
 
-app.post('/associations', async (req, res) => {
-  const { user_id, name, association_authentication, association_logo } = req.body;
+app.post('/associations', upload.fields([
+  { name: 'association_logo', maxCount: 1 },
+  { name: 'association_authentication', maxCount: 1 }
+]), async (req, res) => {
+  const { user_id, name, description, food, clothes } = req.body;
   try {
+    const logoFile = req.files['association_logo'] ? req.files['association_logo'][0].filename : null;
+    const authFile = req.files['association_authentication'] ? req.files['association_authentication'][0].filename : null;
+
+    const logoPath = logoFile ? `/uploads/${logoFile}` : null;
+    const authPath = authFile ? `/uploads/${authFile}` : null;
+
     const result = await pool.query(
-      `INSERT INTO associations (user_id, name, association_authentication, association_logo)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [user_id, name, association_authentication, association_logo]
+      `INSERT INTO associations 
+        (user_id, name, association_authentication, association_logo, description, food, clothes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [user_id, name, authPath, logoPath, description, food === 'true', clothes === 'true']
     );
+
     res.json(result.rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).send('Server error');
   }
 });
 
+
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.get('/donations', async (req, res) => {
   try {
@@ -179,20 +290,21 @@ app.get('/donations', async (req, res) => {
   }
 });
 
-app.post('/donations', async (req, res) => {
-  const { donor_id, donation_type, item_image, note, status } = req.body;
+app.post('/donations', upload.single("item_image"), async (req, res) => {
+  const { donor_id, donation_type, note, status } = req.body;
+  const file = req.file;
   try {
+    const imagePath = file ? `/uploads/${file.filename}` : null;
     const result = await pool.query(
       `INSERT INTO donations (donor_id, donation_type, item_image, note, status)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [donor_id, donation_type, item_image, note, status || 'pending']
+      [donor_id, donation_type, imagePath, note, status || 'pending']
     );
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).send('Server error');
   }
 });
-
 
 app.post('/food_donations', async (req, res) => {
   const { donation_id, is_perishable, food_type, expiration_date } = req.body;
@@ -208,7 +320,6 @@ app.post('/food_donations', async (req, res) => {
   }
 });
 
-
 app.post('/clothes_donations', async (req, res) => {
   const { donation_id, clothes_type } = req.body;
   try {
@@ -222,7 +333,6 @@ app.post('/clothes_donations', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-
 
 app.get('/donation_history', async (req, res) => {
   try {
@@ -246,7 +356,6 @@ app.post('/donation_history', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-
 
 app.get('/delivery_persons', async (req, res) => {
   try {
@@ -294,7 +403,6 @@ app.post('/delivery', async (req, res) => {
   }
 });
 
-
 app.get('/feedbacks', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM feedbacks');
@@ -317,7 +425,6 @@ app.post('/feedbacks', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-
 
 app.get('/notifications', async (req, res) => {
   try {

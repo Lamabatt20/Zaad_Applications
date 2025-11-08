@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 
-export default function UserType() {
+export default function UserType({ navigation }) {
   return (
     <View style={styles.container}>
       <Image
@@ -14,22 +14,24 @@ export default function UserType() {
       <View style={styles.optionsContainer}>
         <TouchableOpacity
           style={styles.option}
-          
+          onPress={() => navigation.navigate('RegisterForDonor')}
         >
           <Image
             source={require('../assets/images/donor 1.png')} 
             style={styles.icon}
           />
           <Text style={styles.optionText}>Donor</Text>
+           
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.option}
-          
+          onPress={() => navigation.navigate('RegisterForAssociation')}
         >
           <Image
             source={require('../assets/images/ass.png')} 
             style={styles.icon}
+             
           />
           <Text style={styles.optionText}>Association</Text>
         </TouchableOpacity>
