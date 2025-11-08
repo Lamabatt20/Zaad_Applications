@@ -106,6 +106,11 @@ export default function RegisterForDonor({ navigation }) {
             />
           </TouchableOpacity>
         </View>
+        {errors.password && (<View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errors.password}</Text>
+            <View style={styles.errorArrow} />
+        </View>
+        )}
 
 
         <Text style={styles.label}>Confirm Password</Text>
@@ -125,7 +130,11 @@ export default function RegisterForDonor({ navigation }) {
             />
           </TouchableOpacity>
         </View>
-
+        {errors.confirmPassword && (<View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+            <View style={styles.errorArrow} />
+        </View>
+        )}
 
         <Text style={styles.label}>Full Name</Text>
         <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
