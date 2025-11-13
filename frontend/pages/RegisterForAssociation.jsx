@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityInd
 import axios from 'axios';
 import config from '../config';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function RegisterForAssociation({ navigation }) {
@@ -17,7 +18,6 @@ export default function RegisterForAssociation({ navigation }) {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
 
-  
   const [associationName, setAssociationName] = useState('');
   const [associationLogo, setAssociationLogo] = useState(null);
   const [associationAuth, setAssociationAuth] = useState(null);
@@ -60,14 +60,33 @@ export default function RegisterForAssociation({ navigation }) {
     return Object.keys(newErrors).length === 0;
   };
 
+  
   const pickFile = async (setFile) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
-    if (!result.canceled) {
-      setFile(result.assets[0]);
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = () => {
+        const file = input.files[0];
+        setFile(file); 
+      };
+      input.click();
+    } else {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+      if (!result.canceled) {
+        let asset = result.assets[0];
+        
+        if (Platform.OS === 'android' && asset.uri.startsWith('content://')) {
+          const fileUri = FileSystem.cacheDirectory + (asset.fileName || 'temp.jpg');
+          await FileSystem.copyAsync({ from: asset.uri, to: fileUri });
+          asset.uri = fileUri;
+        }
+        setFile(asset);
+      }
     }
   };
 
@@ -77,7 +96,6 @@ export default function RegisterForAssociation({ navigation }) {
     const API = axios.create({ baseURL: config.API_URL });
 
     try {
-      
       const accountRes = await API.post('/accounts', {
         username,
         password,
@@ -90,25 +108,31 @@ export default function RegisterForAssociation({ navigation }) {
       if (!accountRes.data.success) throw new Error(accountRes.data.message || 'Failed to create account');
       const accountId = accountRes.data.account.account_id;
 
-      
       const userRes = await API.post('/users', { account_id: accountId });
       if (!userRes.data.success || !userRes.data.user) throw new Error(userRes.data.message || 'Failed to create user');
       const userId = userRes.data.user.user_id;
 
-      
       const formData = new FormData();
       formData.append('user_id', userId);
       formData.append('name', associationName);
-      formData.append('association_logo', {
-        uri: associationLogo.uri,
-        type: associationLogo.type || 'image/jpeg',
-        name: associationLogo.fileName || 'logo.jpg',
-      });
-      formData.append('association_authentication', {
-        uri: associationAuth.uri,
-        type: associationAuth.type || 'image/jpeg',
-        name: associationAuth.fileName || 'auth.jpg',
-      });
+      
+      
+      if (Platform.OS === 'web') {
+        formData.append('association_logo', associationLogo);
+        formData.append('association_authentication', associationAuth);
+      } else {
+        formData.append('association_logo', {
+          uri: associationLogo.uri,
+          type: associationLogo.type || 'image/jpeg',
+          name: associationLogo.fileName || 'logo.jpg',
+        });
+        formData.append('association_authentication', {
+          uri: associationAuth.uri,
+          type: associationAuth.type || 'image/jpeg',
+          name: associationAuth.fileName || 'auth.jpg',
+        });
+      }
+
       formData.append('description', description);
       formData.append('food', food);
       formData.append('clothes', clothes);
@@ -134,6 +158,7 @@ export default function RegisterForAssociation({ navigation }) {
       setClothes(false);
       setErrors({});
       setTimeout(() => navigation.navigate('Login'), 1000);
+
     } catch (error) {
       console.error(error);
       setErrors({ general: error.response?.data?.message || error.message || 'Server error. Please try again.' });
@@ -155,6 +180,7 @@ export default function RegisterForAssociation({ navigation }) {
 
       {step === 1 && (
         <View style={styles.inputContainer}>
+          
           <Text style={styles.label}>Username</Text>
           <TextInput style={styles.input} placeholder="username" value={username} onChangeText={setUsername} />
           {errors.username && renderError(errors.username)}
@@ -189,7 +215,6 @@ export default function RegisterForAssociation({ navigation }) {
           </View>
           {errors.confirmPassword && renderError(errors.confirmPassword)}
 
-
           <Text style={styles.label}>Full Name</Text>
           <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
           {errors.fullName && renderError(errors.fullName)}
@@ -216,20 +241,21 @@ export default function RegisterForAssociation({ navigation }) {
 
       {step === 2 && (
         <View style={styles.inputContainer}>
+          
           <Text style={styles.label}>Association Name</Text>
           <TextInput style={styles.input} placeholder="Association Name" value={associationName} onChangeText={setAssociationName} />
           {errors.associationName && renderError(errors.associationName)}
 
           <Text style={styles.label}>Logo</Text>
           <TouchableOpacity style={styles.inputWithIcon} onPress={() => pickFile(setAssociationLogo)}>
-            <Text style={[styles.inputText, !associationLogo && { color: 'gray' }]}>{associationLogo ? associationLogo.fileName : 'Pick Association Logo'}</Text>
+            <Text style={[styles.inputText, !associationLogo && { color: 'gray' }]}>{associationLogo ? (associationLogo.name || associationLogo.fileName) : 'Pick Association Logo'}</Text>
             <MaterialIcons name="upload-file" size={20} color="gray" />
           </TouchableOpacity>
           {errors.associationLogo && renderError(errors.associationLogo)}
 
           <Text style={styles.label}>Authentication paper</Text>
           <TouchableOpacity style={styles.inputWithIcon} onPress={() => pickFile(setAssociationAuth)}>
-            <Text style={[styles.inputText, !associationAuth && { color: 'gray' }]}>{associationAuth ? associationAuth.fileName : 'Pick Authentication File'}</Text>
+            <Text style={[styles.inputText, !associationAuth && { color: 'gray' }]}>{associationAuth ? (associationAuth.name || associationAuth.fileName) : 'Pick Authentication File'}</Text>
             <MaterialIcons name="upload-file" size={20} color="gray" />
           </TouchableOpacity>
           {errors.associationAuth && renderError(errors.associationAuth)}
@@ -265,7 +291,6 @@ export default function RegisterForAssociation({ navigation }) {
 }
 
 const styles = StyleSheet.create({
- 
   logoTop: { width: 100, height: 100, resizeMode: 'contain', marginBottom: 50},
   inputContainer: { width: '100%', marginBottom: 20 },
   label: { fontSize: Platform.OS === 'ios' ? 14 : 12, color: '#000', marginBottom: 4 },
@@ -279,19 +304,6 @@ const styles = StyleSheet.create({
   inputWithIcon: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#000', borderRadius: 6, paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 12 : 8, marginBottom: 6 },
   inputText: { fontSize: Platform.OS === 'ios' ? 14 : 12, color: '#000', flexShrink: 1 },
   checkbox: { width: 20, height: 20, borderWidth: 1, borderColor: '#000', borderRadius: 4 },
-  passwordContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  borderWidth: 1,
-  borderColor: '#000',
-  borderRadius: 6,
-  paddingHorizontal: 10,
-  marginBottom: 6,
-},
-inputPassword: {
-  flex: 1,
-  paddingVertical: 8,
-  fontSize: Platform.OS === 'ios' ? 14 : 12,
-},
-
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#000', borderRadius: 6, paddingHorizontal: 10, marginBottom: 6 },
+  inputPassword: { flex: 1, paddingVertical: 8, fontSize: Platform.OS === 'ios' ? 14 : 12 },
 });

@@ -65,6 +65,7 @@ export default function LoginScreen({ navigation }) {
             break;
           case 'donor':
              //navigation.navigate('DonorDashboard');
+
             break;
           default:
             setGeneralError('Unknown role');
