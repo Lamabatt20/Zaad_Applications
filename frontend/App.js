@@ -7,6 +7,7 @@ import SelectUserType from './components/UserType';
 import RegisterForDonor from './pages/RegisterForDonor';
 import RegisterForAssociation from './pages/RegisterForAssociation';
 import ForgotPassword from './pages/ForgotPassword';
+import ChooseDonationType from './pages/ChooseDonationType';
 
 
 
@@ -22,6 +23,13 @@ export default function App() {
           <Stack.Screen name="UserType" component={SelectUserType} />
           <Stack.Screen name="RegisterForDonor" component={RegisterForDonor} />
           <Stack.Screen name="RegisterForAssociation" component={RegisterForAssociation} />
+          <Stack.Screen
+            name="ChooseDonationType"
+            component={ChooseDonationType}
+            options={{
+              headerShown: false,
+            }}
+          />
           <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
         </Stack.Navigator>
       </NavigationContainer>

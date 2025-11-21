@@ -61,11 +61,11 @@ export default function LoginScreen({ navigation }) {
             //navigation.navigate('AssociationDashboard');
             break;
           case 'admin':
-           //navigation.navigate('AdminDashboard');
+            //navigation.navigate('AdminDashboard');
             break;
           case 'donor':
-             //navigation.navigate('DonorDashboard');
-
+            // navigate donors to choose donation type; pass user_id and username for later use
+            navigation.navigate('ChooseDonationType', { user_id: res.data.user_id, username: res.data.username });
             break;
           default:
             setGeneralError('Unknown role');
