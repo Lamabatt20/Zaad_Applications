@@ -11,6 +11,8 @@ import ClothesAssociationsScreen from './pages/ClothesAssociationsScreen';
 import DecisionScreen from "./pages/DecisionScreen";
 import AssociationInfo from "./pages/AssociationInfo";
 import DonateClothesScreen from "./pages/DonateClothesScreen";
+import ChooseDonationType from './pages/ChooseDonationType';
+
 
 
 const Stack = createNativeStackNavigator();
@@ -24,6 +26,13 @@ export default function App() {
           <Stack.Screen name="UserType" component={SelectUserType} />
           <Stack.Screen name="RegisterForDonor" component={RegisterForDonor} />
           <Stack.Screen name="RegisterForAssociation" component={RegisterForAssociation} />
+          <Stack.Screen
+            name="ChooseDonationType"
+            component={ChooseDonationType}
+            options={{
+              headerShown: false,
+            }}
+          />
           <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
           <Stack.Screen name="DecisionScreen" component={DecisionScreen} />
           <Stack.Screen name="ClothesAssociationsScreen" component={ClothesAssociationsScreen} />
