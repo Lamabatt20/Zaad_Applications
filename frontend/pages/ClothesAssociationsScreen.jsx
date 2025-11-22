@@ -28,25 +28,25 @@ export default function ClothesAssociationsScreen({ navigation }) {
   };
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() =>
-        navigation.navigate("AssociationInfo", {
-          association: item,
-        })
-      }
-    >
-      <Image
-        source={{ uri: `${API.API_URL}${item.association_logo}` }}
-        style={styles.logo}
-      />
-      <Text style={styles.name}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  <TouchableOpacity
+    style={styles.card}
+    onPress={() =>
+      navigation.navigate("AssociationInfo", { association: item })
+    }
+  >
+    <Image
+      source={{ uri: `${API.API_URL}${item.association_logo}` }}
+      style={styles.logo}
+    />
 
-  // SIDEBAR ANIMATION
+    <Text style={styles.associationName}>
+      {item.name}
+    </Text>
+  </TouchableOpacity>
+);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-300)).current;
+  const slideAnim = useRef(new Animated.Value(-280)).current; 
 
   const openSidebar = () => {
     setSidebarOpen(true);
@@ -59,7 +59,7 @@ export default function ClothesAssociationsScreen({ navigation }) {
 
   const closeSidebar = () => {
     Animated.timing(slideAnim, {
-      toValue: -300,
+      toValue: -280,
       duration: 250,
       useNativeDriver: false,
     }).start(() => setSidebarOpen(false));
@@ -67,51 +67,69 @@ export default function ClothesAssociationsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton} onPress={openSidebar}>
+        <Image
+          source={require("../assets/images/image.png")}
+          style={styles.topLogo}
+        />
+
+        <Text style={styles.headerTitle}>Clothes Donation</Text>
+
+       
+        <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
           <Image
             source={require("../assets/menu.png")}
             style={styles.menuIcon}
           />
         </TouchableOpacity>
-
-        <View style={styles.titleContainer}>
-          <Image
-            source={require("../assets/icon.png")}
-            style={styles.headerLogo}
-          />
-          <Text style={styles.headerTitle}>Zaad</Text>
-        </View>
       </View>
 
-      <Text style={styles.title}>Clothes Donation Associations</Text>
-
+     
       <FlatList
         data={associations}
         renderItem={renderItem}
         keyExtractor={(item) => item.association_id.toString()}
         numColumns={2}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        columnWrapperStyle={{
+          justifyContent: "space-between",
+          paddingHorizontal: 15,
+          marginBottom: 15,
+        }}
+        contentContainerStyle={{ paddingBottom: 100 }}
       />
 
-      {/* OVERLAY */}
-      {sidebarOpen && (
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={closeSidebar}
+     
+      <View style={styles.bottomContainer}>
+        <Image
+          source={require("../assets/images/Z A A D.png")}
+          style={styles.bottomLogo}
         />
+      </View>
+
+     
+      <TouchableOpacity
+        style={styles.chatbotButton}
+        onPress={() => navigation.navigate("Chatbot")}
+      >
+        <Image
+          source={require("../assets/images/zaadbot.png")}
+          style={styles.chatbotIcon}
+        />
+      </TouchableOpacity>
+
+     
+      {sidebarOpen && (
+        <TouchableOpacity style={styles.overlay} onPress={closeSidebar} />
       )}
 
-      {/* SIDEBAR */}
-      <Animated.View style={[styles.sidebar, { left: slideAnim }]}>
+      
+      <Animated.View style={[styles.sidebarLeft, { right: slideAnim }]}>
         <View style={styles.profileBox}>
           <Image
-            source={require("../assets/profile.png")} 
+            source={require("../assets/profile.png")}
             style={styles.profileImg}
           />
-       
         </View>
 
         <TouchableOpacity style={styles.sideBtn}>
@@ -141,78 +159,73 @@ export default function ClothesAssociationsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5E9DD",
-    paddingTop: 10,
+    backgroundColor: "#EBE1D7",
+    paddingTop: 25,
     paddingHorizontal: 10,
   },
 
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    elevation: 4,
-    borderRadius: 12,
-    marginBottom: 15,
+    marginTop: 10,
+    marginBottom: 20,
+    justifyContent: "space-between",
   },
 
-  menuButton: {
-    paddingLeft: 10,
-  },
-
-  menuIcon: {
-    width: 28,
-    height: 28,
-  },
-
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: 10,
-  },
-
-  headerLogo: {
-    width: 36,
-    height: 36,
-    marginRight: 8,
+  topLogo: {
+    width: 160,
+    height: 100,
+    resizeMode: "contain",
+    marginLeft: -10,
+    marginRight: 10,
   },
 
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#333",
+    fontFamily: "Times New Roman",
+    fontSize: 25,
+    color: "#8b6f69",
+    marginLeft: -25,
   },
 
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 15,
-    color: "#8B5E3C",
-  },
-
-  card: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 15,
+  menuButtonRight: {
     padding: 10,
-    margin: 8,
-    alignItems: "center",
-    elevation: 3,
+  },
+
+  menuIcon: {
+    width: 45,
+    height: 45,
   },
 
   logo: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     borderRadius: 10,
+    margin: 10,
   },
 
-  name: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
+  bottomContainer: {
+    position: "absolute",
+    bottom: 10,
+    width: "100%",
+    alignItems: "center",
+  },
+
+  bottomLogo: {
+    width: 80,
+    height: 80,
+    resizeMode: "contain",
+  },
+
+  chatbotButton: {
+    position: "absolute",
+    bottom: 100,
+    right: 20,
+  },
+
+  chatbotIcon: {
+    width: 50,
+    height: 50,
+    resizeMode: "contain",
   },
 
   overlay: {
@@ -225,7 +238,7 @@ const styles = StyleSheet.create({
     zIndex: 9,
   },
 
-  sidebar: {
+  sidebarLeft: {
     position: "absolute",
     top: 0,
     bottom: 0,
@@ -234,8 +247,8 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     zIndex: 10,
     elevation: 10,
-    borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
   },
 
   profileBox: {
@@ -248,16 +261,6 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     marginBottom: 10,
-  },
-
-  username: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  email: {
-    fontSize: 14,
-    color: "#555",
   },
 
   sideBtn: {
@@ -281,4 +284,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  card: {
+  width: "47%",
+  alignItems: "center",
+  marginBottom: 15,
+},
+
+associationName: {
+  fontSize: 16, 
+  fontWeight: '500',
+  color: '#2f2f2f',
+  marginBottom: -10,
+  marginTop: 10,
+},
+
 });

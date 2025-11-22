@@ -8,7 +8,6 @@ import RegisterForDonor from './pages/RegisterForDonor';
 import RegisterForAssociation from './pages/RegisterForAssociation';
 import ForgotPassword from './pages/ForgotPassword';
 import ClothesAssociationsScreen from './pages/ClothesAssociationsScreen';
-import DecisionScreen from "./pages/DecisionScreen";
 import AssociationInfo from "./pages/AssociationInfo";
 import DonateClothesScreen from "./pages/DonateClothesScreen";
 import ChooseDonationType from './pages/ChooseDonationType';
@@ -34,7 +33,6 @@ export default function App() {
             }}
           />
           <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
-          <Stack.Screen name="DecisionScreen" component={DecisionScreen} />
           <Stack.Screen name="ClothesAssociationsScreen" component={ClothesAssociationsScreen} />
           <Stack.Screen name="AssociationInfo" component={AssociationInfo} />
           <Stack.Screen name="DonateClothesScreen" component={DonateClothesScreen} />

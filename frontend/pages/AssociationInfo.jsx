@@ -8,43 +8,58 @@ export default function AssociationInfo({ route, navigation }) {
   return (
     <View style={styles.container}>
 
-      {/* HEADER LOGO + NAME */}
       <View style={styles.header}>
         <Image
-          source={{ uri: `${API.API_URL}${association.association_logo}` }}
-          style={styles.logo}
+          source={require("../assets/images/logo1.png")}
+          style={styles.headerLogo}
         />
-        <Text style={styles.title}>{association.name}</Text>
+        <Text style={styles.headerTitle}>{association.name}</Text>
       </View>
 
-      {/* DESCRIPTION */}
-      <Text style={styles.description}>
-        {association.description || "No description available."}
-      </Text>
+    
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Image
+          source={{ uri: `${API.API_URL}${association.association_logo}` }}
+          style={styles.cardImage}
+        />
+          <View style={styles.cardTextContainer}>
+            <Text style={styles.cardTitle}>{association.name}</Text>
+            <Text style={styles.cardDescription}>
+             {association.description
+              || "No description available."}
+            </Text>
+          </View>
+        </View>
+      </View>
 
-      {/* MESSAGE */}
+      
       <Text style={styles.question}>
         Do you want to donate to this association?
       </Text>
 
-      {/* BUTTONS */}
-      <View style={styles.buttons}>
-        {/* YES */}
+      
+      <View style={styles.buttonsContainer}>
         <TouchableOpacity
-          style={styles.yesBtn}
+          style={styles.btnYes}
           onPress={() => navigation.navigate("DonateClothesScreen")}
         >
           <Text style={styles.btnText}>Yes</Text>
         </TouchableOpacity>
 
-        {/* NO */}
         <TouchableOpacity
-          style={styles.noBtn}
+          style={styles.btnNo}
           onPress={() => navigation.goBack()}
         >
           <Text style={styles.btnText}>No</Text>
         </TouchableOpacity>
       </View>
+
+      
+      <Image
+        source={require("../assets/images/Z A A D.png")}
+        style={styles.bottomLogo}
+      />
 
     </View>
   );
@@ -53,65 +68,118 @@ export default function AssociationInfo({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5E9DD",
-    padding: 20,
+    backgroundColor: "#EBE1D7",
+    paddingTop: 60,
+    alignItems: "center",
   },
 
+  
   header: {
+    flexDirection: "row",
     alignItems: "center",
     marginBottom: 20,
   },
 
-  logo: {
-    width: 140,
-    height: 140,
+  headerLogo: {
+    width: 160,
+    height: 100,
     resizeMode: "contain",
-    borderRadius: 10,
+    marginLeft: -130,
+    marginRight: 10,
+    marginTop:-10,
+
+  },
+  headerTitle: {
+    fontFamily: "Times New Roman",
+    fontSize: 25,
+    color: "#8b6f69",
+     marginLeft: -25,
   },
 
-  title: {
-    marginTop: 12,
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#8B5E3C",
-  },
-
-  description: {
-    fontSize: 16,
-    color: "#444",
+  
+  card: {
+    width: "90%",
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
     marginBottom: 30,
-    textAlign: "center",
+    marginTop:30,
   },
 
-  question: {
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-
-  buttons: {
+  row: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    alignItems: "center",
   },
 
-  yesBtn: {
-    backgroundColor: "#3A85FF",
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 10,
+  cardImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 12,
   },
 
-  noBtn: {
-    backgroundColor: "#C94A4A",
+  cardTextContainer: {
+    flex: 1,
+  },
+
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#00000",
+  },
+
+  cardDescription: {
+    fontSize: 14,
+    color: "#444",
+    marginTop: 5,
+  },
+
+  
+  question: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 15,
+  },
+
+  
+  buttonsContainer: {
+    width: "80%",
+    flexDirection: "column",
+    gap: 10,
+  },
+
+  btnYes: {
+    backgroundColor: "#A1746A",
     paddingVertical: 12,
-    paddingHorizontal: 25,
     borderRadius: 10,
+    alignItems: "center",
+  },
+
+  btnNo: {
+    backgroundColor: "#A1746A",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    opacity: 0.85,
   },
 
   btnText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+
+ 
+  bottomLogo: {
+    width: 80,
+    height: 80,
+    resizeMode: "contain",
+    position: "absolute",
+    bottom: 10,
   },
 });

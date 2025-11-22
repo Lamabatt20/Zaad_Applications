@@ -16,7 +16,7 @@ export default function ChooseDonationType({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Welcome Row */}
+       
         <View style={styles.welcomeRow}>
           <Image
             source={require('../assets/images/image.png')}
@@ -31,15 +31,15 @@ export default function ChooseDonationType({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {/* Donation Title */}
+        
         <Text style={styles.bodyTitle}>Choose Donation Type:</Text>
 
-        {/* Cards Row */}
+        
         <View style={styles.cardsRow}>
           <TouchableOpacity
             style={styles.card}
             activeOpacity={0.8}
-            onPress={() => onSelect('Clothes')}
+            onPress={() => navigation.navigate("ClothesAssociationsScreen")}
           >
             <Image
               source={require('../assets/images/clothes.png')}
@@ -64,7 +64,7 @@ export default function ChooseDonationType({ navigation, route }) {
         </View>
       </ScrollView>
 
-      {/* Footer */}
+      
       <View style={styles.footerContainer}>
         <Image
           source={require('../assets/images/Z A A D.png')}
@@ -72,9 +72,12 @@ export default function ChooseDonationType({ navigation, route }) {
         />
       </View>
 
-      {/* Chatbot Bottom Right */}
-      <TouchableOpacity style={styles.chatbotBtn}>
-        <MaterialCommunityIcons name="chat-processing-outline" size={50} color="#8b6f69" />
+      <TouchableOpacity style={styles.chatbotBtn}
+      >
+        <Image
+          source={require("../assets/images/zaadbot.png")}
+          style={{ width: 50, height: 50, resizeMode: "contain" }}
+        />
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -88,7 +91,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 120, // space for footer and chatbot
+    paddingBottom: 120, 
   },
   welcomeRow: {
     flexDirection: 'row',
