@@ -452,3 +452,15 @@ app.post('/notifications', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+// GET associations that accept clothes donations
+app.get('/associations/clothes', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT association_id, name, association_logo FROM associations WHERE clothes = true"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
