@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     fontFamily: "Times New Roman",
     fontSize: 25,
     color: "#8b6f69",
-     marginLeft: -25,
+     marginLeft: -40,
   },
 
   

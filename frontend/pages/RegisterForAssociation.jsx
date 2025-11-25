@@ -175,7 +175,17 @@ export default function RegisterForAssociation({ navigation }) {
   );
 
   return (
-    <ScrollView contentContainerStyle={{ backgroundColor: '#EBE1D7', flexGrow: 1, paddingHorizontal: 40, paddingVertical: 70, alignItems: 'center', justifyContent: 'center' }}>
+  <ScrollView
+    style={{ flex: 1, backgroundColor: '#EBE1D7' }}
+    contentContainerStyle={{
+      paddingHorizontal: 40,
+      paddingTop: 20,
+      paddingBottom: 165,
+      alignItems: 'center',
+    }}
+    keyboardShouldPersistTaps="handled"
+    contentInsetAdjustmentBehavior="always"
+  >
       <Image source={require('../assets/images/logo1.png')} style={styles.logoTop} />
 
       {step === 1 && (
