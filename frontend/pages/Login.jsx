@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import axios from 'axios';
 import config from '../config';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function LoginScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,6 +25,16 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState('EN');
   const [langModalVisible, setLangModalVisible] = useState(false);
+
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadDark = async () => {
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    };
+    loadDark();
+  }, []);
 
   const selectLanguage = (value) => {
     setLang(value);
@@ -51,28 +62,21 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
     setGeneralError('');
     const API = axios.create({ baseURL: config.API_URL });
+
     try {
       const res = await API.post('/login', { username, password });
       if (res.data.success) {
-        setUsernameError('');
-        setPasswordError('');
         switch (res.data.role) {
-          case 'association':
-            //navigation.navigate('AssociationDashboard');
-            break;
-          case 'admin':
-            //navigation.navigate('AdminDashboard');
-            break;
           case 'donor':
-           navigation.navigate("ChooseDonationType", {
-            user_id: res.data.user_id,
-            username: res.data.username,
-            email: res.data.email,
-            full_name: res.data.full_name,
-            phone: res.data.phone,
-            role: res.data.role,
-            address:res.data.address,
-          });
+            navigation.navigate("ChooseDonationType", {
+              user_id: res.data.user_id,
+              username: res.data.username,
+              email: res.data.email,
+              full_name: res.data.full_name,
+              phone: res.data.phone,
+              role: res.data.role,
+              address: res.data.address,
+            });
             break;
           default:
             setGeneralError('Unknown role');
@@ -87,15 +91,20 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const text = darkMode ? "#fff" : "#000";
+  const inputBg = darkMode ? "#2a2a2a" : "#EBE1D7";
+  const border = darkMode ? "#666" : "#000";
+
   return (
-    <View style={styles.container}>
-      
+    <View style={[styles.container, { backgroundColor: bg }]}>
+
       <TouchableOpacity
         style={[
           styles.langButton,
           lang === 'EN'
-            ? { right: 20, left: 'auto', flexDirection: 'row' }
-            : { left: 20, right: 'auto', flexDirection: 'row-reverse' },
+            ? { right: 20, flexDirection: 'row' }
+            : { left: 20, flexDirection: 'row-reverse' },
         ]}
         onPress={() => setLangModalVisible(true)}
       >
@@ -105,21 +114,21 @@ export default function LoginScreen({ navigation }) {
           color="#A27571"
           style={{ transform: [{ scaleX: lang === 'AR' ? -1 : 1 }] }}
         />
-        <Text style={styles.langText}>{lang}</Text>
+        <Text style={[styles.langText, { color: text }]}>{lang}</Text>
       </TouchableOpacity>
 
-     
       <Image source={require('../assets/images/logo3.png')} style={styles.logoTop} />
 
-     
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Username</Text>
+        <Text style={[styles.label, { color: text }]}>Username</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: inputBg, color: text, borderColor: border }]}
           placeholder="username"
+          placeholderTextColor={darkMode ? "#999" : "#666"}
           value={username}
           onChangeText={setUsername}
         />
+
         {usernameError !== '' && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{usernameError}</Text>
@@ -127,11 +136,12 @@ export default function LoginScreen({ navigation }) {
           </View>
         )}
 
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.passwordContainer}>
+        <Text style={[styles.label, { color: text }]}>Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: border }]}>
           <TextInput
-            style={styles.inputPassword}
+            style={[styles.inputPassword, { color: text }]}
             placeholder="password"
+            placeholderTextColor={darkMode ? "#999" : "#666"}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -140,7 +150,7 @@ export default function LoginScreen({ navigation }) {
             <MaterialIcons
               name={showPassword ? 'visibility' : 'visibility-off'}
               size={22}
-              color="gray"
+              color={text}
             />
           </TouchableOpacity>
         </View>
@@ -153,74 +163,60 @@ export default function LoginScreen({ navigation }) {
         )}
       </View>
 
-      
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+      <TouchableOpacity
+        style={[styles.loginButton, { backgroundColor: darkMode ? "#333" : "#000" }]}
+        onPress={handleLogin}
+      >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginText}>Log in</Text>}
       </TouchableOpacity>
 
       {generalError !== '' && (
-        <Text
-          style={[
-            styles.generalErrorText,
-            { color: generalError.includes('successful') ? 'green' : 'red' },
-          ]}
-        >
+        <Text style={[styles.generalErrorText, { color: generalError.includes('successful') ? 'green' : 'red' }]}>
           {generalError}
         </Text>
       )}
 
       <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-        <Text style={styles.forgotPassword}>Forgot Password?</Text>
+        <Text style={[styles.forgotPassword, { color: text }]}>Forgot Password?</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.createAccountButton}
+        style={[styles.createAccountButton, { borderColor: text }]}
         onPress={() => navigation.navigate('UserType')}
       >
-        <Text style={styles.createText}>Create new Account</Text>
+        <Text style={[styles.createText, { color: text }]}>Create new Account</Text>
       </TouchableOpacity>
 
       <View style={styles.bottomLogoContainer}>
         <Image source={require('../assets/images/Z A A D.png')} style={styles.logoBottom} />
       </View>
 
-      
       <Modal
         visible={langModalVisible}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setLangModalVisible(false)}
       >
-        <View style={styles.fullScreenModal}>
-          <TouchableOpacity
-            style={styles.closeIcon}
-            onPress={() => setLangModalVisible(false)}
-          >
-            <Text style={styles.closeText}>X</Text>
+        <View style={[styles.fullScreenModal, { backgroundColor: bg }]}>
+          <TouchableOpacity style={styles.closeIcon} onPress={() => setLangModalVisible(false)}>
+            <Text style={[styles.closeText, { color: text }]}>X</Text>
           </TouchableOpacity>
 
-          
           <View style={styles.modalTitleContainer}>
-            <Text style={styles.modalTitleAr}>اختر اللغة</Text>
-            <Text style={styles.modalTitleEn}>Choose the Language</Text>
+            <Text style={[styles.modalTitleAr, { color: text }]}>اختر اللغة</Text>
+            <Text style={[styles.modalTitleEn, { color: text }]}>Choose the Language</Text>
           </View>
 
-          
-          <TouchableOpacity
-            style={styles.optionButton}
-            onPress={() => selectLanguage('EN')}
-          >
-            <Text style={styles.optionText}>English (EN)</Text>
+          <TouchableOpacity style={[styles.optionButton, { borderColor: text }]} onPress={() => selectLanguage('EN')}>
+            <Text style={[styles.optionText, { color: text }]}>English (EN)</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.optionButton}
-            onPress={() => selectLanguage('AR')}
-          >
-            <Text style={styles.optionText}>العربية (AR) </Text>
+          <TouchableOpacity style={[styles.optionButton, { borderColor: text }]} onPress={() => selectLanguage('AR')}>
+            <Text style={[styles.optionText, { color: text }]}>العربية (AR)</Text>
           </TouchableOpacity>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -228,22 +224,18 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBE1D7',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 30,
   },
   langButton: {
-    color: '#EBE1D7',
     position: 'absolute',
     top: 50,
-    left: 20,
     zIndex: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   langText: {
-    color: '#EBE1D7',
     fontWeight: '400',
     fontSize: 12,
     position: 'absolute',
@@ -254,154 +246,142 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
     marginBottom: 80,
   },
-  inputContainer: { 
+  inputContainer: {
     width: '100%',
-    marginBottom: 20
+    marginBottom: 20,
   },
-  label: { 
+  label: {
     fontSize: Platform.OS === 'ios' ? 14 : 12,
-    color: '#000', 
-    marginBottom: 4 
+    marginBottom: 4,
   },
-  input: { 
+  input: {
     borderWidth: 1,
-    borderColor: '#000',
-    borderRadius: 6, 
-    padding: 10, 
-    marginBottom: 6, 
-    fontSize: Platform.OS === 'ios' ? 14 : 12 
+    borderRadius: 6,
+    padding: 10,
+    marginBottom: 6,
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
   },
-  loginButton: { 
-    backgroundColor: '#000', 
-    paddingVertical: 12, 
-    borderRadius: 25, 
-    width: '100%', 
-    alignItems: 'center' 
+  loginButton: {
+    paddingVertical: 12,
+    borderRadius: 25,
+    width: '100%',
+    alignItems: 'center',
   },
-  loginText: { 
-    color: '#fff', 
-    fontSize: Platform.OS === 'ios' ? 16 : 12, 
-    fontWeight: '400' 
+  loginText: {
+    color: '#fff',
+    fontSize: Platform.OS === 'ios' ? 16 : 12,
+    fontWeight: '400',
   },
-  forgotPassword: { 
-    color: '#000', 
-    marginTop: 12, 
-    textDecorationLine: 'underline', 
-    fontSize: Platform.OS === 'ios' ? 15 : 12 
+  forgotPassword: {
+    marginTop: 12,
+    textDecorationLine: 'underline',
+    fontSize: Platform.OS === 'ios' ? 15 : 12,
   },
-  createAccountButton: { 
-    borderColor: '#000', 
-    borderWidth: 1, 
-    paddingVertical: 12, 
-    borderRadius: 25, 
-    width: '100%', 
-    alignItems: 'center', 
-    marginTop: Platform.OS === 'ios' ? 170 : 155 
+  createAccountButton: {
+    borderWidth: 1,
+    paddingVertical: 12,
+    borderRadius: 25,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: Platform.OS === 'ios' ? 170 : 155,
   },
-  createText: { 
-    color: '#000', 
-    fontSize: Platform.OS === 'ios' ? 15 : 12 
+  createText: {
+    fontSize: Platform.OS === 'ios' ? 15 : 12,
   },
-  bottomLogoContainer: { 
-    position: 'absolute', 
-    bottom: 10, 
-    alignItems: 'center' 
+  bottomLogoContainer: {
+    position: 'absolute',
+    bottom: 10,
+    alignItems: 'center',
   },
-  logoBottom: { 
-    width: Platform.OS === 'ios' ? 80 : 70, 
-    height: Platform.OS === 'ios' ? 80 : 70, 
-    resizeMode: 'contain' 
+  logoBottom: {
+    width: Platform.OS === 'ios' ? 80 : 70,
+    height: Platform.OS === 'ios' ? 80 : 70,
+    resizeMode: 'contain',
   },
-  errorContainer: { backgroundColor: 'red', 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: 4, 
-    alignSelf: 'flex-start', 
-    marginTop: 2, 
-    position: 'relative' 
+  errorContainer: {
+    backgroundColor: 'red',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    position: 'relative',
   },
-  errorText: { 
-    color: '#fff', 
-    fontSize: Platform.OS === 'ios' ? 12 : 10
-   },
-  errorArrow: { 
-    position: 'absolute', 
-    top: -6, 
-    left: 10, 
-    width: 0, 
-    height: 0, 
-    borderLeftWidth: 6, 
-    borderRightWidth: 6, 
-    borderBottomWidth: 6, 
-    borderLeftColor: 'transparent', 
-    borderRightColor: 'transparent', 
-    borderBottomColor: 'red' 
+  errorText: {
+    color: '#fff',
+    fontSize: Platform.OS === 'ios' ? 12 : 10,
   },
-  generalErrorText: { 
-    fontSize: Platform.OS === 'ios' ? 14 : 12, 
-    textAlign: 'center', 
-    marginTop: 10 
+  errorArrow: {
+    position: 'absolute',
+    top: -6,
+    left: 10,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderBottomWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'red',
   },
-  passwordContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    borderWidth: 1, 
-    borderColor: '#000', 
-    borderRadius: 6, 
-    paddingHorizontal: 10, 
-    marginBottom: 6 },
-  inputPassword: { 
-    flex: 1, 
-    fontSize: Platform.OS === 'ios' ? 14 : 12, 
-    paddingVertical: 10 
+  generalErrorText: {
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+  },
+  inputPassword: {
+    flex: 1,
+    fontSize: Platform.OS === 'ios' ? 14 : 12,
+    paddingVertical: 10,
   },
   fullScreenModal: {
     flex: 1,
-    backgroundColor: '#EBE1D7',
     paddingHorizontal: 20,
     paddingTop: 60,
     alignItems: 'center',
   },
-  closeIcon: { 
-    position: 'absolute', 
-    top: 60, 
-    right: 20, 
-    zIndex: 10 
+  closeIcon: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
   },
-  closeText: { 
-    fontSize: 20, 
-    fontWeight: '300', 
-    color: 'gray' 
+  closeText: {
+    fontSize: 20,
+    fontWeight: '300',
   },
-
-  modalTitleContainer: { 
-    marginBottom: 40, 
-    alignItems: 'center' 
+  modalTitleContainer: {
+    marginBottom: 40,
+    alignItems: 'center',
   },
-  modalTitleEn: { 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    color: '#000' 
+  modalTitleEn: {
+    fontSize: 22,
+    fontWeight: 'bold',
   },
-  modalTitleAr: { 
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    color: '#000', 
-    marginTop: 5 },
-
-  optionButton: { 
-    width: '100%', 
-    paddingVertical: 15, 
-    borderWidth: 1, 
-    borderColor: '#000', 
-    borderRadius: 10, 
-    marginBottom: 20, 
-    alignItems: 'center', 
-    backgroundColor: 'transparent' 
+  modalTitleAr: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 5,
   },
-  optionText: { 
-    color: '#000', 
-    fontSize: 18, 
-    textAlign: 'center' 
+  optionButton: {
+    width: '100%',
+    paddingVertical: 15,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginBottom: 20,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  optionText: {
+    fontSize: 18,
+    textAlign: 'center',
   },
 });

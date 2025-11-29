@@ -1,12 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import axios from 'axios';
 import config from '../config';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function RegisterForAssociation({ navigation }) {
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadMode = async () => {
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    };
+    loadMode();
+  }, []);
+
+  const theme = {
+    background: darkMode ? "#1c1c1c" : "#EBE1D7",
+    text: darkMode ? "#fff" : "#000",
+    border: darkMode ? "#888" : "#000",
+    inputBg: darkMode ? "#2a2a2a" : "#EBE1D7",
+    placeholder: darkMode ? "#aaa" : "#555",
+    button: darkMode ? "#333" : "#000",
+    errorBg: darkMode ? "#b30000" : "red",
+  };
+
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -60,7 +81,6 @@ export default function RegisterForAssociation({ navigation }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  
   const pickFile = async (setFile) => {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
@@ -68,7 +88,7 @@ export default function RegisterForAssociation({ navigation }) {
       input.accept = 'image/*';
       input.onchange = () => {
         const file = input.files[0];
-        setFile(file); 
+        setFile(file);
       };
       input.click();
     } else {
@@ -79,7 +99,7 @@ export default function RegisterForAssociation({ navigation }) {
       });
       if (!result.canceled) {
         let asset = result.assets[0];
-        
+
         if (Platform.OS === 'android' && asset.uri.startsWith('content://')) {
           const fileUri = FileSystem.cacheDirectory + (asset.fileName || 'temp.jpg');
           await FileSystem.copyAsync({ from: asset.uri, to: fileUri });
@@ -115,8 +135,7 @@ export default function RegisterForAssociation({ navigation }) {
       const formData = new FormData();
       formData.append('user_id', userId);
       formData.append('name', associationName);
-      
-      
+
       if (Platform.OS === 'web') {
         formData.append('association_logo', associationLogo);
         formData.append('association_authentication', associationAuth);
@@ -142,7 +161,6 @@ export default function RegisterForAssociation({ navigation }) {
       });
       if (!assocRes.data) throw new Error('Failed to create association');
 
-      
       setUsername('');
       setPassword('');
       setConfirmPassword('');
@@ -160,7 +178,6 @@ export default function RegisterForAssociation({ navigation }) {
       setTimeout(() => navigation.navigate('Login'), 1000);
 
     } catch (error) {
-      console.error(error);
       setErrors({ general: error.response?.data?.message || error.message || 'Server error. Please try again.' });
     } finally {
       setLoading(false);
@@ -168,131 +185,184 @@ export default function RegisterForAssociation({ navigation }) {
   };
 
   const renderError = (message) => (
-    <View style={styles.errorContainer}>
+    <View style={[styles.errorContainer, { backgroundColor: theme.errorBg }]}>
       <Text style={styles.errorText}>{message}</Text>
       <View style={styles.errorArrow} />
     </View>
   );
 
   return (
-  <ScrollView
-    style={{ flex: 1, backgroundColor: '#EBE1D7' }}
-    contentContainerStyle={{
-      paddingHorizontal: 40,
-      paddingTop: 20,
-      paddingBottom: 165,
-      alignItems: 'center',
-    }}
-    keyboardShouldPersistTaps="handled"
-    contentInsetAdjustmentBehavior="always"
-  >
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.background }}
+      contentContainerStyle={{
+        paddingHorizontal: 40,
+        paddingTop: 20,
+        paddingBottom: 165,
+        alignItems: 'center',
+      }}
+      keyboardShouldPersistTaps="handled"
+    >
       <Image source={require('../assets/images/logo1.png')} style={styles.logoTop} />
 
       {step === 1 && (
         <View style={styles.inputContainer}>
-          
-          <Text style={styles.label}>Username</Text>
-          <TextInput style={styles.input} placeholder="username" value={username} onChangeText={setUsername} />
+
+          <Text style={[styles.label, { color: theme.text }]}>Username</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="username"
+            placeholderTextColor={theme.placeholder}
+            value={username}
+            onChangeText={setUsername}
+          />
           {errors.username && renderError(errors.username)}
 
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordContainer}>
+          <Text style={[styles.label, { color: theme.text }]}>Password</Text>
+          <View style={[styles.passwordContainer, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
             <TextInput
-              style={styles.inputPassword}
+              style={[styles.inputPassword, { color: theme.text }]}
               placeholder="password"
+              placeholderTextColor={theme.placeholder}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color="gray" />
+              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={theme.text} />
             </TouchableOpacity>
           </View>
           {errors.password && renderError(errors.password)}
 
-          <Text style={styles.label}>Confirm Password</Text>
-          <View style={styles.passwordContainer}>
+          <Text style={[styles.label, { color: theme.text }]}>Confirm Password</Text>
+          <View style={[styles.passwordContainer, { borderColor: theme.border, backgroundColor: theme.inputBg }]}>
             <TextInput
-              style={styles.inputPassword}
+              style={[styles.inputPassword, { color: theme.text }]}
               placeholder="confirm password"
+              placeholderTextColor={theme.placeholder}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
             />
             <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-              <MaterialIcons name={showConfirmPassword ? "visibility" : "visibility-off"} size={20} color="gray" />
+              <MaterialIcons name={showConfirmPassword ? "visibility" : "visibility-off"} size={20} color={theme.text} />
             </TouchableOpacity>
           </View>
           {errors.confirmPassword && renderError(errors.confirmPassword)}
 
-          <Text style={styles.label}>Full Name</Text>
-          <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
+          <Text style={[styles.label, { color: theme.text }]}>Full Name</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="Full name"
+            placeholderTextColor={theme.placeholder}
+            value={fullName}
+            onChangeText={setFullName}
+          />
           {errors.fullName && renderError(errors.fullName)}
 
-          <Text style={styles.label}>Address</Text>
-          <TextInput style={styles.input} placeholder="Address" value={address} onChangeText={setAddress} />
+          <Text style={[styles.label, { color: theme.text }]}>Address</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="Address"
+            placeholderTextColor={theme.placeholder}
+            value={address}
+            onChangeText={setAddress}
+          />
           {errors.address && renderError(errors.address)}
 
-          <Text style={styles.label}>Phone</Text>
-          <TextInput style={styles.input} placeholder="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Text style={[styles.label, { color: theme.text }]}>Phone</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="Phone"
+            placeholderTextColor={theme.placeholder}
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
           {errors.phone && renderError(errors.phone)}
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
+          <Text style={[styles.label, { color: theme.text }]}>Email</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="Email"
+            placeholderTextColor={theme.placeholder}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+          />
           {errors.email && renderError(errors.email)}
 
-          {errors.general && <Text style={styles.error}>{errors.general}</Text>}
+          {errors.general && <Text style={{ color: "red" }}>{errors.general}</Text>}
 
-          <TouchableOpacity style={styles.signupButton} onPress={() => { if (validateFieldsStep1()) setStep(2); }}>
-            <Text style={styles.signupText}>Next</Text>
+          <TouchableOpacity
+            style={[styles.signupButton, { backgroundColor: theme.button }]}
+            onPress={() => { if (validateFieldsStep1()) setStep(2); }}
+          >
+            <Text style={[styles.signupText, { color: "#fff" }]}>Next</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {step === 2 && (
         <View style={styles.inputContainer}>
-          
-          <Text style={styles.label}>Association Name</Text>
-          <TextInput style={styles.input} placeholder="Association Name" value={associationName} onChangeText={setAssociationName} />
+
+          <Text style={[styles.label, { color: theme.text }]}>Association Name</Text>
+          <TextInput
+            style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+            placeholder="Association Name"
+            placeholderTextColor={theme.placeholder}
+            value={associationName}
+            onChangeText={setAssociationName}
+          />
           {errors.associationName && renderError(errors.associationName)}
 
-          <Text style={styles.label}>Logo</Text>
-          <TouchableOpacity style={styles.inputWithIcon} onPress={() => pickFile(setAssociationLogo)}>
-            <Text style={[styles.inputText, !associationLogo && { color: 'gray' }]}>{associationLogo ? (associationLogo.name || associationLogo.fileName) : 'Pick Association Logo'}</Text>
-            <MaterialIcons name="upload-file" size={20} color="gray" />
+          <Text style={[styles.label, { color: theme.text }]}>Logo</Text>
+          <TouchableOpacity
+            style={[styles.inputWithIcon, { borderColor: theme.border, backgroundColor: theme.inputBg }]}
+            onPress={() => pickFile(setAssociationLogo)}
+          >
+            <Text style={[styles.inputText, { color: theme.text }]}>
+              {associationLogo ? (associationLogo.name || associationLogo.fileName) : 'Pick Association Logo'}
+            </Text>
+            <MaterialIcons name="upload-file" size={20} color={theme.text} />
           </TouchableOpacity>
           {errors.associationLogo && renderError(errors.associationLogo)}
 
-          <Text style={styles.label}>Authentication paper</Text>
-          <TouchableOpacity style={styles.inputWithIcon} onPress={() => pickFile(setAssociationAuth)}>
-            <Text style={[styles.inputText, !associationAuth && { color: 'gray' }]}>{associationAuth ? (associationAuth.name || associationAuth.fileName) : 'Pick Authentication File'}</Text>
-            <MaterialIcons name="upload-file" size={20} color="gray" />
+          <Text style={[styles.label, { color: theme.text }]}>Authentication paper</Text>
+          <TouchableOpacity
+            style={[styles.inputWithIcon, { borderColor: theme.border, backgroundColor: theme.inputBg }]}
+            onPress={() => pickFile(setAssociationAuth)}
+          >
+            <Text style={[styles.inputText, { color: theme.text }]}>
+              {associationAuth ? (associationAuth.name || associationAuth.fileName) : 'Pick Authentication File'}
+            </Text>
+            <MaterialIcons name="upload-file" size={20} color={theme.text} />
           </TouchableOpacity>
           {errors.associationAuth && renderError(errors.associationAuth)}
 
-          <Text style={styles.label}>Description</Text>
+          <Text style={[styles.label, { color: theme.text }]}>Description</Text>
           <TextInput
-            style={[styles.input, { height: 80 }]}
+            style={[styles.input, { height: 80, borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
             placeholder="Description"
+            placeholderTextColor={theme.placeholder}
             value={description}
             onChangeText={setDescription}
             multiline
           />
 
-          <Text style={styles.label}>Type of donations</Text>
+          <Text style={[styles.label, { color: theme.text }]}>Type of donations</Text>
           <View style={{ flexDirection: 'row', marginBottom: 10 }}>
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', marginRight: 20 }} onPress={() => setFood(!food)}>
-              <View style={[styles.checkbox, food && { backgroundColor: '#000' }]} />
-              <Text style={{ marginLeft: 5 }}>Food</Text>
+              <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: food ? theme.text : "transparent" }]} />
+              <Text style={{ marginLeft: 5, color: theme.text }}>Food</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => setClothes(!clothes)}>
-              <View style={[styles.checkbox, clothes && { backgroundColor: '#000' }]} />
-              <Text style={{ marginLeft: 5 }}>Clothes</Text>
+              <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: clothes ? theme.text : "transparent" }]} />
+              <Text style={{ marginLeft: 5, color: theme.text }}>Clothes</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.signupText}>Signup</Text>}
+          <TouchableOpacity style={[styles.signupButton, { backgroundColor: theme.button }]} onPress={handleSignup}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.signupText, { color: "#fff" }]}>Signup</Text>}
           </TouchableOpacity>
         </View>
       )}
@@ -301,19 +371,18 @@ export default function RegisterForAssociation({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  logoTop: { width: 100, height: 100, resizeMode: 'contain', marginBottom: 50},
+  logoTop: { width: 100, height: 100, resizeMode: 'contain', marginBottom: 50 },
   inputContainer: { width: '100%', marginBottom: 20 },
-  label: { fontSize: Platform.OS === 'ios' ? 14 : 12, color: '#000', marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#000', borderRadius: 6, padding: 10, marginBottom: 6, fontSize: Platform.OS === 'ios' ? 14 : 12 },
-  signupButton: { backgroundColor: '#000', paddingVertical: 12, borderRadius: 25, width: '100%', alignItems: 'center', marginTop: 30 },
-  signupText: { color: '#fff', fontSize: Platform.OS === 'ios' ? 16 : 12, fontWeight: '400' },
-  error: { color: 'red', fontSize: Platform.OS === 'ios' ? 12 : 10, marginBottom: 6 },
-  errorContainer: { backgroundColor: 'red', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2, position: 'relative' },
+  label: { fontSize: Platform.OS === 'ios' ? 14 : 12, marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 6, padding: 10, marginBottom: 6, fontSize: Platform.OS === 'ios' ? 14 : 12 },
+  signupButton: { paddingVertical: 12, borderRadius: 25, width: '100%', alignItems: 'center', marginTop: 30 },
+  signupText: { fontSize: Platform.OS === 'ios' ? 16 : 12, fontWeight: '400' },
+  errorContainer: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start', marginTop: 2, position: 'relative' },
   errorText: { color: '#fff', fontSize: Platform.OS === 'ios' ? 12 : 10 },
   errorArrow: { position: 'absolute', top: -6, left: 10, width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 6, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: 'red' },
-  inputWithIcon: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#000', borderRadius: 6, paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 12 : 8, marginBottom: 6 },
-  inputText: { fontSize: Platform.OS === 'ios' ? 14 : 12, color: '#000', flexShrink: 1 },
-  checkbox: { width: 20, height: 20, borderWidth: 1, borderColor: '#000', borderRadius: 4 },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#000', borderRadius: 6, paddingHorizontal: 10, marginBottom: 6 },
+  inputWithIcon: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 12 : 8, marginBottom: 6 },
+  inputText: { fontSize: Platform.OS === 'ios' ? 14 : 12, flexShrink: 1 },
+  checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4 },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, marginBottom: 6 },
   inputPassword: { flex: 1, paddingVertical: 8, fontSize: Platform.OS === 'ios' ? 14 : 12 },
 });

@@ -2,16 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
 
 export default function ChooseDonationType({ navigation, route }) {
 
- 
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    };
+    loadTheme();
+    
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadTheme();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const textColor = darkMode ? "#fff" : "#2f2f2f";
+  const cardText = darkMode ? "#fff" : "#333";
+
   const initialData = route?.params || {};
 
-  
   const [currentUser, setCurrentUser] = useState({
     user_id: initialData.user_id,
     username: initialData.username,
@@ -22,7 +40,6 @@ export default function ChooseDonationType({ navigation, route }) {
     address: initialData.address
   });
 
-  
   useEffect(() => {
     if (route.params) {
       setCurrentUser(prev => ({
@@ -37,10 +54,9 @@ export default function ChooseDonationType({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-       
-        
+
         <View style={styles.welcomeRow}>
           <Image
             source={require('../assets/images/image.png')}
@@ -49,10 +65,11 @@ export default function ChooseDonationType({ navigation, route }) {
           />
 
           <View style={styles.welcomeTextContainer}>
-            <Text style={styles.welcome}>Welcome {currentUser.username || 'Donor'}</Text>
+            <Text style={[styles.welcome, { color: textColor }]}>
+              Welcome {currentUser.username || 'Donor'}
+            </Text>
           </View>
 
-         
           <TouchableOpacity
             style={styles.profileBtn}
             onPress={() =>
@@ -61,21 +78,18 @@ export default function ChooseDonationType({ navigation, route }) {
               })
             }
           >
-            <Ionicons name="person-circle-outline" size={36} color="#A27571" />
+            <Ionicons name="person-circle-outline" size={36} color={darkMode ? "#fff" : "#A27571"} />
           </TouchableOpacity>
         </View>
 
-        
-        
-        <Text style={styles.bodyTitle}>Choose Donation Type:</Text>
+        <Text style={[styles.bodyTitle, { color: textColor }]}>
+          Choose Donation Type:
+        </Text>
 
-        
-       
         <View style={styles.cardsRow}>
-          
-          
+
           <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: darkMode ? "transparent" : "transparent" }]}
             activeOpacity={0.8}
             onPress={() =>
               navigation.navigate("ClothesAssociationsScreen", {
@@ -88,12 +102,13 @@ export default function ChooseDonationType({ navigation, route }) {
               style={styles.cardImage}
               resizeMode="contain"
             />
-            <Text style={styles.cardLabel}>Clothes Donation</Text>
+            <Text style={[styles.cardLabel, { color: cardText }]}>
+              Clothes Donation
+            </Text>
           </TouchableOpacity>
 
-         
           <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: darkMode ? "transparent" : "transparent" }]}
             activeOpacity={0.8}
             onPress={() => onSelect('Food')}
           >
@@ -102,14 +117,14 @@ export default function ChooseDonationType({ navigation, route }) {
               style={styles.cardImage}
               resizeMode="contain"
             />
-            <Text style={styles.cardLabel}>Food Donation</Text>
+            <Text style={[styles.cardLabel, { color: cardText }]}>
+              Food Donation
+            </Text>
           </TouchableOpacity>
 
         </View>
       </ScrollView>
 
-      
-      
       <View style={styles.footerContainer}>
         <Image
           source={require('../assets/images/Z A A D.png')}
@@ -117,7 +132,6 @@ export default function ChooseDonationType({ navigation, route }) {
         />
       </View>
 
-      
       <TouchableOpacity
         style={styles.chatbotBtn}
         onPress={() => navigation.navigate("ChatBotScreen")}
@@ -131,11 +145,9 @@ export default function ChooseDonationType({ navigation, route }) {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBE1D7',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -163,7 +175,6 @@ const styles = StyleSheet.create({
     fontSize: 25,
     marginTop: -50,
     marginLeft: -65,
-    color: '#8b6f69',
   },
   profileBtn: {
     top: -30,
@@ -171,7 +182,6 @@ const styles = StyleSheet.create({
   bodyTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#2f2f2f',
     marginBottom: -10,
     marginTop: -20,
   },
@@ -199,7 +209,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-    color: '#333',
   },
   footerContainer: {
     position: 'absolute',

@@ -15,6 +15,8 @@ import ChatBotScreen from "./pages/Chatbot";
 import ProfileScreen from "./pages/Profile";
 import EditProfileScreen from "./pages/EditProfile";
 import ChangePassword from './pages/ChangePassword';
+import SearchAssociation from './pages/SearchAssociation';
+
 
 
 
@@ -38,6 +40,7 @@ export default function App() {
           />
           <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
           <Stack.Screen name="ClothesAssociationsScreen" component={ClothesAssociationsScreen} />
+          <Stack.Screen name="SearchAssociation" component={SearchAssociation} />
           <Stack.Screen name="AssociationInfo" component={AssociationInfo} />
           <Stack.Screen name="DonateClothesScreen" component={DonateClothesScreen} />
           <Stack.Screen name="ChatBotScreen" component={ChatBotScreen} />

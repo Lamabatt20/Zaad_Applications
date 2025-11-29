@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,9 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function ChatBotScreen() {
+export default function ChatBotScreen({ navigation }) {
   const [messages, setMessages] = useState([
     {
       id: "1",
@@ -23,6 +24,34 @@ export default function ChatBotScreen() {
 
   const [input, setInput] = useState("");
   const flatListRef = useRef();
+
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch (e) {
+        
+      }
+    };
+    loadTheme();
+    const unsubscribe = navigation?.addListener?.("focus", loadTheme);
+    return unsubscribe;
+  }, [navigation]);
+
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const headerBg = bg;
+  const textColor = darkMode ? "#fff" : "#333";
+  const menuTint = darkMode ? "#fff" : "#5A3D36";
+  const personIconColor = darkMode ? "#fff" : "#A27571";
+  const inputBg = darkMode ? "#2a2a2a" : "#fff";
+  const inputText = darkMode ? "#fff" : "#000";
+  const inputBorder = darkMode ? "#444" : "#A27571";
+  const botTextColor = darkMode ? "#fff" : "#333";
+  const botBubbleBg = "#A27571";
+  const userBubbleBg = "#C6AAA3";
 
   const sendMessage = () => {
     if (!input.trim()) return;
@@ -44,7 +73,7 @@ export default function ChatBotScreen() {
       };
 
       setMessages((prev) => [...prev, botMessage]);
-      flatListRef.current.scrollToEnd({ animated: true });
+      flatListRef.current?.scrollToEnd({ animated: true });
     }, 600);
   };
 
@@ -58,12 +87,11 @@ export default function ChatBotScreen() {
           isUser ? styles.userContainer : styles.botContainer,
         ]}
       >
-        
         {isUser ? (
           <Ionicons
             name="person-circle-outline"
             size={36}
-            color="#A27571"
+            color={personIconColor}
             style={{ marginLeft: 6 }}
           />
         ) : (
@@ -73,17 +101,16 @@ export default function ChatBotScreen() {
           />
         )}
 
-        
         <View style={{ flexDirection: "column" }}>
-          
-          
           <View
             style={[
               styles.messageBubble,
-              isUser ? styles.userBubble : styles.botBubble,
+              isUser
+                ? [styles.userBubble, { backgroundColor: userBubbleBg }]
+                : [styles.botBubble, { backgroundColor: botBubbleBg }],
             ]}
           >
-            <Text style={isUser ? styles.userText : styles.botText}>
+            <Text style={{ color: isUser ? "#fff" : botTextColor }}>
               {item.text}
             </Text>
           </View>
@@ -94,15 +121,14 @@ export default function ChatBotScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: headerBg }]}>
         <TouchableOpacity>
           <Image
             source={require("../assets/menu.png")}
-            style={styles.menuIcon}
+            style={[styles.menuIcon, { tintColor: menuTint }]}
           />
         </TouchableOpacity>
 
@@ -112,11 +138,10 @@ export default function ChatBotScreen() {
         />
 
         <TouchableOpacity>
-          <Image style={styles.headerIcon} />
+          <Image style={[styles.headerIcon, { tintColor: menuTint }]} />
         </TouchableOpacity>
       </View>
 
-      
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -124,15 +149,23 @@ export default function ChatBotScreen() {
         renderItem={renderMessage}
         contentContainerStyle={{ padding: 20 }}
         onContentSizeChange={() =>
-          flatListRef.current.scrollToEnd({ animated: true })
+          flatListRef.current?.scrollToEnd({ animated: true })
         }
       />
 
-     
-      <View style={styles.inputContainer}>
+      <View
+        style={[
+          styles.inputContainer,
+          { backgroundColor: headerBg, borderColor: inputBorder },
+        ]}
+      >
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            { backgroundColor: inputBg, color: inputText, borderColor: inputBorder },
+          ]}
           placeholder="Type your message..."
+          placeholderTextColor={darkMode ? "#aaa" : "#888"}
           value={input}
           onChangeText={setInput}
         />
@@ -251,6 +284,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
-
 });

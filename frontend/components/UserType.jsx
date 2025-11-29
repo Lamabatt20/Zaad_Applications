@@ -1,15 +1,33 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function UserType({ navigation }) {
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch (e) {
+      }
+    };
+    loadTheme();
+    const unsubscribe = navigation?.addListener?.('focus', loadTheme);
+    return unsubscribe;
+  }, [navigation]);
+
+  const bg = darkMode ? '#1c1c1c' : '#EBE1D7';
+  const textColor = darkMode ? '#fff' : '#000';
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <Image
-        source={require('../assets/images/logo1.png')} 
+        source={require('../assets/images/logo1.png')}
         style={styles.logoTop}
         resizeMode="contain"
       />
-
 
       <View style={styles.optionsContainer}>
         <TouchableOpacity
@@ -17,11 +35,10 @@ export default function UserType({ navigation }) {
           onPress={() => navigation.navigate('RegisterForDonor')}
         >
           <Image
-            source={require('../assets/images/donor 1.png')} 
+            source={require('../assets/images/donor 1.png')}
             style={styles.icon}
           />
-          <Text style={styles.optionText}>Donor</Text>
-           
+          <Text style={[styles.optionText, { color: textColor }]}>Donor</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -29,20 +46,19 @@ export default function UserType({ navigation }) {
           onPress={() => navigation.navigate('RegisterForAssociation')}
         >
           <Image
-            source={require('../assets/images/ass.png')} 
+            source={require('../assets/images/ass.png')}
             style={styles.icon}
-             
           />
-          <Text style={styles.optionText}>Association</Text>
+          <Text style={[styles.optionText, { color: textColor }]}>Association</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.bottomLogoContainer}>
-              <Image
-                source={require('../assets/images/Z A A D.png')}
-                style={styles.logoBottom}
-              />
-            </View>
+        <Image
+          source={require('../assets/images/Z A A D.png')}
+          style={styles.logoBottom}
+        />
+      </View>
     </View>
   );
 }
@@ -50,7 +66,6 @@ export default function UserType({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBE1D7',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -63,7 +78,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     marginBottom: 30,
-    color: '#000000',
     fontWeight: '600',
   },
   optionsContainer: {
@@ -74,7 +88,7 @@ const styles = StyleSheet.create({
   option: {
     alignItems: 'center',
     padding: 20,
-    marginBottom:300,
+    marginBottom: 300,
   },
   icon: {
     width: 110,
@@ -83,7 +97,6 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    color: '#000',
   },
   bottomLogoContainer: {
     position: 'absolute',
