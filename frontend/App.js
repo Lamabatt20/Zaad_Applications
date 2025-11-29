@@ -11,6 +11,10 @@ import ClothesAssociationsScreen from './pages/ClothesAssociationsScreen';
 import AssociationInfo from "./pages/AssociationInfo";
 import DonateClothesScreen from "./pages/DonateClothesScreen";
 import ChooseDonationType from './pages/ChooseDonationType';
+import ChatBotScreen from "./pages/Chatbot";
+import ProfileScreen from "./pages/Profile";
+import EditProfileScreen from "./pages/EditProfile";
+import ChangePassword from './pages/ChangePassword';
 
 
 
@@ -36,6 +40,10 @@ export default function App() {
           <Stack.Screen name="ClothesAssociationsScreen" component={ClothesAssociationsScreen} />
           <Stack.Screen name="AssociationInfo" component={AssociationInfo} />
           <Stack.Screen name="DonateClothesScreen" component={DonateClothesScreen} />
+          <Stack.Screen name="ChatBotScreen" component={ChatBotScreen} />
+          <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+          <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
+          <Stack.Screen name="ChangePassword" component={ChangePassword} />
 
           </Stack.Navigator>
       </NavigationContainer>

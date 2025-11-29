@@ -154,14 +154,14 @@ const styles = StyleSheet.create({
   },
 
   btnYes: {
-    backgroundColor: "#A1746A",
+    backgroundColor: "#A27571",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
   },
 
   btnNo: {
-    backgroundColor: "#A1746A",
+    backgroundColor: "#C6AAA3",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
@@ -173,8 +173,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-
- 
   bottomLogo: {
     width: 80,
     height: 80,

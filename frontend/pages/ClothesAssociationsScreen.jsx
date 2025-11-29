@@ -11,8 +11,9 @@ import {
 import axios from "axios";
 import API from "../config";
 
-export default function ClothesAssociationsScreen({ navigation }) {
+export default function ClothesAssociationsScreen({ navigation ,route}) {
   const [associations, setAssociations] = useState([]);
+  const { user_id, username, email, full_name, phone, role,address } = route?.params || {};
 
   useEffect(() => {
     fetchAssociations();
@@ -110,7 +111,7 @@ export default function ClothesAssociationsScreen({ navigation }) {
      
       <TouchableOpacity
         style={styles.chatbotButton}
-        onPress={() => navigation.navigate("Chatbot")}
+        onPress={() => navigation.navigate("ChatBotScreen")}
       >
         <Image
           source={require("../assets/images/zaadbot.png")}
@@ -136,7 +137,20 @@ export default function ClothesAssociationsScreen({ navigation }) {
           <Text style={styles.sideBtnText}>Dashboard</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sideBtn}>
+        <TouchableOpacity
+          style={styles.sideBtn}
+          onPress={() =>
+            navigation.navigate("ProfileScreen", {
+              user_id,
+              username,
+              email,
+              full_name,
+              phone,
+              role,
+              address,
+            })
+          }
+        >
           <Text style={styles.sideBtnText}>Settings</Text>
         </TouchableOpacity>
 

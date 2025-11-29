@@ -96,20 +96,78 @@ app.get('/accounts', async (req, res) => {
   }
 });
 
-app.post('/accounts', async (req, res) => {
-  const { username, password, role, email, phone, full_name, address } = req.body;
+app.put('/accounts/user/:account_id', async (req, res) => {
+  const accountId = req.params.account_id;
+  const { username, email, phone, full_name, address, password } = req.body;
+
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      `INSERT INTO accounts (username, password_hash, role, email, phone, full_name, address)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [username, hashedPassword, role, email, phone, full_name, address]
-    );
-    res.json({ success: true, account: result.rows[0] });
+    let updateFields = [];
+    let values = [];
+    let index = 1;
+
+    if (username !== undefined) {
+      updateFields.push(`username = $${index++}`);
+      values.push(username);
+    }
+
+    if (email !== undefined) {
+      updateFields.push(`email = $${index++}`);
+      values.push(email);
+    }
+
+    if (phone !== undefined) {
+      updateFields.push(`phone = $${index++}`);
+      values.push(phone);
+    }
+
+    if (full_name !== undefined) {
+      updateFields.push(`full_name = $${index++}`);
+      values.push(full_name);
+    }
+
+    if (address !== undefined) {
+      updateFields.push(`address = $${index++}`);
+      values.push(address);
+    }
+
+    if (password !== undefined) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateFields.push(`password_hash = $${index++}`);
+      values.push(hashedPassword);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ success: false, message: "No fields to update" });
+    }
+
+    values.push(accountId);
+
+    const updateQuery = `
+      UPDATE accounts
+      SET ${updateFields.join(', ')}
+      WHERE account_id = $${index}
+      RETURNING *;
+    `;
+
+    const result = await pool.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Account not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Account updated successfully",
+      account: result.rows[0]
+    });
+
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -137,8 +195,12 @@ app.post('/login', async (req, res) => {
     res.json({
       success: true,
       role: user.role,
-      user_id: user.id,
-      username: user.username
+      user_id: user.account_id,
+      username: user.username,
+      email: user.email,
+      full_name: user.full_name,
+      address: user.address,
+      phone:user.phone
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error' });

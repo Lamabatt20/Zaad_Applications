@@ -1,45 +1,87 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Dimensions, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
 
 export default function ChooseDonationType({ navigation, route }) {
-  const { user_id, username } = route?.params || {};
+
+ 
+  const initialData = route?.params || {};
+
+  
+  const [currentUser, setCurrentUser] = useState({
+    user_id: initialData.user_id,
+    username: initialData.username,
+    email: initialData.email,
+    full_name: initialData.full_name,
+    phone: initialData.phone,
+    role: initialData.role,
+    address: initialData.address
+  });
+
+  
+  useEffect(() => {
+    if (route.params) {
+      setCurrentUser(prev => ({
+        ...prev,
+        ...route.params,
+      }));
+    }
+  }, [route.params]);
 
   const onSelect = (type) => {
-    console.log('Selected:', type, 'user_id:', user_id);
+    console.log('Selected:', type, 'user_id:', currentUser.user_id);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
        
+        
         <View style={styles.welcomeRow}>
           <Image
             source={require('../assets/images/image.png')}
             style={styles.welcomeLogo}
             resizeMode="contain"
           />
+
           <View style={styles.welcomeTextContainer}>
-            <Text style={styles.welcome}>Welcome {username || 'Donor'}</Text>
+            <Text style={styles.welcome}>Welcome {currentUser.username || 'Donor'}</Text>
           </View>
-          <TouchableOpacity style={styles.profileBtn}>
-            <Ionicons name="person-circle-outline" size={36} color="#8b6f69" />
+
+         
+          <TouchableOpacity
+            style={styles.profileBtn}
+            onPress={() =>
+              navigation.navigate("ProfileScreen", {
+                ...currentUser
+              })
+            }
+          >
+            <Ionicons name="person-circle-outline" size={36} color="#A27571" />
           </TouchableOpacity>
         </View>
 
         
+        
         <Text style={styles.bodyTitle}>Choose Donation Type:</Text>
 
         
+       
         <View style={styles.cardsRow}>
+          
+          
           <TouchableOpacity
             style={styles.card}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate("ClothesAssociationsScreen")}
+            onPress={() =>
+              navigation.navigate("ClothesAssociationsScreen", {
+                ...currentUser
+              })
+            }
           >
             <Image
               source={require('../assets/images/clothes.png')}
@@ -49,6 +91,7 @@ export default function ChooseDonationType({ navigation, route }) {
             <Text style={styles.cardLabel}>Clothes Donation</Text>
           </TouchableOpacity>
 
+         
           <TouchableOpacity
             style={styles.card}
             activeOpacity={0.8}
@@ -61,9 +104,11 @@ export default function ChooseDonationType({ navigation, route }) {
             />
             <Text style={styles.cardLabel}>Food Donation</Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
 
+      
       
       <View style={styles.footerContainer}>
         <Image
@@ -72,7 +117,10 @@ export default function ChooseDonationType({ navigation, route }) {
         />
       </View>
 
-      <TouchableOpacity style={styles.chatbotBtn}
+      
+      <TouchableOpacity
+        style={styles.chatbotBtn}
+        onPress={() => navigation.navigate("ChatBotScreen")}
       >
         <Image
           source={require("../assets/images/zaadbot.png")}
@@ -83,6 +131,7 @@ export default function ChooseDonationType({ navigation, route }) {
   );
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -91,7 +140,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 120, 
+    paddingBottom: 120,
   },
   welcomeRow: {
     flexDirection: 'row',
@@ -115,13 +164,12 @@ const styles = StyleSheet.create({
     marginTop: -50,
     marginLeft: -65,
     color: '#8b6f69',
-
   },
   profileBtn: {
     top: -30,
   },
   bodyTitle: {
-    fontSize: 16, 
+    fontSize: 16,
     fontWeight: '500',
     color: '#2f2f2f',
     marginBottom: -10,

@@ -64,7 +64,15 @@ export default function LoginScreen({ navigation }) {
             //navigation.navigate('AdminDashboard');
             break;
           case 'donor':
-            navigation.navigate('ChooseDonationType', { user_id: res.data.user_id, username: res.data.username });
+           navigation.navigate("ChooseDonationType", {
+            user_id: res.data.user_id,
+            username: res.data.username,
+            email: res.data.email,
+            full_name: res.data.full_name,
+            phone: res.data.phone,
+            role: res.data.role,
+            address:res.data.address,
+          });
             break;
           default:
             setGeneralError('Unknown role');
