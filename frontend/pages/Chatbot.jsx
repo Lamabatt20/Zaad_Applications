@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import API from "../config";
 import SideMenu from "../components/SideMenu";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function ChatBotScreen({ navigation, route }) {
   const [messages, setMessages] = useState([
@@ -33,19 +34,41 @@ export default function ChatBotScreen({ navigation, route }) {
   const [user, setUser] = useState({ user_id, username, email, full_name, phone, role, address });
 
   useEffect(() => {
-    // If user_id provided via navigation, fetch latest user data from backend
-    const fetchUser = async () => {
-      if (!user_id) return;
+    // Fetch user data: first from route params, then from AsyncStorage if not available, then from API
+    const initializeUser = async () => {
       try {
-        const res = await axios.get(`${API.API_URL}/accounts/${user_id}`);
-        if (res && res.data) setUser(res.data);
+        // If user data provided via route params, use it
+        if (user_id) {
+          try {
+            const res = await axios.get(`${API.API_URL}/accounts/${user_id}`);
+            if (res && res.data) {
+              setUser(res.data);
+              // Save to AsyncStorage for future use
+              await AsyncStorage.setItem("user_data", JSON.stringify(res.data));
+            }
+          } catch (err) {
+            console.log('Error fetching user from API:', err.message || err);
+          }
+          return;
+        }
+
+        // If no user_id in params, try to get from AsyncStorage
+        const savedUserData = await AsyncStorage.getItem("user_data");
+        if (savedUserData) {
+          const userData = JSON.parse(savedUserData);
+          setUser(userData);
+          console.log('Loaded user from AsyncStorage:', userData);
+          return;
+        }
+
+        console.log('No user data available');
       } catch (err) {
-        console.log('Error fetching user for Chatbot:', err.message || err);
+        console.log('Error initializing user:', err.message || err);
       }
     };
 
-    fetchUser();
-  }, [user_id]);
+    initializeUser();
+  }, []);
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -201,6 +224,7 @@ export default function ChatBotScreen({ navigation, route }) {
         onClose={closeSidebar}
         navigation={navigation}
         user={user}
+        sourceScreen="ChatBotScreen"
       />
     </KeyboardAvoidingView>
   );

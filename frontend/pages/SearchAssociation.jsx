@@ -18,8 +18,21 @@ export default function SearchAssociation({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
   const [filtered, setFiltered] = useState([]);
 
-  const donationType =
-    route?.params?.donationType || route?.params?.type || route?.params?.selectedType || 'clothes';
+  // Determine donation type based on source screen:
+  // If from ChatBot, fetch all associations; otherwise, fetch specific type (clothes/food)
+  const sourceScreen = route?.params?.sourceScreen || 'ChatBot';
+  let donationType = 'clothes'; // default
+  
+  if (sourceScreen === 'ChatBotScreen') {
+    donationType = 'all';
+  } else if (sourceScreen === 'FoodAssociationsScreen') {
+    donationType = 'food';
+  } else if (sourceScreen === 'ClothesAssociationsScreen') {
+    donationType = 'clothes';
+  } else {
+    // Fallback to params if provided
+    donationType = route?.params?.donationType || route?.params?.type || route?.params?.selectedType || 'clothes';
+  }
 
   useEffect(() => {
     fetchAssociations();
@@ -41,11 +54,25 @@ export default function SearchAssociation({ navigation, route }) {
 
   const fetchAssociations = async () => {
     try {
-      const res = await axios.get(`${API.API_URL}/associations/${donationType}`);
+      let endpoint = '';
+      console.log('SearchAssociation - sourceScreen:', sourceScreen, 'donationType:', donationType);
+      
+      if (donationType === 'all') {
+        // Fetch all associations (when from ChatBot)
+        endpoint = `${API.API_URL}/associations`;
+      } else {
+        // Fetch filtered by type (clothes or food)
+        endpoint = `${API.API_URL}/associations/${donationType}`;
+      }
+      console.log('SearchAssociation - endpoint:', endpoint);
+      
+      const res = await axios.get(endpoint);
       const data = Array.isArray(res.data) ? res.data : (res.data.items || []);
+      console.log('SearchAssociation - fetched data count:', data.length);
       setAssociations(data);
       setFiltered(data);
     } catch (e) {
+      console.log('Error fetching associations:', e);
     }
   };
 

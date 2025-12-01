@@ -12,12 +12,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function DonateClothesScreen({ navigation }) {
+export default function DonateFoodScreen({ navigation }) {
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
-  const [condition, setCondition] = useState("New");
+  const [isPerishable, setIsPerishable] = useState("No");
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function DonateClothesScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: text }]}>Donate Clothes</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>Donate Food</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -84,16 +84,19 @@ export default function DonateClothesScreen({ navigation }) {
           onChangeText={setAddress}
         />
 
-        {/* Condition Dropdown */}
-        <Text style={[styles.label, { color: text }]}>Condition</Text>
+        {/* Is Perishable Dropdown */}
+        <Text style={[styles.label, { color: text }]}>Is Perishable</Text>
         <TouchableOpacity style={[styles.dropdown, { backgroundColor: inputBg, borderColor: border }]}>
-          <Text style={[styles.dropdownText, { color: text }]}>{condition}</Text>
+          <Text style={[styles.dropdownText, { color: text }]}>{isPerishable}</Text>
           <Ionicons name="chevron-down" size={20} color={text} />
         </TouchableOpacity>
 
         {/* Image Picker Section */}
         <Text style={[styles.label, { color: text }]}>
           Take pictures of the Donated Item
+        </Text>
+        <Text style={[styles.hint, { color: "#999" }]}>
+          Please Make sure to show the Expiration Date
         </Text>
 
         <TouchableOpacity style={[styles.imagePickerBox, { borderColor: border }]}>
@@ -144,6 +147,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 16,
     marginBottom: 8,
+  },
+  hint: {
+    fontSize: 13,
+    marginBottom: 10,
+    fontWeight: "400",
   },
   input: {
     borderRadius: 10,
