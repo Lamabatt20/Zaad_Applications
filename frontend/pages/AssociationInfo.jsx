@@ -1,66 +1,89 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
   const { association } = route.params;
 
-  return (
-    <View style={styles.container}>
+  const [darkMode, setDarkMode] = useState(false);
 
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch (e) {
+      }
+    };
+    loadTheme();
+    const unsubscribe = navigation?.addListener?.("focus", loadTheme);
+    return unsubscribe;
+  }, [navigation]);
+
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const headerTitleColor = darkMode ? "#fff" : "#8b6f69";
+  const cardBg = darkMode ? "#2a2a2a" : "#fff";
+  const cardTitleColor = darkMode ? "#fff" : "#000";
+  const cardDescriptionColor = darkMode ? "#ccc" : "#444";
+  const questionColor = darkMode ? "#fff" : "#333";
+  const btnYesBg = "#A27571";
+  const btnNoBg = "#C6AAA3";
+  const btnTextColor = "#fff";
+
+  return (
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.header}>
         <Image
           source={require("../assets/images/logo1.png")}
           style={styles.headerLogo}
         />
-        <Text style={styles.headerTitle}>{association.name}</Text>
+        <Text style={[styles.headerTitle, { color: headerTitleColor }]}>
+          {association.name}
+        </Text>
       </View>
 
-    
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: cardBg }]}>
         <View style={styles.row}>
           <Image
-          source={{ uri: `${API.API_URL}${association.association_logo}` }}
-          style={styles.cardImage}
-        />
+            source={{ uri: `${API.API_URL}${association.association_logo}` }}
+            style={styles.cardImage}
+          />
           <View style={styles.cardTextContainer}>
-            <Text style={styles.cardTitle}>{association.name}</Text>
-            <Text style={styles.cardDescription}>
-             {association.description
-              || "No description available."}
+            <Text style={[styles.cardTitle, { color: cardTitleColor }]}>
+              {association.name}
+            </Text>
+            <Text style={[styles.cardDescription, { color: cardDescriptionColor }]}>
+              {association.description || "No description available."}
             </Text>
           </View>
         </View>
       </View>
 
-      
-      <Text style={styles.question}>
+      <Text style={[styles.question, { color: questionColor }]}>
         Do you want to donate to this association?
       </Text>
 
-      
       <View style={styles.buttonsContainer}>
         <TouchableOpacity
-          style={styles.btnYes}
+          style={[styles.btnYes, { backgroundColor: btnYesBg }]}
           onPress={() => navigation.navigate("DonateClothesScreen")}
         >
-          <Text style={styles.btnText}>Yes</Text>
+          <Text style={[styles.btnText, { color: btnTextColor }]}>Yes</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.btnNo}
+          style={[styles.btnNo, { backgroundColor: btnNoBg }]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.btnText}>No</Text>
+          <Text style={[styles.btnText, { color: btnTextColor }]}>No</Text>
         </TouchableOpacity>
       </View>
 
-      
       <Image
         source={require("../assets/images/Z A A D.png")}
         style={styles.bottomLogo}
       />
-
     </View>
   );
 }
@@ -68,12 +91,10 @@ export default function AssociationInfo({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EBE1D7",
     paddingTop: 60,
     alignItems: "center",
   },
 
-  
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -86,20 +107,16 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
     marginLeft: -130,
     marginRight: 10,
-    marginTop:-10,
-
+    marginTop: -10,
   },
   headerTitle: {
     fontFamily: "Times New Roman",
     fontSize: 25,
-    color: "#8b6f69",
-     marginLeft: -40,
+    marginLeft: -40,
   },
 
-  
   card: {
     width: "90%",
-    backgroundColor: "#fff",
     padding: 15,
     borderRadius: 12,
     shadowColor: "#000",
@@ -107,7 +124,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
     marginBottom: 30,
-    marginTop:30,
+    marginTop: 30,
   },
 
   row: {
@@ -129,24 +146,19 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#00000",
   },
 
   cardDescription: {
     fontSize: 14,
-    color: "#444",
     marginTop: 5,
   },
 
-  
   question: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#333",
     marginBottom: 15,
   },
 
-  
   buttonsContainer: {
     width: "80%",
     flexDirection: "column",
@@ -154,22 +166,19 @@ const styles = StyleSheet.create({
   },
 
   btnYes: {
-    backgroundColor: "#A27571",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
   },
 
   btnNo: {
-    backgroundColor: "#C6AAA3",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
-    opacity: 0.85,
+    opacity: 0.95,
   },
 
   btnText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "700",
   },

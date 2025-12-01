@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
 import axios from 'axios';
 import config from '../config';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function ChangePassword({ route, navigation }) {
   const { user_id, username, email, full_name, phone, role, address } =
@@ -25,6 +27,32 @@ export default function ChangePassword({ route, navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch (e) {
+      }
+    };
+    loadTheme();
+    const unsubscribe = navigation?.addListener?.("focus", loadTheme);
+    return unsubscribe;
+  }, [navigation]);
+
+  const bg = darkMode ? '#1c1c1c' : '#EBE1D7';
+  const textColor = darkMode ? '#fff' : '#000';
+  const labelColor = textColor;
+  const inputBg = darkMode ? '#2a2a2a' : '#fff';
+  const inputText = darkMode ? '#fff' : '#000';
+  const inputBorder = darkMode ? '#444' : '#000';
+  const resetButtonBg = darkMode ? '#A27571' : '#000';
+  const iconColor = darkMode ? '#ddd' : 'gray';
+  const placeholderColor = darkMode ? '#aaa' : '#555';
+
   const validateFields = () => {
     const newErrors = {};
 
@@ -43,17 +71,15 @@ export default function ChangePassword({ route, navigation }) {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
   const handleResetPassword = async () => {
     if (!validateFields()) return;
     setLoading(true);
 
     try {
-      const res = await axios.put(
+      await axios.put(
         `${config.API_URL}/accounts/user/${user_id}`,
-        {
-          password: newPassword,
-
-        }
+        { password: newPassword }
       );
 
       alert('Password has been reset successfully!');
@@ -62,8 +88,8 @@ export default function ChangePassword({ route, navigation }) {
       setConfirmPassword('');
 
       navigation.navigate("ProfileScreen", {
-            user_id,username, email, full_name, phone, role, address 
-            });
+        user_id, username, email, full_name, phone, role, address
+      });
 
     } catch (error) {
       console.error(error);
@@ -84,7 +110,7 @@ export default function ChangePassword({ route, navigation }) {
         alignItems: 'center',
         justifyContent: 'center',
       }}
-      style={{ backgroundColor: '#EBE1D7' }}
+      style={{ backgroundColor: bg }}
     >
       <Image
         source={require('../assets/images/logo3.png')}
@@ -93,12 +119,12 @@ export default function ChangePassword({ route, navigation }) {
 
       <View style={styles.inputContainer}>
 
-        <Text style={styles.label}>New Password</Text>
-        <View style={styles.passwordContainer}>
+        <Text style={[styles.label, { color: labelColor }]}>New Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: inputBorder }]}>
           <TextInput
-            style={styles.inputPassword}
+            style={[styles.inputPassword, { color: inputText }]}
             placeholder="new password"
-            placeholderTextColor="#555"
+            placeholderTextColor={placeholderColor}
             secureTextEntry={!showNewPassword}
             value={newPassword}
             onChangeText={setNewPassword}
@@ -107,7 +133,7 @@ export default function ChangePassword({ route, navigation }) {
             <MaterialIcons
               name={showNewPassword ? 'visibility' : 'visibility-off'}
               size={22}
-              color="gray"
+              color={iconColor}
             />
           </TouchableOpacity>
         </View>
@@ -119,13 +145,12 @@ export default function ChangePassword({ route, navigation }) {
           </View>
         )}
 
-        
-        <Text style={styles.label}>Confirm New Password</Text>
-        <View style={styles.passwordContainer}>
+        <Text style={[styles.label, { color: labelColor }]}>Confirm New Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: inputBorder }]}>
           <TextInput
-            style={styles.inputPassword}
+            style={[styles.inputPassword, { color: inputText }]}
             placeholder="confirm new password"
-            placeholderTextColor="#555"
+            placeholderTextColor={placeholderColor}
             secureTextEntry={!showConfirmPassword}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
@@ -134,7 +159,7 @@ export default function ChangePassword({ route, navigation }) {
             <MaterialIcons
               name={showConfirmPassword ? 'visibility' : 'visibility-off'}
               size={22}
-              color="gray"
+              color={iconColor}
             />
           </TouchableOpacity>
         </View>
@@ -153,9 +178,8 @@ export default function ChangePassword({ route, navigation }) {
         )}
       </View>
 
-      
       <TouchableOpacity
-        style={styles.resetButton}
+        style={[styles.resetButton, { backgroundColor: resetButtonBg }]}
         onPress={handleResetPassword}
         disabled={loading}
       >

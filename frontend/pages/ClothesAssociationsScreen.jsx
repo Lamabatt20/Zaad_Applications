@@ -3,41 +3,59 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from "react
 import SideMenu from "../components/SideMenu";
 import axios from "axios";
 import API from "../config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function ClothesAssociationsScreen({ navigation ,route}) {
+export default function ClothesAssociationsScreen({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
-  const { user_id, username, email, full_name, phone, role,address } = route?.params || {};
+  const { user_id, username, email, full_name, phone, role, address } =
+    route?.params || {};
+  const donationType =
+    route?.params?.donationType || route?.params?.type || "clothes";
+
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    };
+    loadTheme();
+  }, []);
 
   useEffect(() => {
     fetchAssociations();
-  }, []);
+  }, [donationType]);
 
   const fetchAssociations = async () => {
     try {
-      const res = await axios.get(`${API.API_URL}/associations/clothes`);
-      setAssociations(res.data);
+      const res = await axios.get(`${API.API_URL}/associations/${donationType}`);
+      const data = Array.isArray(res.data) ? res.data : res.data.items || [];
+      setAssociations(data);
     } catch (err) {
-      console.log("Error fetching associations:", err);
+      // keep associations empty on error
     }
   };
 
-  const renderItem = ({ item }) => (
-  <TouchableOpacity
-    style={styles.card}
-    onPress={() =>
-      navigation.navigate("AssociationInfo", { association: item })
-    }
-  >
-    <Image
-      source={{ uri: `${API.API_URL}${item.association_logo}` }}
-      style={styles.logo}
-    />
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const text = darkMode ? "#fff" : "#000";
 
-    <Text style={styles.associationName}>
-      {item.name}
-    </Text>
-  </TouchableOpacity>
-);
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      onPress={() =>
+        navigation.navigate("AssociationInfo", { association: item })
+      }
+      style={styles.itemContainer}
+    >
+      <Image
+        source={{ uri: `${API.API_URL}${item.association_logo}` }}
+        style={styles.logo}
+      />
+
+      <Text style={[styles.associationName, { color: text }]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -55,10 +73,7 @@ export default function ClothesAssociationsScreen({ navigation ,route}) {
         <Text style={styles.headerTitle}>Clothes Donation</Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
-          <Image
-            source={require("../assets/menu.png")}
-            style={styles.menuIcon}
-          />
+          <Image source={require("../assets/menu.png")} style={styles.menuIcon} />
         </TouchableOpacity>
       </View>
 
@@ -105,7 +120,6 @@ export default function ClothesAssociationsScreen({ navigation ,route}) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EBE1D7",
     paddingTop: 25,
     paddingHorizontal: 10,
   },
@@ -146,11 +160,22 @@ const styles = StyleSheet.create({
     height: 45,
   },
 
+  itemContainer: {
+    width: "47%",
+    alignItems: "center",
+  },
+
   logo: {
     width: 140,
     height: 140,
     borderRadius: 10,
-    margin: 10,
+  },
+
+  associationName: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginTop: 10,
+    marginBottom: -10,
   },
 
   bottomContainer: {
@@ -161,9 +186,11 @@ const styles = StyleSheet.create({
   },
 
   bottomLogo: {
-    width: 80,
+     width: 80,
     height: 80,
     resizeMode: "contain",
+    position: "absolute",
+    bottom: 10,
   },
 
   chatbotButton: {
@@ -175,7 +202,6 @@ const styles = StyleSheet.create({
   chatbotIcon: {
     width: 50,
     height: 50,
-    resizeMode: "contain",
   },
 
   overlay: {
@@ -193,7 +219,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 280,
-    backgroundColor: "#fff",
     paddingTop: 40,
     zIndex: 10,
     elevation: 10,
@@ -210,7 +235,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    marginBottom: 10,
   },
 
   sideBtn: {
@@ -220,7 +244,6 @@ const styles = StyleSheet.create({
 
   sideBtnText: {
     fontSize: 16,
-    color: "#333",
   },
 
   logoutBtn: {
@@ -234,18 +257,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
-  card: {
-  width: "47%",
-  alignItems: "center",
-  marginBottom: 15,
-},
-
-associationName: {
-  fontSize: 16, 
-  fontWeight: '500',
-  color: '#2f2f2f',
-  marginBottom: -10,
-  marginTop: 10,
-},
-
 });
