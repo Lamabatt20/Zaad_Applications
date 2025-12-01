@@ -159,6 +159,7 @@ export default function ChatBotScreen({ navigation }) {
           { backgroundColor: headerBg, borderColor: inputBorder },
         ]}
       >
+        
         <TextInput
           style={[
             styles.input,
