@@ -95,6 +95,35 @@ app.get('/accounts', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+app.post('/accounts', async (req, res) => {
+  const { username, password, role, email, phone, full_name, address } = req.body;
+
+  if (!username || !password || !role) {
+    return res.status(400).json({ success: false, message: "Missing required fields" });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      `INSERT INTO accounts (username, password_hash, role, email, phone, full_name, address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [username, hashedPassword, role, email, phone, full_name, address]
+    );
+
+    res.json({
+      success: true,
+      account: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
 
 app.put('/accounts/user/:account_id', async (req, res) => {
   const accountId = req.params.account_id;
