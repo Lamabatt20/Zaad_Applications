@@ -4,7 +4,7 @@ import SideMenu from "../components/SideMenu";
 import axios from "axios";
 import API from "../config";
 
-export default function ClothesAssociationsScreen({ navigation ,route}) {
+export default function FoodAssociationsScreen({ navigation ,route}) {
   const [associations, setAssociations] = useState([]);
   const { user_id, username, email, full_name, phone, role,address } = route?.params || {};
 
@@ -14,7 +14,7 @@ export default function ClothesAssociationsScreen({ navigation ,route}) {
 
   const fetchAssociations = async () => {
     try {
-      const res = await axios.get(`${API.API_URL}/associations/clothes`);
+      const res = await axios.get(`${API.API_URL}/associations/food`);
       setAssociations(res.data);
     } catch (err) {
       console.log("Error fetching associations:", err);
@@ -52,7 +52,7 @@ export default function ClothesAssociationsScreen({ navigation ,route}) {
           style={styles.topLogo}
         />
 
-        <Text style={styles.headerTitle}>Clothes Donation</Text>
+        <Text style={styles.headerTitle}>Food Donation</Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
           <Image

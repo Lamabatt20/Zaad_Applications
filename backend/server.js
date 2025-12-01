@@ -95,6 +95,19 @@ app.get('/accounts', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
+// Return a single account by id
+app.get('/accounts/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const result = await pool.query('SELECT * FROM accounts WHERE account_id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Account not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching account by id:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 app.post('/accounts', async (req, res) => {
   const { username, password, role, email, phone, full_name, address } = req.body;
 
@@ -547,6 +560,18 @@ app.get('/associations/clothes', async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT association_id, name,description,association_logo FROM associations WHERE clothes = true"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get('/associations/food', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT association_id, name,description,association_logo FROM associations WHERE food = true"
     );
     res.json(result.rows);
   } catch (err) {
