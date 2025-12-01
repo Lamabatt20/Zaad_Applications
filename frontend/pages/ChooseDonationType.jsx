@@ -49,6 +49,8 @@ export default function ChooseDonationType({ navigation, route }) {
     }
   }, [route.params]);
 
+  
+
   const onSelect = (type) => {
     console.log('Selected:', type, 'user_id:', currentUser.user_id);
   };
@@ -110,7 +112,11 @@ export default function ChooseDonationType({ navigation, route }) {
           <TouchableOpacity
             style={[styles.card, { backgroundColor: darkMode ? "transparent" : "transparent" }]}
             activeOpacity={0.8}
-            onPress={() => onSelect('Food')}
+            onPress={() =>
+              navigation.navigate("FoodAssociationsScreen", {
+                ...currentUser
+              })
+            }
           >
             <Image
               source={require('../assets/images/food.png')}
@@ -134,13 +140,14 @@ export default function ChooseDonationType({ navigation, route }) {
 
       <TouchableOpacity
         style={styles.chatbotBtn}
-        onPress={() => navigation.navigate("ChatBotScreen")}
+        onPress={() => navigation.navigate("ChatBotScreen", { ...currentUser })}
       >
         <Image
           source={require("../assets/images/zaadbot.png")}
           style={{ width: 50, height: 50, resizeMode: "contain" }}
         />
       </TouchableOpacity>
+     
     </SafeAreaView>
   );
 }
@@ -226,4 +233,5 @@ const styles = StyleSheet.create({
     bottom: 100,
     right: 20,
   },
+  
 });

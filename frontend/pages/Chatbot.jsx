@@ -11,9 +11,11 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import API from "../config";
+import SideMenu from "../components/SideMenu";
 
-export default function ChatBotScreen({ navigation }) {
+export default function ChatBotScreen({ navigation, route }) {
   const [messages, setMessages] = useState([
     {
       id: "1",
@@ -24,6 +26,26 @@ export default function ChatBotScreen({ navigation }) {
 
   const [input, setInput] = useState("");
   const flatListRef = useRef();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const openSidebar = () => setSidebarOpen(true);
+  const closeSidebar = () => setSidebarOpen(false);
+  const { user_id, username, email, full_name, phone, role, address } = route?.params || {};
+  const [user, setUser] = useState({ user_id, username, email, full_name, phone, role, address });
+
+  useEffect(() => {
+    // If user_id provided via navigation, fetch latest user data from backend
+    const fetchUser = async () => {
+      if (!user_id) return;
+      try {
+        const res = await axios.get(`${API.API_URL}/accounts/${user_id}`);
+        if (res && res.data) setUser(res.data);
+      } catch (err) {
+        console.log('Error fetching user for Chatbot:', err.message || err);
+      }
+    };
+
+    fetchUser();
+  }, [user_id]);
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -124,21 +146,21 @@ export default function ChatBotScreen({ navigation }) {
       style={[styles.container, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={[styles.header, { backgroundColor: headerBg }]}>
-        <TouchableOpacity>
-          <Image
-            source={require("../assets/menu.png")}
-            style={[styles.menuIcon, { tintColor: menuTint }]}
-          />
-        </TouchableOpacity>
+      
+      <View style={styles.header}>
+        {/* left placeholder so logo stays centered */}
+        <View style={{ width: 45 }} />
 
         <Image
           source={require("../assets/images/ZaadBot1.png")}
           style={styles.headerLogo}
         />
 
-        <TouchableOpacity>
-          <Image style={[styles.headerIcon, { tintColor: menuTint }]} />
+        <TouchableOpacity onPress={openSidebar}>
+          <Image
+            source={require("../assets/menu.png")}
+            style={styles.menuIcon}
+          />
         </TouchableOpacity>
       </View>
 
@@ -175,6 +197,12 @@ export default function ChatBotScreen({ navigation }) {
           <Text style={{ color: "#fff", fontWeight: "bold" }}>➤</Text>
         </TouchableOpacity>
       </View>
+      <SideMenu
+        visible={sidebarOpen}
+        onClose={closeSidebar}
+        navigation={navigation}
+        user={user}
+      />
     </KeyboardAvoidingView>
   );
 }
