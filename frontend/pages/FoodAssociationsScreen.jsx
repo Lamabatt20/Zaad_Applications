@@ -1,12 +1,38 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+} from "react-native";
 import SideMenu from "../components/SideMenu";
 import axios from "axios";
 import API from "../config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function FoodAssociationsScreen({ navigation ,route}) {
+export default function FoodAssociationsScreen({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
-  const { user_id, username, email, full_name, phone, role,address } = route?.params || {};
+  const [darkMode, setDarkMode] = useState(false);
+
+  const { user_id, username, email, full_name, phone, role, address } =
+    route?.params || {};
+
+  
+  useEffect(() => {
+    loadDarkMode();
+  }, []);
+
+  const loadDarkMode = async () => {
+    try {
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    } catch (e) {}
+  };
+
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const text = darkMode ? "#fff" : "#2f2f2f";
 
   useEffect(() => {
     fetchAssociations();
@@ -22,22 +48,25 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
   };
 
   const renderItem = ({ item }) => (
-  <TouchableOpacity
-    style={styles.card}
-    onPress={() =>
-      navigation.navigate("AssociationInfo", { association: item, donationType: 'food' })
-    }
-  >
-    <Image
-      source={{ uri: `${API.API_URL}${item.association_logo}` }}
-      style={styles.logo}
-    />
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() =>
+        navigation.navigate("AssociationInfo", {
+          association: item,
+          donationType: "food",
+        })
+      }
+    >
+      <Image
+        source={{ uri: `${API.API_URL}${item.association_logo}` }}
+        style={styles.logo}
+      />
 
-    <Text style={styles.associationName}>
-      {item.name}
-    </Text>
-  </TouchableOpacity>
-);
+      <Text style={[styles.associationName, { color: text }]}>
+        {item.name}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -45,19 +74,19 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.header}>
         <Image
           source={require("../assets/images/image.png")}
-          style={styles.topLogo}
+          style={[styles.topLogo]}
         />
 
-        <Text style={styles.headerTitle}>Food Donation</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>Food Donation</Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
           <Image
             source={require("../assets/menu.png")}
-            style={styles.menuIcon}
+            style={[styles.menuIcon, { tintColor: text }]}
           />
         </TouchableOpacity>
       </View>
@@ -84,7 +113,17 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
 
       <TouchableOpacity
         style={styles.chatbotButton}
-        onPress={() => navigation.navigate("ChatBotScreen", { user_id, username, email, full_name, phone, role, address })}
+        onPress={() =>
+          navigation.navigate("ChatBotScreen", {
+            user_id,
+            username,
+            email,
+            full_name,
+            phone,
+            role,
+            address,
+          })
+        }
       >
         <Image
           source={require("../assets/images/zaadbot.png")}
@@ -98,6 +137,7 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
         navigation={navigation}
         user={{ user_id, username, email, full_name, phone, role, address }}
         sourceScreen="FoodAssociationsScreen"
+        darkMode={darkMode}
       />
     </View>
   );
@@ -106,7 +146,6 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EBE1D7",
     paddingTop: 25,
     paddingHorizontal: 10,
   },
@@ -132,7 +171,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Times New Roman",
     fontSize: 25,
-    color: "#8b6f69",
     marginLeft: -150,
     marginBottom: 30,
   },
@@ -179,74 +217,18 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
 
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    zIndex: 9,
-  },
-
-  sidebarLeft: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 280,
-    backgroundColor: "#fff",
-    paddingTop: 40,
-    zIndex: 10,
-    elevation: 10,
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-  },
-
-  profileBox: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-
-  profileImg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 10,
-  },
-
-  sideBtn: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-
-  sideBtnText: {
-    fontSize: 16,
-    color: "#333",
-  },
-
-  logoutBtn: {
-    marginTop: 30,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-
-  logoutText: {
-    color: "red",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   card: {
-  width: "47%",
-  alignItems: "center",
-  marginBottom: 15,
-},
+    width: "47%",
+    alignItems: "center",
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+  },
 
-associationName: {
-  fontSize: 16, 
-  fontWeight: '500',
-  color: '#2f2f2f',
-  marginBottom: -10,
-  marginTop: 10,
-},
-
+  associationName: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: -10,
+    marginTop: 10,
+  },
 });

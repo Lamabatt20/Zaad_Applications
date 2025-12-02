@@ -121,11 +121,8 @@ export default function EditProfileScreen({ route, navigation }) {
           <View style={styles.profileImageContainer}>
             <Image
               source={require("../assets/images/profiles.png")}
-              style={{ width: 125, height: 110 }}
+              style={[{ width: 125, height: 110 },{tintColor:theme.text}]}
             />
-            <TouchableOpacity style={styles.editIconBtn} onPress={updateAccount}>
-              <Ionicons name="pencil" size={18} color="#fff" />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.fieldBox}>
@@ -176,6 +173,19 @@ export default function EditProfileScreen({ route, navigation }) {
               keyboardType="number-pad"
             />
           </View>
+
+          <TouchableOpacity
+            style={styles.saveBtn}
+            onPress={updateAccount}
+          >
+            <Ionicons
+              name="checkmark-done"
+              size={17}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.saveBtnText}>Save Changes</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.passwordBtn}
@@ -236,18 +246,6 @@ const styles = StyleSheet.create({
     marginTop: -90,
   },
 
-  editIconBtn: {
-    backgroundColor: "#000",
-    width: 30,
-    height: 30,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    right: 120,
-    top: 65,
-  },
-
   fieldBox: {
     marginTop: 15,
   },
@@ -265,11 +263,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
+  saveBtn: {
+    backgroundColor: "#A27571",
+    paddingVertical: 14,
+    borderRadius: 30,
+    marginTop: 175,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  saveBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
   passwordBtn: {
     backgroundColor: "#000",
     paddingVertical: 14,
     borderRadius: 30,
-    marginTop: 240,
+    marginTop: 16,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",

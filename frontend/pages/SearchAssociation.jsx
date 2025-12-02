@@ -12,27 +12,42 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import API from '../config';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function SearchAssociation({ navigation, route }) {
   const [query, setQuery] = useState('');
   const [associations, setAssociations] = useState([]);
   const [filtered, setFiltered] = useState([]);
+  const [darkMode, setDarkMode] = useState(false);
 
-  // Determine donation type based on source screen:
-  // If from ChatBot, fetch all associations; otherwise, fetch specific type (clothes/food)
-  const sourceScreen = route?.params?.sourceScreen || 'ChatBot';
-  let donationType = 'clothes'; // default
   
-  if (sourceScreen === 'ChatBotScreen') {
-    donationType = 'all';
-  } else if (sourceScreen === 'FoodAssociationsScreen') {
-    donationType = 'food';
-  } else if (sourceScreen === 'ClothesAssociationsScreen') {
-    donationType = 'clothes';
-  } else {
-    // Fallback to params if provided
-    donationType = route?.params?.donationType || route?.params?.type || route?.params?.selectedType || 'clothes';
-  }
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch {}
+    };
+    loadTheme();
+  }, []);
+
+  
+  const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const text = darkMode ? "#fff" : "#2f2f2f";
+  const cardBg = darkMode ? "#2a2a2a" : "#fff";
+  const cardText = darkMode ? "#fff" : "#333";
+  const inputBg = darkMode ? "#2a2a2a" : "#fff";
+  const inputText = darkMode ? "#fff" : "#000";
+  const placeholder = darkMode ? "#aaa" : "#888";
+
+ 
+  const sourceScreen = route?.params?.sourceScreen || 'ChatBot';
+  let donationType = 'clothes';
+
+  if (sourceScreen === 'ChatBotScreen') donationType = 'all';
+  else if (sourceScreen === 'FoodAssociationsScreen') donationType = 'food';
+  else if (sourceScreen === 'ClothesAssociationsScreen') donationType = 'clothes';
+  else donationType = route?.params?.donationType || 'clothes';
 
   useEffect(() => {
     fetchAssociations();
@@ -54,21 +69,13 @@ export default function SearchAssociation({ navigation, route }) {
 
   const fetchAssociations = async () => {
     try {
-      let endpoint = '';
-      console.log('SearchAssociation - sourceScreen:', sourceScreen, 'donationType:', donationType);
-      
-      if (donationType === 'all') {
-        // Fetch all associations (when from ChatBot)
-        endpoint = `${API.API_URL}/associations`;
-      } else {
-        // Fetch filtered by type (clothes or food)
-        endpoint = `${API.API_URL}/associations/${donationType}`;
-      }
-      console.log('SearchAssociation - endpoint:', endpoint);
-      
+      let endpoint =
+        donationType === 'all'
+          ? `${API.API_URL}/associations`
+          : `${API.API_URL}/associations/${donationType}`;
+
       const res = await axios.get(endpoint);
-      const data = Array.isArray(res.data) ? res.data : (res.data.items || []);
-      console.log('SearchAssociation - fetched data count:', data.length);
+      const data = Array.isArray(res.data) ? res.data : res.data.items || [];
       setAssociations(data);
       setFiltered(data);
     } catch (e) {
@@ -78,7 +85,7 @@ export default function SearchAssociation({ navigation, route }) {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { backgroundColor: cardBg }]}
       onPress={() => navigation.navigate('AssociationInfo', { association: item })}
     >
       <Image
@@ -90,28 +97,30 @@ export default function SearchAssociation({ navigation, route }) {
         style={styles.cardLogo}
       />
       <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{item.name}</Text>
-        <Text style={styles.cardSubtitle} numberOfLines={2}>{item.description}</Text>
+        <Text style={[styles.cardTitle, { color: cardText }]}>{item.name}</Text>
+        <Text style={[styles.cardSubtitle, { color: darkMode ? "#ccc" : "#666" }]} numberOfLines={2}>
+          {item.description}
+        </Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: bg }]}>
+      <View style={[styles.container, { backgroundColor: bg }]}>
+
         <View style={styles.topSearchRow}>
           <Image source={require('../assets/images/logo1.png')} style={styles.logo1} />
-          <View style={styles.searchRow}>
+
+          <View style={[styles.searchRow, { backgroundColor: inputBg }]}>
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder={`Search ${donationType} associations`}
-              placeholderTextColor="#999"
-              style={styles.searchInput}
-              clearButtonMode="while-editing"
+              placeholderTextColor={placeholder}
+              style={[styles.searchInput, { color: inputText }]}
             />
-            <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn}>
-            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn}></TouchableOpacity>
           </View>
         </View>
 
@@ -120,7 +129,6 @@ export default function SearchAssociation({ navigation, route }) {
           keyExtractor={(item) => (item.association_id || item.id || item.name).toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         />
 
         <View style={styles.bottomLogoContainer}>
@@ -132,7 +140,7 @@ export default function SearchAssociation({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5efe9' },
+  safe: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 18 : 12 },
   topSearchRow: {
     flexDirection: 'row',
@@ -148,24 +156,16 @@ const styles = StyleSheet.create({
   },
   searchRow: {
     flex: 1,
-    marginRight: -1,
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 8,
-    backgroundColor: '#fff',
     borderRadius: 12,
     paddingHorizontal: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
   },
   searchInput: {
     flex: 1,
     height: 36,
     fontSize: 14,
-    color: '#222',
-    alignItems:'center',
   },
   clearBtn: {
     width: 28,
@@ -174,12 +174,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clearText: { fontSize: 18, color: '#999' },
   list: { paddingBottom: 120 },
+
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -187,7 +186,7 @@ const styles = StyleSheet.create({
   cardLogo: { width: 64, height: 64, borderRadius: 10, marginRight: 12, resizeMode: 'cover' },
   cardContent: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  cardSubtitle: { fontSize: 13, color: '#666' },
+  cardSubtitle: { fontSize: 13 },
   bottomLogoContainer: { position: 'absolute', bottom: 10, left: 0, right: 0, alignItems: 'center' },
   bottomLogo: { width: 80, height: 80, resizeMode: 'contain' },
 });

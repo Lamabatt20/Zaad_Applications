@@ -1,39 +1,73 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function SideMenu({ visible, onClose, navigation, user = {}, sourceScreen = 'ChatBot' }) {
+export default function SideMenu({ visible, onClose, navigation, user = {}, sourceScreen = 'ChatBot', darkMode = false }) {
   if (!visible) return null;
 
+  const bgColor = darkMode ? "#1c1c1c" : "#EBE1D7";
+  const textColor = darkMode ? "#fff" : "#2f2f2f";
+
   const { user_id, username, email, full_name, phone, role, address } = user;
+
+  const handleLogout = async () => {
+    await AsyncStorage.clear();
+    onClose();
+    navigation.navigate('Login');
+  };
 
   return (
     <>
       <TouchableOpacity style={styles.overlay} onPress={onClose} />
 
-      <Animated.View style={styles.sidebarLeft}>
+      <Animated.View style={[styles.sidebarLeft, { backgroundColor: bgColor }]}>
         <View style={styles.profileBox}>
-          <Image source={require('../assets/profile.png')} style={styles.profileImg} />
-          <Text style={styles.profileName}>{username || 'Donor'}</Text>
-          <Text style={styles.profileEmail}>{email || ''}</Text>
+          <Image source={require('../assets/profile.png')} style={[styles.profileImg,{ tintColor: textColor }]} />
+          <Text style={[styles.profileName, { color: textColor }]}>{username || 'Donor'}</Text>
+          <Text style={[styles.profileEmail, { color: textColor }]}>{email || ''}</Text>
         </View>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('ChooseDonationType', { user_id, username, email, full_name, phone, role, address }); }}>
-          <Text style={styles.sideBtnText}>Dashboard</Text>
+        <TouchableOpacity
+          style={styles.sideBtn}
+          onPress={() => {
+            onClose();
+            navigation.navigate('ChooseDonationType', { user_id, username, email, full_name, phone, role, address });
+          }}
+        >
+          <Text style={[styles.sideBtnText, { color: textColor }]}>Dashboard</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('ProfileScreen', { user_id, username, email, full_name, phone, role, address }); }}>
-          <Text style={styles.sideBtnText}>Settings</Text>
+        <TouchableOpacity
+          style={styles.sideBtn}
+          onPress={() => {
+            onClose();
+            navigation.navigate('ProfileScreen', { user_id, username, email, full_name, phone, role, address });
+          }}
+        >
+          <Text style={[styles.sideBtnText, { color: textColor }]}>Settings</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('Notifications'); }}>
-          <Text style={styles.sideBtnText}>Notifications</Text>
+        <TouchableOpacity
+          style={styles.sideBtn}
+          onPress={() => {
+            onClose();
+            navigation.navigate('Notifications');
+          }}
+        >
+          <Text style={[styles.sideBtnText, { color: textColor }]}>Notifications</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('SearchAssociation', { user_id, username, email, full_name, phone, role, address, sourceScreen }); }}>
-          <Text style={styles.sideBtnText}>Search</Text>
+        <TouchableOpacity
+          style={styles.sideBtn}
+          onPress={() => {
+            onClose();
+            navigation.navigate('SearchAssociation', { user_id, username, email, full_name, phone, role, address, sourceScreen });
+          }}
+        >
+          <Text style={[styles.sideBtnText, { color: textColor }]}>Search</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => { onClose(); navigation.navigate('Login'); }}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -57,7 +91,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: 280,
-    backgroundColor: '#fff',
     paddingTop: 40,
     zIndex: 10,
     elevation: 10,
@@ -77,11 +110,9 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
   },
   profileEmail: {
     fontSize: 13,
-    color: '#666',
   },
   sideBtn: {
     paddingVertical: 15,
@@ -89,7 +120,6 @@ const styles = StyleSheet.create({
   },
   sideBtnText: {
     fontSize: 16,
-    color: '#333',
   },
   logoutBtn: {
     marginTop: 30,

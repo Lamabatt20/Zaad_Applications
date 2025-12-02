@@ -36,7 +36,7 @@ export default function DonateFoodScreen({ navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header */}
+      
       <View style={[styles.header, { borderBottomColor: border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={text} />
@@ -46,7 +46,7 @@ export default function DonateFoodScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Category */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Category"
@@ -55,7 +55,7 @@ export default function DonateFoodScreen({ navigation }) {
           onChangeText={setCategory}
         />
 
-        {/* Quantity */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Quantity"
@@ -65,7 +65,7 @@ export default function DonateFoodScreen({ navigation }) {
           keyboardType="numeric"
         />
 
-        {/* Description */}
+        
         <TextInput
           style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Description"
@@ -75,7 +75,7 @@ export default function DonateFoodScreen({ navigation }) {
           onChangeText={setDescription}
         />
 
-        {/* Pickup Address */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Enter pickup Address"
@@ -84,14 +84,14 @@ export default function DonateFoodScreen({ navigation }) {
           onChangeText={setAddress}
         />
 
-        {/* Is Perishable Dropdown */}
+        
         <Text style={[styles.label, { color: text }]}>Is Perishable</Text>
         <TouchableOpacity style={[styles.dropdown, { backgroundColor: inputBg, borderColor: border }]}>
           <Text style={[styles.dropdownText, { color: text }]}>{isPerishable}</Text>
           <Ionicons name="chevron-down" size={20} color={text} />
         </TouchableOpacity>
 
-        {/* Image Picker Section */}
+       
         <Text style={[styles.label, { color: text }]}>
           Take pictures of the Donated Item
         </Text>
@@ -103,13 +103,13 @@ export default function DonateFoodScreen({ navigation }) {
           <Text style={styles.plus}>+</Text>
         </TouchableOpacity>
 
-        {/* Next Button */}
+    
         <TouchableOpacity style={[styles.nextBtn, { backgroundColor: nextBtnBg }]}>
           <Text style={styles.nextText}>next</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Footer Logo */}
+    
       <View style={styles.footerContainer}>
         <Image
           source={require("../assets/images/Z A A D.png")}
