@@ -192,7 +192,15 @@ export default function ProfileScreen({ route, navigation }) {
 
       <TouchableOpacity
         style={styles.chatbotBtn}
-        onPress={() => navigation.navigate("ChatBotScreen")}
+        onPress={() => navigation.navigate("ChatBotScreen", {
+          user_id,
+          username,
+          email,
+          full_name,
+          phone,
+          role,
+          address
+        })}
       >
         <Image
           source={require("../assets/images/zaadbot.png")}

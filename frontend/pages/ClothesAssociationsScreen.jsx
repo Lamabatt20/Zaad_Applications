@@ -42,7 +42,7 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       onPress={() =>
-        navigation.navigate("AssociationInfo", { association: item })
+        navigation.navigate("AssociationInfo", { association: item, donationType: 'clothes' })
       }
       style={styles.itemContainer}
     >
@@ -112,6 +112,7 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
         onClose={closeSidebar}
         navigation={navigation}
         user={{ user_id, username, email, full_name, phone, role, address }}
+        sourceScreen="ClothesAssociationsScreen"
       />
     </View>
   );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 
-export default function SideMenu({ visible, onClose, navigation, user = {} }) {
+export default function SideMenu({ visible, onClose, navigation, user = {}, sourceScreen = 'ChatBot' }) {
   if (!visible) return null;
 
   const { user_id, username, email, full_name, phone, role, address } = user;
@@ -17,7 +17,7 @@ export default function SideMenu({ visible, onClose, navigation, user = {} }) {
           <Text style={styles.profileEmail}>{email || ''}</Text>
         </View>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('Dashboard'); }}>
+        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('ChooseDonationType', { user_id, username, email, full_name, phone, role, address }); }}>
           <Text style={styles.sideBtnText}>Dashboard</Text>
         </TouchableOpacity>
 
@@ -29,7 +29,7 @@ export default function SideMenu({ visible, onClose, navigation, user = {} }) {
           <Text style={styles.sideBtnText}>Notifications</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('Search'); }}>
+        <TouchableOpacity style={styles.sideBtn} onPress={() => { onClose(); navigation.navigate('SearchAssociation', { user_id, username, email, full_name, phone, role, address, sourceScreen }); }}>
           <Text style={styles.sideBtnText}>Search</Text>
         </TouchableOpacity>
 

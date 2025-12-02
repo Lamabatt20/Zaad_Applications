@@ -66,17 +66,21 @@ export default function LoginScreen({ navigation }) {
     try {
       const res = await API.post('/login', { username, password });
       if (res.data.success) {
+        // Save user data to AsyncStorage for use throughout the app
+        const userData = {
+          user_id: res.data.user_id,
+          username: res.data.username,
+          email: res.data.email,
+          full_name: res.data.full_name,
+          phone: res.data.phone,
+          role: res.data.role,
+          address: res.data.address,
+        };
+        await AsyncStorage.setItem("user_data", JSON.stringify(userData));
+
         switch (res.data.role) {
           case 'donor':
-            navigation.navigate("ChooseDonationType", {
-              user_id: res.data.user_id,
-              username: res.data.username,
-              email: res.data.email,
-              full_name: res.data.full_name,
-              phone: res.data.phone,
-              role: res.data.role,
-              address: res.data.address,
-            });
+            navigation.navigate("ChooseDonationType", userData);
             break;
           default:
             setGeneralError('Unknown role');

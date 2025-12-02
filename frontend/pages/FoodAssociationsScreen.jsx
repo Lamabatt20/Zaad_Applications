@@ -25,7 +25,7 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
   <TouchableOpacity
     style={styles.card}
     onPress={() =>
-      navigation.navigate("AssociationInfo", { association: item })
+      navigation.navigate("AssociationInfo", { association: item, donationType: 'food' })
     }
   >
     <Image
@@ -97,6 +97,7 @@ export default function FoodAssociationsScreen({ navigation ,route}) {
         onClose={closeSidebar}
         navigation={navigation}
         user={{ user_id, username, email, full_name, phone, role, address }}
+        sourceScreen="FoodAssociationsScreen"
       />
     </View>
   );
