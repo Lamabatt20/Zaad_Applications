@@ -12,6 +12,12 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log('➡', req.method, req.url);
+  next();
+});
+
+app.get('/__ping', (req, res) => res.send('pong'));
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -448,18 +454,100 @@ app.post('/notifications', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+app.get('/donations/clothes/pending', async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at
+      FROM donations d
+      JOIN donors dr   ON dr.user_id = d.donor_id
+      JOIN users u     ON u.user_id  = dr.user_id
+      JOIN accounts a  ON a.account_id = u.account_id
+      JOIN clothes_donations cd ON cd.donation_id = d.donation_id
+      WHERE d.donation_type = 'clothes' AND d.status = 'pending'
+      ORDER BY d.donation_id DESC
+    `);
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to fetch pending clothes donations' });
+  }
+});
+
+app.post('/assoc/donations/:id/accept', async (req, res) => {
+  try {
+    await pool.query(`UPDATE donations SET status='accepted' WHERE donation_id=$1`, [req.params.id]);
+    res.json({ ok:true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to accept donation' });
+  }
+});
+
+app.post('/assoc/donations/:id/reject', async (req, res) => {
+  try {
+    await pool.query(`UPDATE donations SET status='rejected' WHERE donation_id=$1`, [req.params.id]);
+    res.json({ ok:true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to reject donation' });
+  }
+});
+app.get('/donations/clothes/accepted', async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             cd.clothes_type
+      FROM donations d
+      JOIN donors dr   ON dr.user_id = d.donor_id
+      JOIN users u     ON u.user_id  = dr.user_id
+      JOIN accounts a  ON a.account_id = u.account_id
+      JOIN clothes_donations cd ON cd.donation_id = d.donation_id
+      WHERE d.donation_type = 'clothes' AND d.status = 'accepted'
+      ORDER BY d.donation_id DESC
+    `);
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to fetch accepted clothes donations' });
+  }
+});
+
+app.get('/donations/clothes/rejected', async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             cd.clothes_type
+      FROM donations d
+      JOIN donors dr   ON dr.user_id = d.donor_id
+      JOIN users u     ON u.user_id  = dr.user_id
+      JOIN accounts a  ON a.account_id = u.account_id
+      JOIN clothes_donations cd ON cd.donation_id = d.donation_id
+      WHERE d.donation_type = 'clothes' AND d.status = 'rejected'
+      ORDER BY d.donation_id DESC
+    `);
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to fetch rejected clothes donations' });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-});
-app.get('/associations/clothes', async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT association_id, name,description,association_logo FROM associations WHERE clothes = true"
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
 });

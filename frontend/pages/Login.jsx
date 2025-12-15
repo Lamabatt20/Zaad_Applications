@@ -58,7 +58,7 @@ export default function LoginScreen({ navigation }) {
         setPasswordError('');
         switch (res.data.role) {
           case 'association':
-            //navigation.navigate('AssociationDashboard');
+            navigation.navigate('DashbordAssociationClothes', { user_id: res.data.user_id, username: res.data.username });
             break;
           case 'admin':
             //navigation.navigate('AdminDashboard');
