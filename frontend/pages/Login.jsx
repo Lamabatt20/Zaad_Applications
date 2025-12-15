@@ -79,6 +79,12 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem("user_data", JSON.stringify(userData));
 
         switch (res.data.role) {
+          case 'association':
+            //navigation.navigate('AssociationDashboard');
+            break;
+          case 'admin':
+            //navigation.navigate('AdminDashboard');
+            break;
           case 'donor':
             navigation.navigate("ChooseDonationType", userData);
             break;
