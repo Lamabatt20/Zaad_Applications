@@ -2,19 +2,18 @@ import React, { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, Image, FlatList,
   TouchableOpacity, ActivityIndicator, SafeAreaView,
-  RefreshControl, Alert
+  RefreshControl
 } from "react-native";
 import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
 import config from "../config";
 
-export default function AcceptedClothesScreen() {
+export default function ApprovedClothesScreen() {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
-  const [submitting, setSubmitting] = useState({}); // { [id]: true }
 
   const normalizeSlash = (base, path) => {
     if (!base) return path;
@@ -34,18 +33,17 @@ export default function AcceptedClothesScreen() {
     item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
     note: x.note ?? x.description ?? "",
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
-    status: x.status ?? "accepted",
+    status: x.status ?? "approved",
   });
 
   const fetchData = async () => {
     try {
       setErrorMsg(""); setLoading(true);
-      console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/accepted`);
-      const res = await axios.get(`${config.API_URL}/donations/clothes/accepted`);
+      const res = await axios.get(`${config.API_URL}/donations/clothes/approved`);
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       setItems(arr.map(normalizeDonation));
     } catch (e) {
-      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load accepted donations");
+      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load approved donations");
       setItems([]);
     } finally { setLoading(false); setRefreshing(false); }
   };
@@ -53,38 +51,11 @@ export default function AcceptedClothesScreen() {
   useEffect(() => { fetchData(); }, []);
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const removeFromUI = (id) => {
-    setItems(prev => prev.filter(d => String(d.donation_id) !== String(id)));
-  };
-
-  const approveDonation = async (id) => {
-    try {
-      setSubmitting(s => ({ ...s, [id]: true }));
-      // optimistic: remove from Accepted list (it will appear in Approved screen)
-      removeFromUI(id);
-      await axios.post(`${config.API_URL}/assoc/donations/${id}/approve`);
-      // (optional) show toast/alert
-      // Alert.alert("Done", "Donation approved.");
-    } catch (e) {
-      // rollback
-      Alert.alert("Error", "Could not approve. Restoring item.");
-      fetchData();
-    } finally {
-      setSubmitting(s => {
-        const c = { ...s };
-        delete c[id];
-        return c;
-      });
-    }
-  };
-
   const renderItem = ({ item }) => {
     const dateStr =
       typeof item.created_at === "string" && item.created_at.includes("T")
         ? item.created_at.split("T")[0]
         : (item.created_at || "").toString().slice(0, 10);
-
-    const isSubmitting = !!submitting[item.donation_id];
 
     return (
       <View style={styles.card}>
@@ -98,25 +69,15 @@ export default function AcceptedClothesScreen() {
         </View>
 
         <View style={styles.statusContainer}>
-          <Text style={styles.statusAccepted}>Accepted</Text>
+          <Text style={styles.statusApproved}>Approved</Text>
         </View>
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
+            style={[styles.btn, styles.detailsBtn]}
             onPress={() => navigation.navigate("RequestDetails", { id: item.donation_id })}
-            disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Details</Text>
-          </TouchableOpacity>
-
-          {/* NEW: Approve button */}
-          <TouchableOpacity
-            style={[styles.btn, styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => approveDonation(item.donation_id)}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Approve</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -129,8 +90,8 @@ export default function AcceptedClothesScreen() {
         <View style={styles.headerIconWrapper}>
           <Image source={require("../assets/icon.png")} style={styles.headerIcon} />
         </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerMainTitle}>Accepted Donations</Text>
+        <View className="headerTextContainer">
+          <Text style={styles.headerMainTitle}>Approved Donations</Text>
         </View>
       </View>
 
@@ -150,7 +111,7 @@ export default function AcceptedClothesScreen() {
             keyExtractor={(it) => String(it.donation_id)}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
-            ListEmptyComponent={<Text style={{ textAlign: "center", marginTop: 30 }}>No accepted donations</Text>}
+            ListEmptyComponent={<Text style={{ textAlign: "center", marginTop: 30 }}>No approved donations</Text>}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           />
         )}
@@ -177,11 +138,10 @@ const styles = StyleSheet.create({
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
   statusContainer: { position: "absolute", right: 10, top: 10 },
-  statusAccepted: { backgroundColor: "#22c55e", color: "#fff", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: "700" },
+  statusApproved: { backgroundColor: "#110202ff", color: "#fff", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: "700" },
 
-  actionButtons: { flexDirection: "row", gap: 10, marginTop: 15, flexWrap: "wrap" },
+  actionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 15 },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   detailsBtn: { backgroundColor: "#8b6f69" },
-  approveBtn: { backgroundColor: "#3b82f6" }, // blue
   btnText: { color: "#fff", fontWeight: "700" },
 });

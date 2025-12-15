@@ -607,7 +607,6 @@ app.get("/recommend", async (req, res) => {
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
-
 app.get('/donations/clothes/pending', async (req, res) => {
   try {
     const q = await pool.query(`
@@ -621,7 +620,7 @@ app.get('/donations/clothes/pending', async (req, res) => {
       JOIN donors dr   ON dr.user_id = d.donor_id
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
-      JOIN clothes_donations cd ON cd.donation_id = d.donation_id
+      LEFT JOIN clothes_donations cd ON cd.donation_id = d.donation_id
       WHERE d.donation_type = 'clothes' AND d.status = 'pending'
       ORDER BY d.donation_id DESC
     `);
@@ -702,9 +701,7 @@ app.get('/donations/clothes/rejected', async (req, res) => {
 });
 
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+
 app.get('/associations/clothes', async (req, res) => {
   try {
     const result = await pool.query(
@@ -728,4 +725,61 @@ app.get('/associations/food', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+// POST /assoc/donations/:id/approve  -> accepted ➜ approved
+app.post('/assoc/donations/:id/approve', async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE donations SET status='approved' WHERE donation_id=$1 AND status='accepted'`,
+      [req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to approve donation' });
+  }
+});
+
+// GET /donations/clothes/approved  -> list approved clothes
+app.get('/donations/clothes/approved', async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             cd.clothes_type
+      FROM donations d
+      JOIN donors dr   ON dr.user_id = d.donor_id
+      JOIN users u     ON u.user_id  = dr.user_id
+      JOIN accounts a  ON a.account_id = u.account_id
+      JOIN clothes_donations cd ON cd.donation_id = d.donation_id
+      WHERE d.donation_type='clothes' AND d.status='approved'
+      ORDER BY d.donation_id DESC
+    `);
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to fetch approved clothes donations' });
+  }
+});
+// POST /assoc/donations/:id/restore  -> rejected ➜ pending
+app.post('/assoc/donations/:id/restore', async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE donations SET status='pending' WHERE donation_id=$1 AND status='rejected'`,
+      [req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false, error:'Failed to restore donation' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

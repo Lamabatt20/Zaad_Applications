@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, Image, FlatList,
   TouchableOpacity, ActivityIndicator, SafeAreaView,
-  RefreshControl
+  RefreshControl, Alert
 } from "react-native";
 import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
@@ -14,6 +14,7 @@ export default function RejectedClothesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
+  const [submitting, setSubmitting] = useState({}); // { [id]: true }
 
   const normalizeSlash = (base, path) => {
     if (!base) return path;
@@ -52,11 +53,36 @@ export default function RejectedClothesScreen() {
   useEffect(() => { fetchData(); }, []);
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
+  const removeFromUI = (id) => {
+    setItems(prev => prev.filter(d => String(d.donation_id) !== String(id)));
+  };
+
+  const restoreDonation = async (id) => {
+    try {
+      setSubmitting(s => ({ ...s, [id]: true }));
+      // optimistic: remove from Rejected list (it will reappear in Pending screen)
+      removeFromUI(id);
+      await axios.post(`${config.API_URL}/assoc/donations/${id}/restore`);
+      // Optional: Alert.alert("Done", "Donation restored to pending.");
+    } catch (e) {
+      Alert.alert("Error", "Could not restore. Restoring item in list.");
+      fetchData(); // rollback by refetch
+    } finally {
+      setSubmitting(s => {
+        const c = { ...s };
+        delete c[id];
+        return c;
+      });
+    }
+  };
+
   const renderItem = ({ item }) => {
     const dateStr =
       typeof item.created_at === "string" && item.created_at.includes("T")
         ? item.created_at.split("T")[0]
         : (item.created_at || "").toString().slice(0, 10);
+
+    const isSubmitting = !!submitting[item.donation_id];
 
     return (
       <View style={styles.card}>
@@ -74,12 +100,21 @@ export default function RejectedClothesScreen() {
         </View>
 
         <View style={styles.actionButtons}>
-          {/* في الـ Rejected منطقياً تفاصيل فقط */}
           <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn]}
+            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
             onPress={() => navigation.navigate("RequestDetails", { id: item.donation_id })}
+            disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Details</Text>
+          </TouchableOpacity>
+
+          {/* NEW: Restore button */}
+          <TouchableOpacity
+            style={[styles.btn, styles.restoreBtn, isSubmitting && { opacity: 0.6 }]}
+            onPress={() => restoreDonation(item.donation_id)}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.btnText}>Restore</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -142,8 +177,9 @@ const styles = StyleSheet.create({
   statusContainer: { position: "absolute", right: 10, top: 10 },
   statusRejected: { backgroundColor: "#ef4444", color: "#fff", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: "700" },
 
-  actionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 15 },
+  actionButtons: { flexDirection: "row", gap: 10, marginTop: 15, flexWrap: "wrap" },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   detailsBtn: { backgroundColor: "#8b6f69" },
+  restoreBtn: { backgroundColor: "#fea86eff" }, 
   btnText: { color: "#fff", fontWeight: "700" },
 });
