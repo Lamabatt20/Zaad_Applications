@@ -552,6 +552,57 @@ app.post('/notifications', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+app.get("/recommend", async (req, res) => {
+  const { donation_type, donor_id, location } = req.query;
+
+  try {
+    let query = `
+      SELECT 
+        a.association_id,
+        a.name,
+        a.description,
+        acc.address
+      FROM associations a
+      LEFT JOIN users u ON a.user_id = u.user_id
+      LEFT JOIN accounts acc ON acc.account_id = u.account_id
+      WHERE 1 = 1
+    `;
+
+    if (donation_type === "food") query += " AND a.food = true";
+    if (donation_type === "clothes") query += " AND a.clothes = true";
+
+    const result = await pool.query(query);
+    let associations = result.rows;
+
+    if (location) {
+      const loc = location.toLowerCase();
+      associations = associations.filter(a =>
+        a.address?.toLowerCase().includes(loc)
+      );
+    }
+
+    let donationHistory = [];
+    if (donor_id) {
+      const historyResult = await pool.query(
+        "SELECT * FROM donation_history WHERE donor_id = $1",
+        [donor_id]
+      );
+      donationHistory = historyResult.rows;
+    }
+
+    res.json({
+      success: true,
+      associations,
+      donation_history: donationHistory,
+    });
+
+  } catch (error) {
+    console.error("Recommendation API Error:", error);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
@@ -567,6 +618,7 @@ app.get('/associations/clothes', async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 app.get('/associations/food', async (req, res) => {
   try {

@@ -15,6 +15,14 @@ import axios from "axios";
 import API from "../config";
 import SideMenu from "../components/SideMenu";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+const OPENAI_API_KEY = "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";
+const ASSISTANT_ID = "asst_vmzyZiX3S8mxG7Zvka3nNAEW";
+
+const openaiHeaders = {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${OPENAI_API_KEY}`,
+  "OpenAI-Beta": "assistants=v2",
+};
 
 export default function ChatBotScreen({ navigation, route }) {
   const [messages, setMessages] = useState([
@@ -91,7 +99,7 @@ export default function ChatBotScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation]);
 
-  // 🌙🎨 Dynamic Theme Colors
+  
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const headerBg = bg;
   const textColor = darkMode ? "#fff" : "#333";
@@ -104,29 +112,122 @@ export default function ChatBotScreen({ navigation, route }) {
   const botBubbleBg = "#A27571";
   const userBubbleBg = "#C6AAA3";
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  const callZaadBot = async (text, user) => {
+  try {
+    const threadRes = await axios.post(
+      "https://api.openai.com/v1/threads",
+      {},
+      { headers: openaiHeaders }
+    );
+    const threadId = threadRes.data.id;
 
-    const userMessage = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: input,
-    };
+    
+    await axios.post(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      {
+        role: "user",
+        content: text,
+        metadata: {
+          donor_id: user?.user_id?.toString() || "",
+          location: user?.address || "",
+        },
+      },
+      { headers: openaiHeaders }
+    );
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
+    let runRes = await axios.post(
+      `https://api.openai.com/v1/threads/${threadId}/runs`,
+      { assistant_id: ASSISTANT_ID },
+      { headers: openaiHeaders }
+    );
 
-    setTimeout(() => {
-      const botMessage = {
-        id: Date.now().toString() + "b",
-        sender: "bot",
-        text: "This is a sample reply from ZaadBot",
-      };
+    let run = runRes.data;
+    while (
+      run.status === "queued" ||
+      run.status === "in_progress" ||
+      run.status === "requires_action"
+    ) {
+      if (run.status === "requires_action") {
+        const calls = run.required_action.submit_tool_outputs.tool_calls;
+        const tool_outputs = [];
 
-      setMessages((prev) => [...prev, botMessage]);
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 600);
+        for (const call of calls) {
+          if (call.function.name === "getRecommendations") {
+            const args = JSON.parse(call.function.arguments);
+
+            const donation_type = args.donation_type;
+            const donor_id = args.donor_id || user?.user_id;
+            const location = args.location || user?.address;
+
+            const resApi = await axios.get(`${API.API_URL}/recommend`, {
+              params: { donation_type, donor_id, location },
+            });
+
+            tool_outputs.push({
+              tool_call_id: call.id,
+              output: JSON.stringify(resApi.data),
+            });
+          }
+        }
+
+        const submit = await axios.post(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${run.id}/submit_tool_outputs`,
+          { tool_outputs },
+          { headers: openaiHeaders }
+        );
+
+        run = submit.data;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const poll = await axios.get(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${run.id}`,
+          { headers: openaiHeaders }
+        );
+        run = poll.data;
+      }
+    }
+
+    const msgs = await axios.get(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      { headers: openaiHeaders }
+    );
+
+    const assistantMsg = msgs.data.data.find((m) => m.role === "assistant");
+
+    return assistantMsg?.content?.[0]?.text?.value || "No response.";
+
+  } catch (err) {
+    console.log("ZaadBot Error:", err.response?.data || err.message);
+    return "Error contacting ZaadBot.";
+  }
+};
+
+
+  const sendMessage = async () => {
+  if (!input.trim()) return;
+
+  const userMessage = {
+    id: Date.now().toString(),
+    sender: "user",
+    text: input,
   };
+
+  setMessages((prev) => [...prev, userMessage]);
+  const messageToSend = input;
+  setInput("");
+
+  const botReply = await callZaadBot(messageToSend, user);
+
+  const botMessage = {
+    id: Date.now().toString() + "b",
+    sender: "bot",
+    text: botReply,
+  };
+
+  setMessages((prev) => [...prev, botMessage]);
+  flatListRef.current?.scrollToEnd({ animated: true });
+};
+
 
   const renderMessage = ({ item }) => {
     const isUser = item.sender === "user";
