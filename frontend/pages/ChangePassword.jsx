@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,10 +16,13 @@ import config from '../config';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function ForgotPassword({ navigation }) {
+export default function ChangePassword({ route, navigation }) {
+  const { user_id, username, email, full_name, phone, role, address } =
+    route?.params || {};
+
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
@@ -27,31 +31,43 @@ export default function ForgotPassword({ navigation }) {
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
-    const loadMode = async () => {
-      const saved = await AsyncStorage.getItem("dark_mode");
-      if (saved !== null) setDarkMode(saved === "true");
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("dark_mode");
+        if (saved !== null) setDarkMode(saved === "true");
+      } catch (e) {
+      }
     };
-    loadMode();
-  }, []);
+    loadTheme();
+    const unsubscribe = navigation?.addListener?.("focus", loadTheme);
+    return unsubscribe;
+  }, [navigation]);
 
-  const colors = {
-    bg: darkMode ? "#1c1c1c" : "#EBE1D7",
-    text: darkMode ? "#fff" : "#000",
-    inputBorder: darkMode ? "#666" : "#000",
-    inputText: darkMode ? "#2a2a2a" : "#000",
-    placeholder: darkMode ? "#ccc" : "#555",
-    buttonBg: darkMode ? "#333" : "#000",
-    buttonText: darkMode ? "#fff" : "#fff"
-  };
+  const bg = darkMode ? '#1c1c1c' : '#EBE1D7';
+  const textColor = darkMode ? '#fff' : '#000';
+  const labelColor = textColor;
+  const inputBg = darkMode ? '#2a2a2a' : '#fff';
+  const inputText = darkMode ? '#fff' : '#000';
+  const inputBorder = darkMode ? '#444' : '#000';
+  const resetButtonBg = darkMode ? '#A27571' : '#000';
+  const iconColor = darkMode ? '#ddd' : 'gray';
+  const placeholderColor = darkMode ? '#aaa' : '#555';
 
   const validateFields = () => {
     const newErrors = {};
-    if (!usernameOrEmail) newErrors.usernameOrEmail = 'Username or Email is required';
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+
     if (!newPassword) newErrors.newPassword = 'Password is required';
-    else if (!passwordRegex.test(newPassword)) newErrors.newPassword = 'Password must be stronger';
+    else if (!passwordRegex.test(newPassword))
+      newErrors.newPassword =
+        'Password must be 8+ chars, include uppercase, lowercase, number and symbol';
+
     if (!confirmPassword) newErrors.confirmPassword = 'Confirm password is required';
-    else if (newPassword !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
+    else if (newPassword !== confirmPassword)
+      newErrors.confirmPassword = 'Passwords do not match';
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -59,23 +75,27 @@ export default function ForgotPassword({ navigation }) {
   const handleResetPassword = async () => {
     if (!validateFields()) return;
     setLoading(true);
+
     try {
-      const res = await axios.post(`${config.API_URL}/reset-password`, {
-        usernameOrEmail,
-        newPassword,
+      await axios.put(
+        `${config.API_URL}/accounts/user/${user_id}`,
+        { password: newPassword }
+      );
+
+      alert('Password has been reset successfully!');
+
+      setNewPassword('');
+      setConfirmPassword('');
+
+      navigation.navigate("ProfileScreen", {
+        user_id, username, email, full_name, phone, role, address
       });
-      if (res.data.success) {
-        setErrors({});
-        setUsernameOrEmail('');
-        setNewPassword('');
-        setConfirmPassword('');
-        alert('Password reset successfully');
-        navigation.navigate('Login');
-      } else {
-        setErrors({ general: res.data.message || 'Error' });
-      }
+
     } catch (error) {
-      setErrors({ general: error.response?.data?.message || 'Server error' });
+      console.error(error);
+      setErrors({
+        general: error.response?.data?.message || 'Server error. Please try again.',
+      });
     } finally {
       setLoading(false);
     }
@@ -90,7 +110,7 @@ export default function ForgotPassword({ navigation }) {
         alignItems: 'center',
         justifyContent: 'center',
       }}
-      style={{ backgroundColor: colors.bg }}
+      style={{ backgroundColor: bg }}
     >
       <Image
         source={require('../assets/images/logo3.png')}
@@ -98,27 +118,13 @@ export default function ForgotPassword({ navigation }) {
       />
 
       <View style={styles.inputContainer}>
-        <Text style={[styles.label, { color: colors.text }]}>Username or Email</Text>
-        <TextInput
-          style={[styles.input, { borderColor: colors.inputBorder, color: colors.inputText }]}
-          placeholder="username or email"
-          placeholderTextColor={colors.placeholder}
-          value={usernameOrEmail}
-          onChangeText={setUsernameOrEmail}
-        />
-        {errors.usernameOrEmail && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{errors.usernameOrEmail}</Text>
-            <View style={styles.errorArrow} />
-          </View>
-        )}
 
-        <Text style={[styles.label, { color: colors.text }]}>New Password</Text>
-        <View style={[styles.passwordContainer, { borderColor: colors.inputBorder }]}>
+        <Text style={[styles.label, { color: labelColor }]}>New Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: inputBorder }]}>
           <TextInput
-            style={[styles.inputPassword, { color: colors.inputText }]}
+            style={[styles.inputPassword, { color: inputText }]}
             placeholder="new password"
-            placeholderTextColor={colors.placeholder}
+            placeholderTextColor={placeholderColor}
             secureTextEntry={!showNewPassword}
             value={newPassword}
             onChangeText={setNewPassword}
@@ -127,7 +133,7 @@ export default function ForgotPassword({ navigation }) {
             <MaterialIcons
               name={showNewPassword ? 'visibility' : 'visibility-off'}
               size={22}
-              color={colors.text}
+              color={iconColor}
             />
           </TouchableOpacity>
         </View>
@@ -139,12 +145,12 @@ export default function ForgotPassword({ navigation }) {
           </View>
         )}
 
-        <Text style={[styles.label, { color: colors.text }]}>Confirm New Password</Text>
-        <View style={[styles.passwordContainer, { borderColor: colors.inputBorder }]}>
+        <Text style={[styles.label, { color: labelColor }]}>Confirm New Password</Text>
+        <View style={[styles.passwordContainer, { borderColor: inputBorder }]}>
           <TextInput
-            style={[styles.inputPassword, { color: colors.inputText }]}
+            style={[styles.inputPassword, { color: inputText }]}
             placeholder="confirm new password"
-            placeholderTextColor={colors.placeholder}
+            placeholderTextColor={placeholderColor}
             secureTextEntry={!showConfirmPassword}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
@@ -153,7 +159,7 @@ export default function ForgotPassword({ navigation }) {
             <MaterialIcons
               name={showConfirmPassword ? 'visibility' : 'visibility-off'}
               size={22}
-              color={colors.text}
+              color={iconColor}
             />
           </TouchableOpacity>
         </View>
@@ -166,21 +172,24 @@ export default function ForgotPassword({ navigation }) {
         )}
 
         {errors.general && (
-          <Text style={[styles.error, { alignSelf: 'flex-start' }]}>{errors.general}</Text>
+          <Text style={[styles.error, { alignSelf: 'flex-start' }]}>
+            {errors.general}
+          </Text>
         )}
       </View>
 
       <TouchableOpacity
-        style={[styles.resetButton, { backgroundColor: colors.buttonBg }]}
+        style={[styles.resetButton, { backgroundColor: resetButtonBg }]}
         onPress={handleResetPassword}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color={colors.buttonText} />
+          <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={[styles.resetText, { color: colors.buttonText }]}>Reset Password</Text>
+          <Text style={styles.resetText}>Reset Password</Text>
         )}
       </TouchableOpacity>
+
     </ScrollView>
   );
 }
@@ -198,22 +207,18 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: Platform.OS === 'ios' ? 14 : 12,
+    color: '#000000',
     marginBottom: 4,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 6,
-    fontSize: Platform.OS === 'ios' ? 14 : 12,
-  },
   resetButton: {
+    backgroundColor: '#000',
     paddingVertical: 12,
     borderRadius: 25,
     width: '100%',
     alignItems: 'center',
   },
   resetText: {
+    color: '#fff',
     fontSize: Platform.OS === 'ios' ? 16 : 12,
     fontWeight: '400',
   },
@@ -239,6 +244,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 6,
     borderRightWidth: 6,
     borderBottomWidth: 6,
+    borderStyle: 'solid',
+    backgroundColor: 'transparent',
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: 'red',
@@ -252,6 +259,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
+    borderColor: '#000',
     borderRadius: 6,
     paddingHorizontal: 10,
     marginBottom: 6,
@@ -260,5 +268,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Platform.OS === 'ios' ? 14 : 12,
     paddingVertical: 10,
+    color: '#000',
   },
 });

@@ -1,49 +1,61 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+} from "react-native";
 import SideMenu from "../components/SideMenu";
 import axios from "axios";
 import API from "../config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function ClothesAssociationsScreen({ navigation, route }) {
+export default function FoodAssociationsScreen({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
-  const { user_id, username, email, full_name, phone, role, address } =
-    route?.params || {};
-  const donationType =
-    route?.params?.donationType || route?.params?.type || "clothes";
-
   const [darkMode, setDarkMode] = useState(false);
 
+  const { user_id, username, email, full_name, phone, role, address } =
+    route?.params || {};
+
+  
   useEffect(() => {
-    const loadTheme = async () => {
-      const saved = await AsyncStorage.getItem("dark_mode");
-      if (saved !== null) setDarkMode(saved === "true");
-    };
-    loadTheme();
+    loadDarkMode();
   }, []);
 
-  useEffect(() => {
-    fetchAssociations();
-  }, [donationType]);
-
-  const fetchAssociations = async () => {
+  const loadDarkMode = async () => {
     try {
-      const res = await axios.get(`${API.API_URL}/associations/${donationType}`);
-      const data = Array.isArray(res.data) ? res.data : res.data.items || [];
-      setAssociations(data);
-    } catch (err) {
-    }
+      const saved = await AsyncStorage.getItem("dark_mode");
+      if (saved !== null) setDarkMode(saved === "true");
+    } catch (e) {}
   };
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const text = darkMode ? "#fff" : "#2f2f2f";
 
+  useEffect(() => {
+    fetchAssociations();
+  }, []);
+
+  const fetchAssociations = async () => {
+    try {
+      const res = await axios.get(`${API.API_URL}/associations/food`);
+      setAssociations(res.data);
+    } catch (err) {
+      console.log("Error fetching associations:", err);
+    }
+  };
+
   const renderItem = ({ item }) => (
     <TouchableOpacity
+      style={styles.card}
       onPress={() =>
-        navigation.navigate("AssociationInfo", { association: item, donationType: 'clothes' })
+        navigation.navigate("AssociationInfo", {
+          association: item,
+          donationType: "food",
+        })
       }
-      style={styles.itemContainer}
     >
       <Image
         source={{ uri: `${API.API_URL}${item.association_logo}` }}
@@ -66,13 +78,16 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
       <View style={styles.header}>
         <Image
           source={require("../assets/images/image.png")}
-          style={styles.topLogo}
+          style={[styles.topLogo]}
         />
 
-        <Text style={[styles.headerTitle, { color: text }]}>Clothes Donation</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>Food Donation</Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
-          <Image source={require("../assets/menu.png")} style={[styles.menuIcon, { tintColor: text }]} />
+          <Image
+            source={require("../assets/menu.png")}
+            style={[styles.menuIcon, { tintColor: text }]}
+          />
         </TouchableOpacity>
       </View>
 
@@ -98,7 +113,17 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
 
       <TouchableOpacity
         style={styles.chatbotButton}
-        onPress={() => navigation.navigate("ChatBotScreen", { user_id, username, email, full_name, phone, role, address })}
+        onPress={() =>
+          navigation.navigate("ChatBotScreen", {
+            user_id,
+            username,
+            email,
+            full_name,
+            phone,
+            role,
+            address,
+          })
+        }
       >
         <Image
           source={require("../assets/images/zaadbot.png")}
@@ -111,7 +136,7 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
         onClose={closeSidebar}
         navigation={navigation}
         user={{ user_id, username, email, full_name, phone, role, address }}
-        sourceScreen="ClothesAssociationsScreen"
+        sourceScreen="FoodAssociationsScreen"
         darkMode={darkMode}
       />
     </View>
@@ -146,7 +171,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: "Times New Roman",
     fontSize: 25,
-    color: "#8b6f69",
     marginLeft: -150,
     marginBottom: 30,
   },
@@ -161,22 +185,11 @@ const styles = StyleSheet.create({
     height: 45,
   },
 
-  itemContainer: {
-    width: "47%",
-    alignItems: "center",
-  },
-
   logo: {
     width: 140,
     height: 140,
     borderRadius: 10,
-  },
-
-  associationName: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginTop: 10,
-    marginBottom: -10,
+    margin: 10,
   },
 
   bottomContainer: {
@@ -187,11 +200,9 @@ const styles = StyleSheet.create({
   },
 
   bottomLogo: {
-     width: 80,
+    width: 80,
     height: 80,
     resizeMode: "contain",
-    position: "absolute",
-    bottom: 10,
   },
 
   chatbotButton: {
@@ -203,59 +214,21 @@ const styles = StyleSheet.create({
   chatbotIcon: {
     width: 50,
     height: 50,
+    resizeMode: "contain",
   },
 
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    zIndex: 9,
-  },
-
-  sidebarLeft: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 280,
-    paddingTop: 40,
-    zIndex: 10,
-    elevation: 10,
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-  },
-
-  profileBox: {
+  card: {
+    width: "47%",
     alignItems: "center",
-    marginBottom: 20,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
   },
 
-  profileImg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-
-  sideBtn: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-
-  sideBtnText: {
+  associationName: {
     fontSize: 16,
-  },
-
-  logoutBtn: {
-    marginTop: 30,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-
-  logoutText: {
-    color: "red",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "500",
+    marginBottom: -10,
+    marginTop: 10,
   },
 });

@@ -12,12 +12,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function DonateClothesScreen({ navigation }) {
+export default function DonateFoodScreen({ navigation }) {
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
-  const [condition, setCondition] = useState("New");
+  const [isPerishable, setIsPerishable] = useState("No");
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -36,17 +36,17 @@ export default function DonateClothesScreen({ navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header */}
+      
       <View style={[styles.header, { borderBottomColor: border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: text }]}>Donate Clothes</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>Donate Food</Text>
         <View style={{ width: 28 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Category */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Category"
@@ -55,7 +55,7 @@ export default function DonateClothesScreen({ navigation }) {
           onChangeText={setCategory}
         />
 
-        {/* Quantity */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Quantity"
@@ -65,7 +65,7 @@ export default function DonateClothesScreen({ navigation }) {
           keyboardType="numeric"
         />
 
-        {/* Description */}
+        
         <TextInput
           style={[styles.input, styles.textArea, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Description"
@@ -75,7 +75,7 @@ export default function DonateClothesScreen({ navigation }) {
           onChangeText={setDescription}
         />
 
-        {/* Pickup Address */}
+        
         <TextInput
           style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
           placeholder="Enter pickup Address"
@@ -84,29 +84,32 @@ export default function DonateClothesScreen({ navigation }) {
           onChangeText={setAddress}
         />
 
-        {/* Condition Dropdown */}
-        <Text style={[styles.label, { color: text }]}>Condition</Text>
+        
+        <Text style={[styles.label, { color: text }]}>Is Perishable</Text>
         <TouchableOpacity style={[styles.dropdown, { backgroundColor: inputBg, borderColor: border }]}>
-          <Text style={[styles.dropdownText, { color: text }]}>{condition}</Text>
+          <Text style={[styles.dropdownText, { color: text }]}>{isPerishable}</Text>
           <Ionicons name="chevron-down" size={20} color={text} />
         </TouchableOpacity>
 
-        {/* Image Picker Section */}
+       
         <Text style={[styles.label, { color: text }]}>
           Take pictures of the Donated Item
+        </Text>
+        <Text style={[styles.hint, { color: "#999" }]}>
+          Please Make sure to show the Expiration Date
         </Text>
 
         <TouchableOpacity style={[styles.imagePickerBox, { borderColor: border }]}>
           <Text style={styles.plus}>+</Text>
         </TouchableOpacity>
 
-        {/* Next Button */}
+    
         <TouchableOpacity style={[styles.nextBtn, { backgroundColor: nextBtnBg }]}>
           <Text style={styles.nextText}>next</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Footer Logo */}
+    
       <View style={styles.footerContainer}>
         <Image
           source={require("../assets/images/Z A A D.png")}
@@ -144,6 +147,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 16,
     marginBottom: 8,
+  },
+  hint: {
+    fontSize: 13,
+    marginBottom: 10,
+    fontWeight: "400",
   },
   input: {
     borderRadius: 10,
