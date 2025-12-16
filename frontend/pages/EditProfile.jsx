@@ -18,11 +18,12 @@ export default function EditProfileScreen({ route, navigation }) {
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
 
+  const isAssociation = role === "association";
+
   const [editUsername, setEditUsername] = useState(username || "");
   const [editFullName, setEditFullName] = useState(full_name || "");
   const [editPhone, setEditPhone] = useState(phone || "");
   const [editAddress, setEditAddress] = useState(address || "");
-
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -78,10 +79,10 @@ export default function EditProfileScreen({ route, navigation }) {
   return (
     <LinearGradient
       colors={
-  darkMode
-    ? ["#2b2b2b", "#3a3a3a", "#1f1f1f"]  
-    : ["#A27571", "#FFDAB4", "rgba(162,117,113,0)"]
-}
+        darkMode
+          ? ["#2b2b2b", "#3a3a3a", "#1f1f1f"]
+          : ["#A27571", "#FFDAB4", "rgba(162,117,113,0)"]
+      }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.gradientBackground}
@@ -93,35 +94,37 @@ export default function EditProfileScreen({ route, navigation }) {
         />
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.chatbotBtn}
-        onPress={() => navigation.navigate("ChatBotScreen", {
-          user_id,
-          username: editUsername,
-          email,
-          full_name: editFullName,
-          phone: editPhone,
-          role,
-          address: editAddress
-        })}
-      >
-        <Image
-          source={require("../assets/images/zaadbot.png")}
-          style={{ width: 40, height: 40 }}
-        />
-      </TouchableOpacity>
+      {!isAssociation && (
+        <TouchableOpacity
+          style={styles.chatbotBtn}
+          onPress={() =>
+            navigation.navigate("ChatBotScreen", {
+              user_id,
+              username: editUsername,
+              email,
+              full_name: editFullName,
+              phone: editPhone,
+              role,
+              address: editAddress,
+            })
+          }
+        >
+          <Image
+            source={require("../assets/images/zaadbot.png")}
+            style={{ width: 40, height: 40 }}
+          />
+        </TouchableOpacity>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View
-          style={[
-            styles.profileCard,
-            { backgroundColor: theme.background }
-          ]}
-        >
+        <View style={[styles.profileCard, { backgroundColor: theme.background }]}>
           <View style={styles.profileImageContainer}>
             <Image
               source={require("../assets/images/profiles.png")}
-              style={[{ width: 125, height: 110 },{tintColor:theme.text}]}
+              style={[
+                { width: 125, height: 110 },
+                { tintColor: theme.text },
+              ]}
             />
           </View>
 
@@ -130,7 +133,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editUsername}
               onChangeText={setEditUsername}
@@ -142,7 +145,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editFullName}
               onChangeText={setEditFullName}
@@ -154,7 +157,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editAddress}
               onChangeText={setEditAddress}
@@ -166,7 +169,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editPhone}
               onChangeText={setEditPhone}
@@ -174,10 +177,7 @@ export default function EditProfileScreen({ route, navigation }) {
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.saveBtn}
-            onPress={updateAccount}
-          >
+          <TouchableOpacity style={styles.saveBtn} onPress={updateAccount}>
             <Ionicons
               name="checkmark-done"
               size={17}

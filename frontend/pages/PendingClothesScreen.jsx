@@ -33,11 +33,14 @@ export default function PendingClothesScreen() {
   };
 
   const buildImageUrl = (raw) => {
-    if (raw == null || raw === "null" || raw === "undefined") return null;
-    if (typeof raw === "string" && raw.startsWith("/")) return normalizeSlash(config.API_URL, raw);
-    return raw;
-  };
+  if (!raw) return null;
 
+  const fullUrl = raw.startsWith("/")
+    ? `${config.API_URL}${raw}`
+    : raw;
+
+  return encodeURI(fullUrl); 
+};
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
@@ -144,14 +147,14 @@ export default function PendingClothesScreen() {
 
     return (
       <View style={styles.card}>
-        {/* image */}
+        
         {item.item_image ? (
           <Image source={{ uri: item.item_image }} style={styles.itemImage} />
         ) : (
           <Image source={require("../assets/icon.png")} style={styles.itemImage} />
         )}
 
-        {/* texts */}
+        
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.donor_name}</Text>
           <Text numberOfLines={2} style={styles.subtitle}>
@@ -202,14 +205,15 @@ export default function PendingClothesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerLarge}>
-        <View style={styles.headerIconWrapper}>
-          <Image source={require("../assets/icon.png")} style={styles.headerIcon} />
-        </View>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerMainTitle}>Pending Donations</Text>
-        </View>
+      <Image
+        source={require("../assets/images/image.png")}
+        style={styles.welcomeLogo}
+        resizeMode="contain"
+      />
+      <View style={styles.headerTextContainer}>
+        <Text style={styles.headerMainTitle}>Pending Donations</Text>
       </View>
-
+    </View>
       {/* show an error banner if something failed */}
       {!!errorMsg && (
         <View style={styles.errorBar}>
@@ -247,7 +251,7 @@ export default function PendingClothesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
   headerLarge: {
-    backgroundColor: "#8b6f69",
+    backgroundColor: "#EBE1D7",
     paddingVertical: 16,
     paddingHorizontal: 14,
     flexDirection: "row",
@@ -271,7 +275,12 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   headerTextContainer: { flex: 1 },
-  headerMainTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  headerMainTitle: {  fontFamily: 'Times New Roman',
+    fontFamily: 'Times New Roman',
+    fontSize: 23,
+    marginTop: -50,
+    marginLeft: -50,
+    color: '#8b6f69',},
 
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
@@ -306,9 +315,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 15,
   },
+  welcomeLogo: {
+    width: 135,
+    height: 135,
+    marginRight: 10,
+    marginLeft: -35,
+    marginTop: -50,
+  },
+  
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   acceptBtn: { backgroundColor: "#4CAF50" },
   rejectBtn: { backgroundColor: "#f44336" },
-  detailsBtn: { backgroundColor: "#8b6f69" },
+  detailsBtn: { backgroundColor: "#A27571" },
   btnText: { color: "#fff", fontWeight: "700" },
 });

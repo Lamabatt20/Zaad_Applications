@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef,useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   ScrollView,
   Animated,
   Image,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  TouchableOpacity
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,8 +17,8 @@ import { useNavigation } from '@react-navigation/native';
 export default function ClothesDonationStatus({ route }) {
   const username = route?.params?.username || "Association";
 
-  // Navigation control
-  const navigation = useNavigation();0.
+ 
+  const navigation = useNavigation();
 
   const statuses = [
     { id: '1', status: 'Pending' },
@@ -26,10 +27,31 @@ export default function ClothesDonationStatus({ route }) {
     { id: '4', status: 'Accepted' },
   ];
 
-  // For card entrance animation
+  const initialData = route?.params || {};
+  
+    const [currentUser, setCurrentUser] = useState({
+      user_id: initialData.user_id,
+      username: initialData.username,
+      email: initialData.email,
+      full_name: initialData.full_name,
+      phone: initialData.phone,
+      role: initialData.role,
+      address: initialData.address
+    });
+  
+    useEffect(() => {
+      if (route.params) {
+        setCurrentUser(prev => ({
+          ...prev,
+          ...route.params,
+        }));
+      }
+    }, [route.params]);
+
+  
   const fadeAnimations = useRef(statuses.map(() => new Animated.Value(0))).current;
 
-  // For press animation
+  
   const pressAnimations = useRef(statuses.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
@@ -53,7 +75,7 @@ export default function ClothesDonationStatus({ route }) {
 
     const pressTranslateY = pressAnimations[index].interpolate({
       inputRange: [0, 1],
-      outputRange: [0, -8], // moves UP when pressed
+      outputRange: [0, -8], 
     });
 
     return (
@@ -118,9 +140,16 @@ export default function ClothesDonationStatus({ route }) {
             <Text style={styles.welcome}>Welcome {username}</Text>
           </View>
 
-          <View style={{ top: -30 }}>
-            <Ionicons name="person-circle-outline" size={36} color="#8b6f69" />
-          </View>
+          <TouchableOpacity
+            style={{ top: -30 }}
+            onPress={() =>
+              navigation.navigate("ProfileScreen", {
+                ...currentUser
+              })
+            }
+          >
+            <Ionicons name="person-circle-outline" size={36} color={ "#A27571"} />
+          </TouchableOpacity>
         </View>
 
         {/* Title for Cards */}
@@ -163,12 +192,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
   },
 
-  /* HEADER */
   welcomeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 30,
-    marginTop: 20,
+    marginTop: -10,
   },
   welcomeLogo: {
     width: 135,
@@ -214,10 +242,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  /* FOOTER */
-  footerContainer: {
+   footerContainer: {
+    position: 'absolute',
+    bottom: -20,
+    width: '100%',
     alignItems: 'center',
-    paddingVertical: 10,
   },
   footerLogo: {
     width: 80,
