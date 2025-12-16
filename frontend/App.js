@@ -23,7 +23,7 @@ import ProfileScreen from "./pages/Profile";
 import EditProfileScreen from "./pages/EditProfile";
 import ChangePassword from './pages/ChangePassword';
 import SearchAssociation from './pages/SearchAssociation';
-
+import ApprovedClothesScreen from './pages/ApprovedClothesScreen';
 
 
 
@@ -56,6 +56,7 @@ export default function App() {
           <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
           <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
           <Stack.Screen name="ChangePassword" component={ChangePassword} />
+          <Stack.Screen name="ApprovedClothesScreen" component={ApprovedClothesScreen} /> 
 
           </Stack.Navigator>
       </NavigationContainer>

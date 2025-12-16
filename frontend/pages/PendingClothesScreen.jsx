@@ -82,8 +82,7 @@ export default function PendingClothesScreen() {
           : "Failed to load pending donations"
       );
       setPendingDonations([]);
-      // Optional: Alert so you notice instantly
-      // Alert.alert("Error", "Failed to load pending donations");
+     
     } finally {
       setLoading(false);
       setRefreshing(false);

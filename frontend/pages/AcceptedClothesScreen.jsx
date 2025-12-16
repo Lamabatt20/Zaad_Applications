@@ -1,14 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  SafeAreaView,
-  RefreshControl,
+  View, Text, StyleSheet, Image, FlatList,
+  TouchableOpacity, ActivityIndicator, SafeAreaView,
+  RefreshControl, Alert
 } from "react-native";
 import axios from "axios";
 import { useNavigation } from "@react-navigation/native";
@@ -20,6 +14,7 @@ export default function AcceptedClothesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
+  const [submitting, setSubmitting] = useState({}); // { [id]: true }
 
   const normalizeSlash = (base, path) => {
     if (!base) return path;
@@ -49,11 +44,9 @@ export default function AcceptedClothesScreen() {
 
   const fetchData = async () => {
     try {
-      setErrorMsg("");
-      setLoading(true);
-      const res = await axios.get(
-        `${config.API_URL}/donations/clothes/accepted`
-      );
+      setErrorMsg(""); setLoading(true);
+      console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/accepted`);
+      const res = await axios.get(`${config.API_URL}/donations/clothes/accepted`);
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       setItems(arr.map(normalizeDonation));
     } catch (e) {
@@ -78,11 +71,38 @@ export default function AcceptedClothesScreen() {
     fetchData();
   };
 
+  const removeFromUI = (id) => {
+    setItems(prev => prev.filter(d => String(d.donation_id) !== String(id)));
+  };
+
+  const approveDonation = async (id) => {
+    try {
+      setSubmitting(s => ({ ...s, [id]: true }));
+      // optimistic: remove from Accepted list (it will appear in Approved screen)
+      removeFromUI(id);
+      await axios.post(`${config.API_URL}/assoc/donations/${id}/approve`);
+      // (optional) show toast/alert
+      // Alert.alert("Done", "Donation approved.");
+    } catch (e) {
+      // rollback
+      Alert.alert("Error", "Could not approve. Restoring item.");
+      fetchData();
+    } finally {
+      setSubmitting(s => {
+        const c = { ...s };
+        delete c[id];
+        return c;
+      });
+    }
+  };
+
   const renderItem = ({ item }) => {
     const dateStr =
       typeof item.created_at === "string" && item.created_at.includes("T")
         ? item.created_at.split("T")[0]
         : (item.created_at || "").toString().slice(0, 10);
+
+    const isSubmitting = !!submitting[item.donation_id];
 
     return (
       <View style={styles.card}>
@@ -111,14 +131,20 @@ export default function AcceptedClothesScreen() {
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn]}
-            onPress={() =>
-              navigation.navigate("RequestDetails", {
-                id: item.donation_id,
-              })
-            }
+            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
+            onPress={() => navigation.navigate("RequestDetails", { id: item.donation_id })}
+            disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Details</Text>
+          </TouchableOpacity>
+
+          {/* NEW: Approve button */}
+          <TouchableOpacity
+            style={[styles.btn, styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
+            onPress={() => approveDonation(item.donation_id)}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.btnText}>Approve</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -227,9 +253,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  actionButtons: { flexDirection: "row", marginTop: 15 },
-
+  actionButtons: { flexDirection: "row", gap: 10, marginTop: 15, flexWrap: "wrap" },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   detailsBtn: { backgroundColor: "#8b6f69" },
+  approveBtn: { backgroundColor: "#3b82f6" }, // blue
   btnText: { color: "#fff", fontWeight: "700" },
 });
