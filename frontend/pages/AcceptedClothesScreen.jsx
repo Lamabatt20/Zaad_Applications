@@ -26,6 +26,7 @@ export default function AcceptedClothesScreen() {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
   const [selectedDate, setSelectedDate] = useState("ALL");
+  const [filterVisible, setFilterVisible] = useState(false);
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
@@ -135,6 +136,8 @@ export default function AcceptedClothesScreen() {
     </View>
   );
 
+  const filterLabel = selectedDate === "ALL" ? "All Accepted Dates" : selectedDate;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerLarge}>
@@ -146,22 +149,18 @@ export default function AcceptedClothesScreen() {
         <Text style={styles.headerMainTitle}>Accepted Clothes Donations</Text>
       </View>
 
-      {/* ✅ FILTER */}
-      <View style={styles.filterBox}>
-        <Text style={styles.filterTitle}>Filter by Date</Text>
+      {/* Filter (button + modal like Pending) */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
+          <Text style={styles.filterBtnTitle}>Filter by Date</Text>
+          <Text style={styles.filterBtnValue}>{filterLabel}</Text>
+        </TouchableOpacity>
 
-        <View style={styles.pickerWrap}>
-          <Picker
-            mode="dropdown"
-            selectedValue={selectedDate}
-            onValueChange={(v) => setSelectedDate(v)}
-            style={{ width: "100%" }}
-          >
-            {allDates.map((d) => (
-              <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
-            ))}
-          </Picker>
-        </View>
+        {selectedDate !== "ALL" && (
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}> 
+            <Text style={styles.clearBtnText}>Clear</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -182,6 +181,51 @@ export default function AcceptedClothesScreen() {
           }
         />
       )}
+
+      {/* Filter Modal (copied from Pending) */}
+      <Modal
+        visible={filterVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
+          <Pressable style={styles.filterModalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Select Date</Text>
+
+            <FlatList
+              data={allDates}
+              keyExtractor={(d) => d}
+              style={{ maxHeight: 340 }}
+              ItemSeparatorComponent={() => <View style={styles.sep} />}
+              renderItem={({ item: d }) => {
+                const active = selectedDate === d;
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedDate(d);
+                      setFilterVisible(false);
+                    }}
+                    style={[styles.dateRow, active && styles.dateRowActive]}
+                  >
+                    <Text style={[styles.dateText, active && styles.dateTextActive]}>
+                      {d === "ALL" ? "All Dates" : d}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+              <View style={{ height: 12 }} />
+
+              <TouchableOpacity
+                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+                onPress={() => setFilterVisible(false)}
+              >
+                <Text style={styles.btnText}>Close</Text>
+              </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* DETAILS MODAL */}
       <Modal transparent visible={detailsVisible} animationType="fade">
@@ -275,6 +319,60 @@ const styles = StyleSheet.create({
   detailsBtn: { backgroundColor: "#8b6f69", padding: 8, borderRadius: 8 },
   approveBtn: { backgroundColor: "#3b82f6", padding: 8, borderRadius: 8 },
   btnText: { color: "#fff", fontWeight: "700" },
+
+  // filter row (from Pending)
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  filterBtn: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    elevation: 2,
+  },
+  filterBtnTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 4,
+    fontFamily: "Times New Roman",
+  },
+  filterBtnValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+  },
+  clearBtn: {
+    backgroundColor: "#8b6f69",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  clearBtnText: { color: "#fff", fontWeight: "800" },
+  filterModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+  },
+  sep: { height: 10 },
+  dateRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f3f3f3",
+  },
+  dateRowActive: { backgroundColor: "#8b6f69" },
+  dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
+  dateTextActive: { color: "#fff" },
 
   modalOverlay: {
     flex: 1,

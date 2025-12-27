@@ -30,6 +30,7 @@ export default function RejectedClothesScreen() {
 
   // ✅ Date filter (Dropdown)
   const [selectedDate, setSelectedDate] = useState("ALL");
+   const [filterVisible, setFilterVisible] = useState(false);
 
   // ✅ re-render every minute for restore countdown
   const [tick, setTick] = useState(0);
@@ -150,6 +151,8 @@ export default function RejectedClothesScreen() {
   const filteredItems =
     selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
+  const filterLabel = selectedDate === "ALL" ? "All Rejected Dates" : selectedDate;
+
   const renderItem = ({ item }) => {
     const isSubmitting = !!submitting[item.donation_id];
     const dateStr = getYMD(item.created_at);
@@ -227,24 +230,65 @@ export default function RejectedClothesScreen() {
 
       {!!errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
-      {/* ✅ FILTER (Dropdown) */}
+      {/* ✅ FILTER (button + modal like Pending) */}
       <View style={styles.filterBox}>
+        <View style={styles.filterRow}>
+          <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
+            <Text style={styles.filterBtnTitle}>Filter by Date</Text>
+            <Text style={styles.filterBtnValue}>{filterLabel}</Text>
+          </TouchableOpacity>
+
           {selectedDate !== "ALL" && (
-            <Text style={styles.filterTitle}>Filter Rejected by Date</Text>
+            <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}>
+              <Text style={styles.clearBtnText}>Clear</Text>
+            </TouchableOpacity>
           )}
-          <View style={styles.pickerWrap}>
-            <Picker
-              mode="dropdown"
-              selectedValue={selectedDate}
-              onValueChange={(v) => setSelectedDate(v)}
-              style={{ width: "100%", height: 40, color: "#333" }}
-              itemStyle={{ height: 40 }}
-            >
-              {allDates.map((d) => (
-                <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
-              ))}
-            </Picker>
-          </View>
+        </View>
+
+        <Modal
+          visible={filterVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setFilterVisible(false)}
+        >
+          <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
+            <Pressable style={styles.filterModalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>Select Date</Text>
+
+              <FlatList
+                data={allDates}
+                keyExtractor={(d) => d}
+                style={{ maxHeight: 340 }}
+                ItemSeparatorComponent={() => <View style={styles.sep} />}
+                renderItem={({ item: d }) => {
+                  const active = selectedDate === d;
+                  return (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedDate(d);
+                        setFilterVisible(false);
+                      }}
+                      style={[styles.dateRow, active && styles.dateRowActive]}
+                    >
+                      <Text style={[styles.dateText, active && styles.dateTextActive]}>
+                        {d === "ALL" ? "All Rejected Dates" : d}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+
+              <View style={{ height: 12 }} />
+
+              <TouchableOpacity
+                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+                onPress={() => setFilterVisible(false)}
+              >
+                <Text style={styles.btnText}>Close</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </View>
 
       {loading ? (
@@ -354,13 +398,12 @@ const styles = StyleSheet.create({
   },
 
   filterBox: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
+    backgroundColor: "transparent",
+    marginHorizontal: 0,
     marginBottom: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
+    borderRadius: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
 
   filterTitle: {
@@ -379,6 +422,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
+  filterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6, paddingHorizontal: 16 },
+  filterBtn: { flex: 1, backgroundColor: "#fff", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, marginRight: 8, elevation: 2 },
+  filterBtnTitle: { fontSize: 12, color: "#8b6f69", fontWeight: "800" },
+  filterBtnValue: { fontSize: 13, color: "#333", marginTop: 2, fontWeight: "700" },
+  clearBtn: { backgroundColor: "#8b6f69", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  clearBtnText: { color: "#fff", fontWeight: "800" },
+
+  filterModalCard: { width: "100%", maxWidth: 360, backgroundColor: "#fff", borderRadius: 12, padding: 10 },
+  sep: { height: 8 },
+  dateRow: { paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10, backgroundColor: "#f3f3f3" },
+  dateRowActive: { backgroundColor: "#8b6f69" },
+  dateText: { color: "#333" },
+  dateTextActive: { color: "#fff", fontWeight: "700" },
 
   card: {
     backgroundColor: "#fff",
