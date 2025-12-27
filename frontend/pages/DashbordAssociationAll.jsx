@@ -9,6 +9,7 @@ import {
   Animated,
   Image,
   TouchableWithoutFeedback,
+  TouchableOpacity,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
@@ -131,9 +132,9 @@ export default function DashbordAssociationAll({ route }) {
             <Text style={styles.welcome}>Welcome {username}</Text>
           </View>
 
-          <View style={{ top: -30 }}>
+          <TouchableOpacity style={{ top: -30 }} onPress={() => navigation.navigate('ProfileScreen', { ...route?.params })}>
             <Ionicons name="person-circle-outline" size={36} color="#8b6f69" />
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Title */}
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 26,
-    marginTop: 20,
+    marginTop: -10,
   },
   welcomeLogo: {
     width: 135,

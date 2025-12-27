@@ -22,19 +22,14 @@ export default function AcceptedClothesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
-  const [submitting, setSubmitting] = useState({}); // { [id]: true }
-
-  // ✅ Details modal
+  const [submitting, setSubmitting] = useState({});
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
-
-  // ✅ Date filter (Dropdown)
   const [selectedDate, setSelectedDate] = useState("ALL");
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
-    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
-    return encodeURI(fullUrl);
+    return raw.startsWith("/") ? encodeURI(`${config.API_URL}${raw}`) : raw;
   };
 
   const getYMD = (created_at) => {
@@ -44,30 +39,22 @@ export default function AcceptedClothesScreen() {
   };
 
   const normalizeDonation = (x) => ({
-    donation_id: x.donation_id ?? x.id,
-    donor_name: x.donor_name ?? x.full_name ?? "Donor",
-    item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
-    note: x.note ?? x.description ?? "",
-    created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
+    donation_id: x.donation_id,
+    donor_name: x.donor_name ?? "Donor",
+    item_image: buildImageUrl(x.item_image),
+    note: x.note ?? "",
+    created_at: x.created_at,
     status: x.status ?? "accepted",
   });
 
   const fetchData = async () => {
     try {
-      setErrorMsg("");
       setLoading(true);
-
       const res = await axios.get(`${config.API_URL}/donations/clothes/accepted`);
-      const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
-      const normalized = arr.map(normalizeDonation);
-      setItems(normalized);
-
-      // ✅ if selected date not exists anymore -> reset ALL
-      const dates = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
-      if (selectedDate !== "ALL" && !dates.has(selectedDate)) setSelectedDate("ALL");
-    } catch (e) {
-      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load accepted donations");
-      setItems([]);
+      const arr = Array.isArray(res.data) ? res.data : [];
+      setItems(arr.map(normalizeDonation));
+    } catch {
+      setErrorMsg("Failed to load accepted donations");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -76,7 +63,6 @@ export default function AcceptedClothesScreen() {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = () => {
@@ -84,18 +70,13 @@ export default function AcceptedClothesScreen() {
     fetchData();
   };
 
-  const removeFromUI = (id) => {
-    setItems((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
-  };
-
   const approveDonation = async (id) => {
     try {
       setSubmitting((s) => ({ ...s, [id]: true }));
-      removeFromUI(id); // optimistic
       await axios.post(`${config.API_URL}/assoc/donations/${id}/approve`);
-    } catch (e) {
-      Alert.alert("Error", "Could not approve. Restoring item.");
-      fetchData();
+      setItems((prev) => prev.filter((d) => d.donation_id !== id));
+    } catch {
+      Alert.alert("Error", "Could not approve donation");
     } finally {
       setSubmitting((s) => {
         const c = { ...s };
@@ -105,71 +86,54 @@ export default function AcceptedClothesScreen() {
     }
   };
 
-  // ✅ dropdown options based on existing dates
   const allDates = useMemo(() => {
-    const set = new Set();
-    items.forEach((d) => {
-      const ymd = getYMD(d.created_at);
-      if (ymd) set.add(ymd);
-    });
-    return ["ALL", ...Array.from(set).sort().reverse()];
+    const set = new Set(items.map((d) => getYMD(d.created_at)));
+    return ["ALL", ...Array.from(set).filter(Boolean).sort().reverse()];
   }, [items]);
 
-  // ✅ filtered list
   const filteredItems =
-    selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
+    selectedDate === "ALL"
+      ? items
+      : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
-  const renderItem = ({ item }) => {
-    const dateStr = getYMD(item.created_at);
-    const isSubmitting = !!submitting[item.donation_id];
+  const renderItem = ({ item }) => (
+    <View style={styles.card}>
+      <Image
+        source={
+          item.item_image
+            ? { uri: item.item_image }
+            : require("../assets/icon.png")
+        }
+        style={styles.itemImage}
+      />
 
-    return (
-      <View style={styles.card}>
-        {item.item_image ? (
-          <Image source={{ uri: item.item_image }} style={styles.itemImage} />
-        ) : (
-          <Image source={require("../assets/icon.png")} style={styles.itemImage} />
-        )}
+      <Text style={styles.title}>{item.donor_name}</Text>
+      <Text style={styles.subtitle} numberOfLines={2}>
+        {item.note || "No description"}
+      </Text>
+      <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
 
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{item.donor_name}</Text>
-          <Text numberOfLines={2} style={styles.subtitle}>
-            {item.note || "No description"}
-          </Text>
-          <Text style={styles.deadline}>
-            Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
-          </Text>
-        </View>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={styles.detailsBtn}
+          onPress={() => {
+            setSelected(item);
+            setDetailsVisible(true);
+          }}
+        >
+          <Text style={styles.btnText}>Details</Text>
+        </TouchableOpacity>
 
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusAccepted}>Accepted</Text>
-        </View>
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => {
-              setSelected(item);
-              setDetailsVisible(true);
-            }}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Details</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => approveDonation(item.donation_id)}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Approve</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.approveBtn}
+          onPress={() => approveDonation(item.donation_id)}
+          disabled={submitting[item.donation_id]}
+        >
+          <Text style={styles.btnText}>Approve</Text>
+        </TouchableOpacity>
       </View>
-    );
-  };
-
-  const modalDate = getYMD(selected?.created_at);
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -179,20 +143,20 @@ export default function AcceptedClothesScreen() {
           style={styles.welcomeLogo}
           resizeMode="contain"
         />
-        <Text style={styles.headerMainTitle}>Accepted Donations</Text>
+        <Text style={styles.headerMainTitle}>Accepted Clothes Donations</Text>
       </View>
 
-      {!!errorMsg && (
-        <View style={styles.errorBar}>
-          <Text style={styles.errorText}>{errorMsg}</Text>
-        </View>
-      )}
-
-      {/* ✅ FILTER (Dropdown) */}
+      {/* ✅ FILTER */}
       <View style={styles.filterBox}>
-        <Text style={styles.filterTitle}>Filter Accepted by Date</Text>
+        <Text style={styles.filterTitle}>Filter by Date</Text>
+
         <View style={styles.pickerWrap}>
-          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
+          <Picker
+            mode="dropdown"
+            selectedValue={selectedDate}
+            onValueChange={(v) => setSelectedDate(v)}
+            style={{ width: "100%" }}
+          >
             {allDates.map((d) => (
               <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
             ))}
@@ -200,79 +164,36 @@ export default function AcceptedClothesScreen() {
         </View>
       </View>
 
-      <View style={styles.content}>
-        {loading ? (
-          <View style={{ paddingTop: 40, alignItems: "center" }}>
-            <ActivityIndicator size="large" />
-            <Text style={{ marginTop: 8 }}>Loading…</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={filteredItems}
-            keyExtractor={(it) => String(it.donation_id)}
-            renderItem={renderItem}
-            contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
-            ListEmptyComponent={
-              <Text style={{ textAlign: "center", marginTop: 30 }}>No accepted donations</Text>
-            }
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          />
-        )}
-      </View>
+      {loading ? (
+        <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+      ) : (
+        <FlatList
+          data={filteredItems}
+          keyExtractor={(i) => String(i.donation_id)}
+          renderItem={renderItem}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={{ padding: 20 }}
+          ListEmptyComponent={
+            <Text style={{ textAlign: "center", marginTop: 20 }}>
+              No accepted donations
+            </Text>
+          }
+        />
+      )}
 
-      {/* ✅ Details Modal */}
-      <Modal
-        visible={detailsVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDetailsVisible(false)}
-      >
+      {/* DETAILS MODAL */}
+      <Modal transparent visible={detailsVisible} animationType="fade">
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => {
-            setDetailsVisible(false);
-            setSelected(null);
-          }}
+          onPress={() => setDetailsVisible(false)}
         >
-          <Pressable style={styles.modalCard} onPress={() => {}}>
+          <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Donation Details</Text>
-
-            {selected?.item_image ? (
-              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
-            ) : (
-              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
-            )}
-
-            <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
-            <Text style={styles.modalDesc}>
-              {selected?.note?.trim() ? selected.note : "No description"}
-            </Text>
-            <Text style={styles.modalDate}>Date: {modalDate || "-"}</Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.btn, styles.approveBtn]}
-                onPress={() => {
-                  const id = selected?.donation_id;
-                  setDetailsVisible(false);
-                  setSelected(null);
-                  if (id) approveDonation(id);
-                }}
-              >
-                <Text style={styles.btnText}>Approve</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.btn, styles.detailsBtn]}
-                onPress={() => {
-                  setDetailsVisible(false);
-                  setSelected(null);
-                }}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
+            <Text>{selected?.donor_name}</Text>
+            <Text>{selected?.note}</Text>
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -282,117 +203,95 @@ export default function AcceptedClothesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
 
-  headerLarge: {
-    backgroundColor: "#EBE1D7",
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  welcomeLogo: {
-    width: 135,
-    height: 135,
-    marginRight: 10,
-    marginLeft: -35,
-    marginTop: -50,
-  },
-  headerMainTitle: {
-    fontFamily: "Times New Roman",
-    fontSize: 23,
-    marginTop: -75,
-    marginLeft: -50,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
     color: "#8b6f69",
+    textAlign: "center",
+    marginVertical: 10,
   },
 
-  errorBar: { backgroundColor: "#ffefef", padding: 10 },
-  errorText: { color: "#9b1c1c", textAlign: "center" },
-
-  // ✅ filter
   filterBox: {
     backgroundColor: "#fff",
     marginHorizontal: 20,
-    marginTop: 6,
     marginBottom: 10,
     borderRadius: 12,
-    padding: 12,
-    elevation: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
   },
+
   filterTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#8b6f69",
     marginBottom: 6,
-    fontFamily: "Times New Roman",
   },
+
   pickerWrap: {
     backgroundColor: "#f3f3f3",
     borderRadius: 10,
-    overflow: "hidden",
+    width: 340,
+    height: 44,
+    justifyContent: "center",
   },
 
-  content: { flex: 1, backgroundColor: "#EBE1D7" },
+  headerLarge: {
+    backgroundColor: "#EBE1D7",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  welcomeLogo: {
+    width: 120,
+    height: 120,
+    marginRight: 10,
+    marginLeft: -20,
+    marginTop: -40,
+  },
+  headerMainTitle: {
+    fontFamily: "Times New Roman",
+    fontSize: 22,
+    marginTop: -55,
+    marginLeft: -40,
+    color: "#8b6f69",
+  },
 
   card: {
     backgroundColor: "#fff",
+    borderRadius: 14,
     padding: 15,
-    borderRadius: 15,
-    marginBottom: 20,
+    marginBottom: 15,
     elevation: 3,
   },
-  itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
-  title: { fontSize: 18, fontWeight: "700", color: "#333" },
-  subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
-  deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
-  statusContainer: { position: "absolute", right: 10, top: 10 },
-  statusAccepted: {
-    backgroundColor: "#22c55e",
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    fontWeight: "700",
-  },
+  itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 8 },
+  title: { fontSize: 16, fontWeight: "700" },
+  subtitle: { color: "#555", marginVertical: 4 },
+  deadline: { fontSize: 13, color: "#333" },
 
-  actionButtons: { flexDirection: "row", gap: 10, marginTop: 15, flexWrap: "wrap" },
-  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
-  detailsBtn: { backgroundColor: "#8b6f69" },
-  approveBtn: { backgroundColor: "#3b82f6" },
+  actionButtons: { flexDirection: "row", gap: 10, marginTop: 10 },
+  detailsBtn: { backgroundColor: "#8b6f69", padding: 8, borderRadius: 8 },
+  approveBtn: { backgroundColor: "#3b82f6", padding: 8, borderRadius: 8 },
   btnText: { color: "#fff", fontWeight: "700" },
 
-  // ✅ Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
   },
   modalCard: {
-    width: "100%",
-    maxWidth: 380,
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    elevation: 10,
+    padding: 20,
+    borderRadius: 14,
+    width: "80%",
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: "800",
-    color: "#8b6f69",
-    marginBottom: 12,
+    fontWeight: "700",
+    marginBottom: 10,
     textAlign: "center",
-    fontFamily: "Times New Roman",
   },
-  modalImage: {
-    width: "100%",
-    height: 180,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: "#f2f2f2",
-  },
-  modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
-  modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
-  modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
-  modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
 });

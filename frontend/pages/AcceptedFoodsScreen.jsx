@@ -215,13 +215,14 @@ export default function AcceptedFoodScreen() {
       <View style={styles.filterBox}>
         <Text style={styles.filterTitle}>Filter by Date</Text>
         <View style={styles.pickerWrap}>
-          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
+          <Picker
+            mode="dropdown"
+            selectedValue={selectedDate}
+            onValueChange={(v) => setSelectedDate(v)}
+            style={{ width: "100%" }}
+          >
             {allDates.map((d) => (
-              <Picker.Item
-                key={d}
-                label={d === "ALL" ? "All Dates" : d}
-                value={d}
-              />
+              <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
             ))}
           </Picker>
         </View>
@@ -346,23 +347,26 @@ const styles = StyleSheet.create({
   filterBox: {
     backgroundColor: "#fff",
     marginHorizontal: 20,
-    marginTop: 6,
     marginBottom: 10,
     borderRadius: 12,
-    padding: 12,
-    elevation: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
   },
+
   filterTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#8b6f69",
     marginBottom: 6,
-    fontFamily: "Times New Roman",
   },
+
   pickerWrap: {
     backgroundColor: "#f3f3f3",
     borderRadius: 10,
-    overflow: "hidden",
+    width: 340,
+    height: 44,
+    justifyContent: "center",
   },
 
   content: { flex: 1, backgroundColor: "#EBE1D7" },

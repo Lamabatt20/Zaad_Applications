@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Animated,
   Image,
   TouchableWithoutFeedback,
+  TouchableOpacity,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
@@ -16,6 +17,23 @@ import { useNavigation } from "@react-navigation/native";
 export default function ClothesDonationStatus({ route }) {
   const username = route?.params?.username || "Association";
   const navigation = useNavigation();
+
+  const initialData = route?.params || {};
+  const [currentUser, setCurrentUser] = useState({
+    user_id: initialData.user_id,
+    username: initialData.username,
+    email: initialData.email,
+    full_name: initialData.full_name,
+    phone: initialData.phone,
+    role: initialData.role,
+    address: initialData.address,
+  });
+
+  useEffect(() => {
+    if (route.params) {
+      setCurrentUser((prev) => ({ ...prev, ...route.params }));
+    }
+  }, [route.params]);
 
   const statuses = [
     { id: "1", status: "Approved", screen: "ApprovedFoodsScreen" },
@@ -110,9 +128,16 @@ export default function ClothesDonationStatus({ route }) {
             <Text style={styles.welcome}>Welcome {username}</Text>
           </View>
 
-          <View style={{ top: -30 }}>
-            <Ionicons name="person-circle-outline" size={36} color="#8b6f69" />
-          </View>
+            <TouchableOpacity
+              style={{ top: -30 }}
+              onPress={() =>
+                navigation.navigate("ProfileScreen", {
+                  ...currentUser,
+                })
+              }
+            >
+              <Ionicons name="person-circle-outline" size={36} color="#A27571" />
+            </TouchableOpacity>
         </View>
 
         {/* Title for Cards */}
@@ -148,7 +173,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 30,
-    marginTop: 20,
+    marginTop: -10,
   },
   welcomeLogo: {
     width: 135,

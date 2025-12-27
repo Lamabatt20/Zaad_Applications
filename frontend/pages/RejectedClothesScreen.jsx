@@ -213,20 +213,38 @@ export default function RejectedClothesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.header}>Rejected Donations</Text>
+      <View style={styles.headerLarge}>
+        <Image
+          source={require("../assets/images/image.png")}
+          style={styles.welcomeLogo}
+          resizeMode="contain"
+        />
+
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerMainTitle}>Rejected Donations</Text>
+        </View>
+      </View>
 
       {!!errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
       {/* ✅ FILTER (Dropdown) */}
       <View style={styles.filterBox}>
-        <Text style={styles.filterTitle}>Filter Rejected by Date</Text>
-        <View style={styles.pickerWrap}>
-          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
-            {allDates.map((d) => (
-              <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
-            ))}
-          </Picker>
-        </View>
+          {selectedDate !== "ALL" && (
+            <Text style={styles.filterTitle}>Filter Rejected by Date</Text>
+          )}
+          <View style={styles.pickerWrap}>
+            <Picker
+              mode="dropdown"
+              selectedValue={selectedDate}
+              onValueChange={(v) => setSelectedDate(v)}
+              style={{ width: "100%", height: 40, color: "#333" }}
+              itemStyle={{ height: 40 }}
+            >
+              {allDates.map((d) => (
+                <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
+              ))}
+            </Picker>
+          </View>
       </View>
 
       {loading ? (
@@ -324,33 +342,42 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
+  headerLarge: { backgroundColor: "#EBE1D7", paddingVertical: 16, paddingHorizontal: 14, flexDirection: "row", alignItems: "center" },
+  welcomeLogo: { width: 135, height: 135, marginRight: 10, marginLeft: -35, marginTop: -50 },
+  headerTextContainer: { flex: 1 },
+  headerMainTitle: { fontFamily: "Times New Roman", fontSize: 23, marginTop: -50, marginLeft: -50, color: "#8b6f69" },
+
   error: {
     textAlign: "center",
     color: "#9b1c1c",
     marginVertical: 10,
   },
 
-  // ✅ filter
   filterBox: {
     backgroundColor: "#fff",
     marginHorizontal: 20,
-    marginTop: 6,
     marginBottom: 10,
     borderRadius: 12,
-    padding: 12,
-    elevation: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
   },
+
   filterTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#8b6f69",
     marginBottom: 6,
-    fontFamily: "Times New Roman",
   },
+
   pickerWrap: {
     backgroundColor: "#f3f3f3",
     borderRadius: 10,
-    overflow: "hidden",
+    width: 340,
+    height: 44,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   card: {

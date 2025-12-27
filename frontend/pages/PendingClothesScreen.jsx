@@ -23,19 +23,19 @@ export default function PendingClothesScreen() {
   const [errorMsg, setErrorMsg] = useState("");
   const [pendingDonations, setPendingDonations] = useState([]);
   const [submitting, setSubmitting] = useState({}); // { [id]: 'accept' | 'reject' }
-
-  // ✅ Details modal state
+  // ✅ details modal
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // ✅ Date filter state
+  // ✅ Date filter (Dropdown)
   const [selectedDate, setSelectedDate] = useState("ALL");
 
-  // --- helpers ---
-  const buildImageUrl = (raw) => {
-    if (!raw) return null;
-    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
-    return encodeURI(fullUrl);
+
+  const normalizeSlash = (base, path) => {
+    if (!base) return path;
+    if (base.endsWith("/") && path.startsWith("/")) return base + path.slice(1);
+    if (!base.endsWith("/") && !path.startsWith("/")) return `${base}/${path}`;
+    return base + path;
   };
 
   const normalizeDonation = (x) => ({
@@ -52,6 +52,12 @@ export default function PendingClothesScreen() {
       return created_at.split("T")[0];
     }
     return String(created_at || "").slice(0, 10);
+  };
+
+  const buildImageUrl = (raw) => {
+    if (!raw) return null;
+    const full = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
+    return encodeURI(full);
   };
 
   const assertConfig = () => {
@@ -151,6 +157,13 @@ export default function PendingClothesScreen() {
     return ["ALL", ...Array.from(set).sort()];
   }, [pendingDonations]);
 
+  // default to most recent date (if any) instead of ALL
+  useEffect(() => {
+    if (allDates.length > 1 && selectedDate === "ALL") {
+      setSelectedDate(allDates[allDates.length - 1]);
+    }
+  }, [allDates]);
+
   // ✅ Filtered data
   const filteredPending =
     selectedDate === "ALL"
@@ -245,13 +258,14 @@ export default function PendingClothesScreen() {
       <View style={styles.filterBox}>
         <Text style={styles.filterTitle}>Filter Pending by Date</Text>
         <View style={styles.pickerWrap}>
-          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
+          <Picker
+            mode="dropdown"
+            selectedValue={selectedDate}
+            onValueChange={(v) => setSelectedDate(v)}
+            style={{ width: "100%" }}
+          >
             {allDates.map((d) => (
-              <Picker.Item
-                key={d}
-                label={d === "ALL" ? "All Pending Dates" : d}
-                value={d}
-              />
+              <Picker.Item key={d} label={d === "ALL" ? "All Pending Dates" : d} value={d} />
             ))}
           </Picker>
         </View>
@@ -380,27 +394,29 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  // ✅ filter
   filterBox: {
     backgroundColor: "#fff",
     marginHorizontal: 20,
-    marginTop: 6,
     marginBottom: 10,
     borderRadius: 12,
-    padding: 12,
-    elevation: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
   },
+
   filterTitle: {
     fontSize: 14,
     fontWeight: "700",
     color: "#8b6f69",
     marginBottom: 6,
-    fontFamily: "Times New Roman",
   },
+
   pickerWrap: {
     backgroundColor: "#f3f3f3",
     borderRadius: 10,
-    overflow: "hidden",
+    width: 340,
+    height: 44,
+    justifyContent: "center",
   },
 
   content: { flex: 1, backgroundColor: "#EBE1D7" },
