@@ -24,8 +24,9 @@ import EditProfileScreen from "./pages/EditProfile";
 import ChangePassword from './pages/ChangePassword';
 import SearchAssociation from './pages/SearchAssociation';
 import ApprovedClothesScreen from './pages/ApprovedClothesScreen';
-
-
+import AcceptedFoodsScreen from './pages/AcceptedFoodsScreen';
+import ApprovedFoodsScreen from './pages/ApprovedFoodsScreen';  
+import DashbordAssociationAll from './pages/DashbordAssociationAll';
 
 const Stack = createNativeStackNavigator();
 
@@ -47,7 +48,7 @@ export default function App() {
           <Stack.Screen name="AssociationInfo" component={AssociationInfo} />
           <Stack.Screen name="DonateClothesScreen" component={DonateClothesScreen} />
           <Stack.Screen name="DashbordAssociationClothes" component={DashbordAssociationClothes} />
-          <Stack.Screen name="DashbordAssociationfoods" component={DashbordAssociationFoods} />
+          <Stack.Screen name="DashbordAssociationFoods" component={DashbordAssociationFoods} />
           <Stack.Screen name="PendingClothesScreen" component={PendingClothesScreen} />
           <Stack.Screen name="AcceptedClothesScreen" component={AcceptedClothesScreen} />
           <Stack.Screen name="RejectedClothesScreen" component={RejectedClothesScreen} />
@@ -57,6 +58,9 @@ export default function App() {
           <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
           <Stack.Screen name="ChangePassword" component={ChangePassword} />
           <Stack.Screen name="ApprovedClothesScreen" component={ApprovedClothesScreen} /> 
+          <Stack.Screen name="AcceptedFoodsScreen" component={AcceptedFoodsScreen} />
+          <Stack.Screen name="ApprovedFoodsScreen" component={ApprovedFoodsScreen} />
+          <Stack.Screen name="DashbordAssociationAll" component={DashbordAssociationAll} />
 
           </Stack.Navigator>
       </NavigationContainer>

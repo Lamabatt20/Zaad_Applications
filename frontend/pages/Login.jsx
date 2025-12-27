@@ -80,7 +80,7 @@ export default function LoginScreen({ navigation }) {
 
         switch (res.data.role) {
           case 'association':
-            navigation.navigate('DashbordAssociationClothes', {
+            navigation.navigate('DashbordAssociationFoods', {
             user_id: res.data.user_id,
             username: res.data.username,
             email: res.data.email,

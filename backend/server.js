@@ -642,14 +642,37 @@ app.post('/assoc/donations/:id/accept', async (req, res) => {
 });
 
 app.post('/assoc/donations/:id/reject', async (req, res) => {
+  const id = req.params.id;
+
   try {
-    await pool.query(`UPDATE donations SET status='rejected' WHERE donation_id=$1`, [req.params.id]);
-    res.json({ ok:true });
+    // 1) غيّر الحالة لـ rejected
+    const upd = await pool.query(
+      `UPDATE donations SET status='rejected' WHERE donation_id=$1 RETURNING donation_id, donor_id`,
+      [id]
+    );
+
+    if (upd.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "Donation not found" });
+    }
+
+    const donor_id = upd.rows[0].donor_id; // ممكن تكون null
+    await pool.query(
+      `
+      INSERT INTO donation_history (donation_id, donor_id, description)
+      VALUES ($1, $2, 'REJECTED')
+      `,
+      [id, donor_id]
+    );
+
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ ok:false, error:'Failed to reject donation' });
+    res.status(500).json({ ok: false, error: "Failed to reject donation" });
   }
 });
+
+
+
 app.get('/donations/clothes/accepted', async (req, res) => {
   try {
     const q = await pool.query(`
@@ -674,7 +697,6 @@ app.get('/donations/clothes/accepted', async (req, res) => {
     res.status(500).json({ ok:false, error:'Failed to fetch accepted clothes donations' });
   }
 });
-
 app.get('/donations/clothes/rejected', async (req, res) => {
   try {
     const q = await pool.query(`
@@ -684,15 +706,24 @@ app.get('/donations/clothes/rejected', async (req, res) => {
              d.note,
              d.status,
              d.created_at,
-             cd.clothes_type
+
+             (
+               SELECT MAX(h.event_time)
+               FROM donation_history h
+               WHERE h.donation_id = d.donation_id
+                 AND h.description = 'REJECTED'
+             ) AS rejected_at
+
       FROM donations d
       JOIN donors dr   ON dr.user_id = d.donor_id
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type = 'clothes' AND d.status = 'rejected'
+      WHERE d.donation_type = 'clothes'
+        AND d.status = 'rejected'
       ORDER BY d.donation_id DESC
     `);
+
     res.json(q.rows);
   } catch (e) {
     console.error(e);
@@ -701,24 +732,10 @@ app.get('/donations/clothes/rejected', async (req, res) => {
 });
 
 
-
 app.get('/associations/clothes', async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT association_id, name,description,association_logo FROM associations WHERE clothes = true"
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-
-app.get('/associations/food', async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT association_id, name,description,association_logo FROM associations WHERE food = true"
     );
     res.json(result.rows);
   } catch (err) {
@@ -766,19 +783,133 @@ app.get('/donations/clothes/approved', async (req, res) => {
     res.status(500).json({ ok:false, error:'Failed to fetch approved clothes donations' });
   }
 });
-// POST /assoc/donations/:id/restore  -> rejected ➜ pending
 app.post('/assoc/donations/:id/restore', async (req, res) => {
+  const id = req.params.id;
+
   try {
-    await pool.query(
-      `UPDATE donations SET status='pending' WHERE donation_id=$1 AND status='rejected'`,
-      [req.params.id]
+    const q = await pool.query(
+      `
+      WITH last_reject AS (
+        SELECT MAX(event_time) AS rejected_at
+        FROM donation_history
+        WHERE donation_id = $1
+          AND description = 'REJECTED'
+      )
+      UPDATE donations
+      SET status = 'pending'
+      WHERE donation_id = $1
+        AND status = 'rejected'
+        AND (SELECT rejected_at FROM last_reject) IS NOT NULL
+        AND now() <= (SELECT rejected_at FROM last_reject) + interval '2 hours'
+      RETURNING donation_id
+      `,
+      [id]
     );
+
+    if (q.rowCount === 0) {
+      return res.status(403).json({
+        ok: false,
+        error: "Restore window expired (2 hours after rejection) or donation not rejected."
+      });
+    }
+
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok:false, error:'Failed to restore donation' });
   }
 });
+
+
+// =======================
+// FOOD DONATIONS ROUTES
+// =======================
+
+
+// GET /donations/food/accepted  -> list accepted food donations
+app.get("/donations/food/accepted", async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             fd.is_perishable,
+             fd.food_type,
+             fd.expiration_date
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u   ON u.user_id  = dr.user_id
+      JOIN accounts a ON a.account_id = u.account_id
+      JOIN food_donations fd ON fd.donation_id = d.donation_id
+      WHERE d.donation_type = 'food'
+        AND d.status = 'accepted'
+      ORDER BY d.donation_id DESC
+    `);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch accepted food donations" });
+  }
+});
+
+
+// GET /donations/food/approved  -> list approved food donations
+app.get("/donations/food/approved", async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             fd.is_perishable,
+             fd.food_type,
+             fd.expiration_date
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u   ON u.user_id  = dr.user_id
+      JOIN accounts a ON a.account_id = u.account_id
+      JOIN food_donations fd ON fd.donation_id = d.donation_id
+      WHERE d.donation_type = 'food'
+        AND d.status = 'approved'
+      ORDER BY d.donation_id DESC
+    `);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch approved food donations" });
+  }
+});
+
+app.use((req, res, next) => {
+  console.log("REQ:", req.method, req.url);
+  next();
+});
+
+// (اختياري) GET /donations/food/accepted/dates  -> distinct dates
+app.get("/donations/food/accepted/dates", async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT DISTINCT to_char(d.created_at, 'YYYY-MM-DD') AS date
+      FROM donations d
+      WHERE d.donation_type = 'food'
+        AND d.status = 'accepted'
+      ORDER BY date DESC
+    `);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch dates" });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);

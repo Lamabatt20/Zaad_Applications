@@ -1,36 +1,46 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View, Text, StyleSheet, Image, FlatList,
-  TouchableOpacity, ActivityIndicator, SafeAreaView,
-  RefreshControl, Alert
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  SafeAreaView,
+  RefreshControl,
+  Alert,
+  Modal,
+  Pressable,
 } from "react-native";
 import axios from "axios";
-import { useNavigation } from "@react-navigation/native";
 import config from "../config";
+import { Picker } from "@react-native-picker/picker";
 
 export default function AcceptedClothesScreen() {
-  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
   const [submitting, setSubmitting] = useState({}); // { [id]: true }
 
-  const normalizeSlash = (base, path) => {
-    if (!base) return path;
-    if (base.endsWith("/") && path.startsWith("/")) return base + path.slice(1);
-    if (!base.endsWith("/") && !path.startsWith("/")) return `${base}/${path}`;
-    return base + path;
-  };
+  // ✅ Details modal
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  // ✅ Date filter (Dropdown)
+  const [selectedDate, setSelectedDate] = useState("ALL");
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
-  
-    const fullUrl = raw.startsWith("/")
-      ? `${config.API_URL}${raw}`
-      : raw;
-  
-    return encodeURI(fullUrl); 
+    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
+    return encodeURI(fullUrl);
+  };
+
+  const getYMD = (created_at) => {
+    if (!created_at) return "";
+    const s = String(created_at);
+    return s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
   };
 
   const normalizeDonation = (x) => ({
@@ -44,17 +54,19 @@ export default function AcceptedClothesScreen() {
 
   const fetchData = async () => {
     try {
-      setErrorMsg(""); setLoading(true);
-      console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/accepted`);
+      setErrorMsg("");
+      setLoading(true);
+
       const res = await axios.get(`${config.API_URL}/donations/clothes/accepted`);
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
-      setItems(arr.map(normalizeDonation));
+      const normalized = arr.map(normalizeDonation);
+      setItems(normalized);
+
+      // ✅ if selected date not exists anymore -> reset ALL
+      const dates = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
+      if (selectedDate !== "ALL" && !dates.has(selectedDate)) setSelectedDate("ALL");
     } catch (e) {
-      setErrorMsg(
-        typeof e?.message === "string"
-          ? e.message
-          : "Failed to load accepted donations"
-      );
+      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load accepted donations");
       setItems([]);
     } finally {
       setLoading(false);
@@ -64,6 +76,7 @@ export default function AcceptedClothesScreen() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = () => {
@@ -72,23 +85,19 @@ export default function AcceptedClothesScreen() {
   };
 
   const removeFromUI = (id) => {
-    setItems(prev => prev.filter(d => String(d.donation_id) !== String(id)));
+    setItems((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
   };
 
   const approveDonation = async (id) => {
     try {
-      setSubmitting(s => ({ ...s, [id]: true }));
-      // optimistic: remove from Accepted list (it will appear in Approved screen)
-      removeFromUI(id);
+      setSubmitting((s) => ({ ...s, [id]: true }));
+      removeFromUI(id); // optimistic
       await axios.post(`${config.API_URL}/assoc/donations/${id}/approve`);
-      // (optional) show toast/alert
-      // Alert.alert("Done", "Donation approved.");
     } catch (e) {
-      // rollback
       Alert.alert("Error", "Could not approve. Restoring item.");
       fetchData();
     } finally {
-      setSubmitting(s => {
+      setSubmitting((s) => {
         const c = { ...s };
         delete c[id];
         return c;
@@ -96,12 +105,22 @@ export default function AcceptedClothesScreen() {
     }
   };
 
-  const renderItem = ({ item }) => {
-    const dateStr =
-      typeof item.created_at === "string" && item.created_at.includes("T")
-        ? item.created_at.split("T")[0]
-        : (item.created_at || "").toString().slice(0, 10);
+  // ✅ dropdown options based on existing dates
+  const allDates = useMemo(() => {
+    const set = new Set();
+    items.forEach((d) => {
+      const ymd = getYMD(d.created_at);
+      if (ymd) set.add(ymd);
+    });
+    return ["ALL", ...Array.from(set).sort().reverse()];
+  }, [items]);
 
+  // ✅ filtered list
+  const filteredItems =
+    selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
+
+  const renderItem = ({ item }) => {
+    const dateStr = getYMD(item.created_at);
     const isSubmitting = !!submitting[item.donation_id];
 
     return (
@@ -109,10 +128,7 @@ export default function AcceptedClothesScreen() {
         {item.item_image ? (
           <Image source={{ uri: item.item_image }} style={styles.itemImage} />
         ) : (
-          <Image
-            source={require("../assets/icon.png")}
-            style={styles.itemImage}
-          />
+          <Image source={require("../assets/icon.png")} style={styles.itemImage} />
         )}
 
         <View style={{ flex: 1 }}>
@@ -132,13 +148,15 @@ export default function AcceptedClothesScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => navigation.navigate("RequestDetails", { id: item.donation_id })}
+            onPress={() => {
+              setSelected(item);
+              setDetailsVisible(true);
+            }}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Details</Text>
           </TouchableOpacity>
 
-          {/* NEW: Approve button */}
           <TouchableOpacity
             style={[styles.btn, styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
             onPress={() => approveDonation(item.donation_id)}
@@ -151,6 +169,8 @@ export default function AcceptedClothesScreen() {
     );
   };
 
+  const modalDate = getYMD(selected?.created_at);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerLarge}>
@@ -159,7 +179,6 @@ export default function AcceptedClothesScreen() {
           style={styles.welcomeLogo}
           resizeMode="contain"
         />
-
         <Text style={styles.headerMainTitle}>Accepted Donations</Text>
       </View>
 
@@ -169,6 +188,18 @@ export default function AcceptedClothesScreen() {
         </View>
       )}
 
+      {/* ✅ FILTER (Dropdown) */}
+      <View style={styles.filterBox}>
+        <Text style={styles.filterTitle}>Filter Accepted by Date</Text>
+        <View style={styles.pickerWrap}>
+          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
+            {allDates.map((d) => (
+              <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
+            ))}
+          </Picker>
+        </View>
+      </View>
+
       <View style={styles.content}>
         {loading ? (
           <View style={{ paddingTop: 40, alignItems: "center" }}>
@@ -177,21 +208,73 @@ export default function AcceptedClothesScreen() {
           </View>
         ) : (
           <FlatList
-            data={items}
+            data={filteredItems}
             keyExtractor={(it) => String(it.donation_id)}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
-              <Text style={{ textAlign: "center", marginTop: 30 }}>
-                No accepted donations
-              </Text>
+              <Text style={{ textAlign: "center", marginTop: 30 }}>No accepted donations</Text>
             }
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           />
         )}
       </View>
+
+      {/* ✅ Details Modal */}
+      <Modal
+        visible={detailsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailsVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setDetailsVisible(false);
+            setSelected(null);
+          }}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Donation Details</Text>
+
+            {selected?.item_image ? (
+              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+            )}
+
+            <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
+            <Text style={styles.modalDesc}>
+              {selected?.note?.trim() ? selected.note : "No description"}
+            </Text>
+            <Text style={styles.modalDate}>Date: {modalDate || "-"}</Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.btn, styles.approveBtn]}
+                onPress={() => {
+                  const id = selected?.donation_id;
+                  setDetailsVisible(false);
+                  setSelected(null);
+                  if (id) approveDonation(id);
+                }}
+              >
+                <Text style={styles.btnText}>Approve</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btn, styles.detailsBtn]}
+                onPress={() => {
+                  setDetailsVisible(false);
+                  setSelected(null);
+                }}
+              >
+                <Text style={styles.btnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -206,7 +289,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-
   welcomeLogo: {
     width: 135,
     height: 135,
@@ -214,7 +296,6 @@ const styles = StyleSheet.create({
     marginLeft: -35,
     marginTop: -50,
   },
-
   headerMainTitle: {
     fontFamily: "Times New Roman",
     fontSize: 23,
@@ -226,6 +307,29 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
+  // ✅ filter
+  filterBox: {
+    backgroundColor: "#fff",
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 12,
+    elevation: 2,
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#8b6f69",
+    marginBottom: 6,
+    fontFamily: "Times New Roman",
+  },
+  pickerWrap: {
+    backgroundColor: "#f3f3f3",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
+
   content: { flex: 1, backgroundColor: "#EBE1D7" },
 
   card: {
@@ -235,15 +339,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     elevation: 3,
   },
-
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
-
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
   statusContainer: { position: "absolute", right: 10, top: 10 },
-
   statusAccepted: {
     backgroundColor: "#22c55e",
     color: "#fff",
@@ -254,8 +355,44 @@ const styles = StyleSheet.create({
   },
 
   actionButtons: { flexDirection: "row", gap: 10, marginTop: 15, flexWrap: "wrap" },
-  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
+  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
   detailsBtn: { backgroundColor: "#8b6f69" },
-  approveBtn: { backgroundColor: "#3b82f6" }, // blue
+  approveBtn: { backgroundColor: "#3b82f6" },
   btnText: { color: "#fff", fontWeight: "700" },
+
+  // ✅ Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 12,
+    textAlign: "center",
+    fontFamily: "Times New Roman",
+  },
+  modalImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: "#f2f2f2",
+  },
+  modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
+  modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
+  modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
+  modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
 });

@@ -13,39 +13,50 @@ import {
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 
-export default function ClothesDonationStatus({ route }) {
+export default function DashbordAssociationAll({ route }) {
   const username = route?.params?.username || "Association";
   const navigation = useNavigation();
 
-  const statuses = [
-    { id: "1", status: "Approved", screen: "ApprovedFoodsScreen" },
-    { id: "2", status: "Accepted", screen: "AcceptedFoodsScreen" },
+  const modules = [
+    {
+      id: "1",
+      title: "Food Donations",
+      subtitle: "Accepted & Approved",
+      icon: "fast-food-outline",
+      screen: "DashbordAssociationFoods", 
+    },
+    {
+      id: "2",
+      title: "Clothes Donations",
+      subtitle: "Pending, Accepted, Approved, Rejected",
+      icon: "shirt-outline",
+      screen: "DashbordAssociationClothes", 
+    },
   ];
 
-  // For card entrance animation
-  const fadeAnimations = useRef(statuses.map(() => new Animated.Value(0))).current;
-
-  // For press animation
-  const pressAnimations = useRef(statuses.map(() => new Animated.Value(0))).current;
+  // animations
+  const fadeAnimations = useRef(modules.map(() => new Animated.Value(0))).current;
+  const pressAnimations = useRef(modules.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     const anims = fadeAnimations.map((anim, index) =>
       Animated.timing(anim, {
         toValue: 1,
-        duration: 600,
-        delay: index * 200,
+        duration: 550,
+        delay: index * 180,
         useNativeDriver: true,
       })
     );
-
-    Animated.stagger(150, anims).start();
+    Animated.stagger(130, anims).start();
   }, []);
 
   const goToScreen = (item) => {
     if (!item?.screen) return;
 
-    // ✅ optional: pass username forward too
-    navigation.navigate(item.screen, { username });
+    navigation.navigate(item.screen, {
+      ...route?.params,
+      username,
+    });
   };
 
   const renderItem = ({ item, index }) => {
@@ -56,27 +67,27 @@ export default function ClothesDonationStatus({ route }) {
 
     const pressTranslateY = pressAnimations[index].interpolate({
       inputRange: [0, 1],
-      outputRange: [0, -8], // moves UP when pressed
+      outputRange: [0, -8],
     });
 
     return (
-    <TouchableWithoutFeedback
-  onPressIn={() => {
-    Animated.spring(pressAnimations[index], {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  }}
-  onPressOut={() => {
-    Animated.spring(pressAnimations[index], {
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
-  }}
-  onPress={() => {
-    goToScreen(item); 
-  }}
->
+      <TouchableWithoutFeedback
+        onPressIn={() => {
+          Animated.spring(pressAnimations[index], {
+            toValue: 1,
+            useNativeDriver: true,
+          }).start();
+        }}
+        onPressOut={() => {
+          Animated.spring(pressAnimations[index], {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+
+          // ✅ التنقّل
+          goToScreen(item);
+        }}
+      >
         <Animated.View
           style={[
             styles.card,
@@ -87,7 +98,17 @@ export default function ClothesDonationStatus({ route }) {
           ]}
         >
           <View style={styles.cardRow}>
-            <Text style={styles.status}>{item.status}</Text>
+            <View style={styles.leftRow}>
+              <View style={styles.iconCircle}>
+                <Ionicons name={item.icon} size={22} color="#8b6f69" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardSub}>{item.subtitle}</Text>
+              </View>
+            </View>
+
             <Ionicons name="chevron-forward" size={20} color="#54403c" />
           </View>
         </Animated.View>
@@ -115,17 +136,25 @@ export default function ClothesDonationStatus({ route }) {
           </View>
         </View>
 
-        {/* Title for Cards */}
+        {/* Title */}
         <View style={styles.cardsTitleContainer}>
-          <Text style={styles.cardsTitle}>Donation Status</Text>
+          <Text style={styles.cardsTitle}>Dashboard (All)</Text>
         </View>
 
-        {/* Status Cards */}
-        <FlatList data={statuses} keyExtractor={(item) => item.id} renderItem={renderItem} scrollEnabled={false} />
+        {/* Cards */}
+        <FlatList
+          data={modules}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          scrollEnabled={false}
+        />
 
         {/* Footer */}
         <View style={styles.footerContainer}>
-          <Image source={require("../assets/images/Z A A D.png")} style={styles.footerLogo} />
+          <Image
+            source={require("../assets/images/Z A A D.png")}
+            style={styles.footerLogo}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -147,7 +176,7 @@ const styles = StyleSheet.create({
   welcomeRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 26,
     marginTop: 20,
   },
   welcomeLogo: {
@@ -165,9 +194,15 @@ const styles = StyleSheet.create({
     marginLeft: -65,
     color: "#8b6f69",
   },
+  smallHint: {
+    marginLeft: -65,
+    marginTop: 6,
+    fontSize: 13,
+    color: "#6b5a56",
+  },
 
-  /* Cards Title */
-  cardsTitleContainer: { marginBottom: 15, marginLeft: 0 },
+  /* Title */
+  cardsTitleContainer: { marginBottom: 15 },
   cardsTitle: {
     fontSize: 22,
     fontWeight: "700",
@@ -178,7 +213,7 @@ const styles = StyleSheet.create({
   /* CARD */
   card: {
     backgroundColor: "#f2f2f2",
-    padding: 20,
+    padding: 18,
     borderRadius: 12,
     marginBottom: 15,
     elevation: 3,
@@ -188,7 +223,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  status: { fontSize: 18, fontWeight: "600", color: "#333" },
+  leftRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  iconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+  },
+  cardTitle: { fontSize: 16, fontWeight: "800", color: "#333" },
+  cardSub: { fontSize: 12, color: "#6b6b6b", marginTop: 2 },
 
   /* FOOTER */
   footerContainer: { alignItems: "center", paddingVertical: 10 },

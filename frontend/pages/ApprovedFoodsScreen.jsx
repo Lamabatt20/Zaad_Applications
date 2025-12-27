@@ -16,30 +16,29 @@ import axios from "axios";
 import config from "../config";
 import { Picker } from "@react-native-picker/picker";
 
-export default function ApprovedClothesScreen() {
+export default function ApprovedFoodScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
 
-  // ✅ Details modal
+  // Details modal
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // ✅ Date filter (same as pending)
+  // Date filter dropdown
   const [selectedDate, setSelectedDate] = useState("ALL");
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
-    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
-    return encodeURI(fullUrl);
+    const full = String(raw).startsWith("/") ? `${config.API_URL}${raw}` : raw;
+    return encodeURI(full);
   };
 
   const getYMD = (created_at) => {
-    if (typeof created_at === "string" && created_at.includes("T")) {
-      return created_at.split("T")[0];
-    }
-    return String(created_at || "").slice(0, 10);
+    if (!created_at) return "";
+    const s = String(created_at);
+    return s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
   };
 
   const normalizeDonation = (x) => ({
@@ -49,6 +48,7 @@ export default function ApprovedClothesScreen() {
     note: x.note ?? x.description ?? "",
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "approved",
+    quantity: x.quantity ?? null,
   });
 
   const fetchData = async () => {
@@ -56,18 +56,18 @@ export default function ApprovedClothesScreen() {
       setErrorMsg("");
       setLoading(true);
 
-      console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/approved`);
-      const res = await axios.get(`${config.API_URL}/donations/clothes/approved`);
+      // ✅ FOOD approved endpoint
+      console.log("[FETCH] GET", `${config.API_URL}/donations/food/approved`);
+      const res = await axios.get(`${config.API_URL}/donations/food/approved`);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
       setItems(normalized);
 
-      // ✅ لو التاريخ المختار ما عاد موجود، رجعي ALL
-      const dates = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
-      if (selectedDate !== "ALL" && !dates.has(selectedDate)) setSelectedDate("ALL");
+      const datesSet = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
+      if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) setSelectedDate("ALL");
     } catch (e) {
-      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load approved donations");
+      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load approved food donations");
       setItems([]);
     } finally {
       setLoading(false);
@@ -85,17 +85,15 @@ export default function ApprovedClothesScreen() {
     fetchData();
   };
 
-  // ✅ Dropdown options (existing dates only)
   const allDates = useMemo(() => {
     const set = new Set();
     items.forEach((d) => {
       const ymd = getYMD(d.created_at);
       if (ymd) set.add(ymd);
     });
-    return ["ALL", ...Array.from(set).sort()]; // same as pending
+    return ["ALL", ...Array.from(set).sort().reverse()];
   }, [items]);
 
-  // ✅ filtered list (same as pending)
   const filteredItems =
     selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
@@ -112,9 +110,15 @@ export default function ApprovedClothesScreen() {
 
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.donor_name}</Text>
+
+          {!!item.quantity && (
+            <Text style={styles.metaText}>Quantity: <Text style={{ fontWeight: "800" }}>{item.quantity}</Text></Text>
+          )}
+
           <Text numberOfLines={2} style={styles.subtitle}>
             {item.note || "No description"}
           </Text>
+
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
@@ -139,18 +143,16 @@ export default function ApprovedClothesScreen() {
     );
   };
 
-  const modalDate = getYMD(selected?.created_at);
-
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.headerLarge}>
-        <View style={styles.headerIconWrapper}>
-          <Image source={require("../assets/icon.png")} style={styles.headerIcon} />
-        </View>
-
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerMainTitle}>Approved Donations</Text>
-        </View>
+        <Image
+          source={require("../assets/images/image.png")}
+          style={styles.welcomeLogo}
+          resizeMode="contain"
+        />
+        <Text style={styles.headerMainTitle}>Approved Food Donations</Text>
       </View>
 
       {!!errorMsg && (
@@ -159,17 +161,13 @@ export default function ApprovedClothesScreen() {
         </View>
       )}
 
-      {/* ✅ FILTER BY DATE (same design as pending) */}
+      {/* Date filter dropdown */}
       <View style={styles.filterBox}>
-        <Text style={styles.filterTitle}>Filter Approved by Date</Text>
+        <Text style={styles.filterTitle}>Filter by Date</Text>
         <View style={styles.pickerWrap}>
           <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
             {allDates.map((d) => (
-              <Picker.Item
-                key={d}
-                label={d === "ALL" ? "All Approved Dates" : d}
-                value={d}
-              />
+              <Picker.Item key={d} label={d === "ALL" ? "All Dates" : d} value={d} />
             ))}
           </Picker>
         </View>
@@ -178,8 +176,8 @@ export default function ApprovedClothesScreen() {
       <View style={styles.content}>
         {loading ? (
           <View style={{ paddingTop: 40, alignItems: "center" }}>
-            <ActivityIndicator size="large" />
-            <Text style={{ marginTop: 8 }}>Loading…</Text>
+            <ActivityIndicator size="large" color="#8b6f69" />
+            <Text style={{ marginTop: 8, color: "#8b6f69" }}>Loading…</Text>
           </View>
         ) : (
           <FlatList
@@ -189,7 +187,7 @@ export default function ApprovedClothesScreen() {
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
               <Text style={{ textAlign: "center", marginTop: 30 }}>
-                No approved donations
+                No approved food donations
               </Text>
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -197,7 +195,7 @@ export default function ApprovedClothesScreen() {
         )}
       </View>
 
-      {/* ✅ Details Modal */}
+      {/* Details Modal */}
       <Modal
         visible={detailsVisible}
         transparent
@@ -221,14 +219,20 @@ export default function ApprovedClothesScreen() {
             )}
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
+
+            {!!selected?.quantity && (
+              <Text style={styles.modalMeta}>Quantity: <Text style={{ fontWeight: "800" }}>{selected.quantity}</Text></Text>
+            )}
+
             <Text style={styles.modalDesc}>
               {selected?.note?.trim() ? selected.note : "No description"}
             </Text>
-            <Text style={styles.modalDate}>Date: {modalDate || "-"}</Text>
+
+            <Text style={styles.modalDate}>Date: {getYMD(selected?.created_at) || "-"}</Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.btn, styles.detailsBtn]}
+                style={[styles.btn, styles.closeBtn]}
                 onPress={() => {
                   setDetailsVisible(false);
                   setSelected(null);
@@ -248,32 +252,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
 
   headerLarge: {
-    backgroundColor: "#8b6f69",
+    backgroundColor: "#EBE1D7",
     paddingVertical: 16,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
   },
-  headerIcon: { width: 36, height: 36, marginRight: 12, tintColor: "#8b6f69" },
-  headerIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    elevation: 6,
+  welcomeLogo: {
+    width: 135,
+    height: 135,
+    marginRight: 10,
+    marginLeft: -35,
+    marginTop: -50,
   },
-  headerTextContainer: { flex: 1 },
-  headerMainTitle: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  headerMainTitle: {
+    fontFamily: "Times New Roman",
+    fontSize: 23,
+    marginTop: -75,
+    marginLeft: -50,
+    color: "#8b6f69",
+  },
 
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  // ✅ filter (same as pending)
   filterBox: {
     backgroundColor: "#fff",
     marginHorizontal: 20,
@@ -302,12 +304,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 15,
     borderRadius: 15,
-    flexDirection: "column",
     marginBottom: 20,
     elevation: 3,
   },
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
+
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
+  metaText: { fontSize: 13, color: "#555", marginTop: 2 },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
@@ -324,9 +327,9 @@ const styles = StyleSheet.create({
   actionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 15 },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
   detailsBtn: { backgroundColor: "#8b6f69" },
+  closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
 
-  // ✅ Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -358,6 +361,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f2f2f2",
   },
   modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
+  modalMeta: { fontSize: 13, color: "#555", marginBottom: 8 },
   modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
   modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end" },

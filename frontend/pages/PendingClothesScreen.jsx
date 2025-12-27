@@ -1,5 +1,4 @@
-
-    import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,36 +10,34 @@ import {
   SafeAreaView,
   Alert,
   RefreshControl,
+  Modal,
+  Pressable,
 } from "react-native";
 import axios from "axios";
-import { useNavigation } from "@react-navigation/native";
 import config from "../config";
+import { Picker } from "@react-native-picker/picker";
 
 export default function PendingClothesScreen() {
-  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [pendingDonations, setPendingDonations] = useState([]);
   const [submitting, setSubmitting] = useState({}); // { [id]: 'accept' | 'reject' }
 
+  // ✅ Details modal state
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  // ✅ Date filter state
+  const [selectedDate, setSelectedDate] = useState("ALL");
+
   // --- helpers ---
-  const normalizeSlash = (base, path) => {
-    if (!base) return path;
-    if (base.endsWith("/") && path.startsWith("/")) return base + path.slice(1);
-    if (!base.endsWith("/") && !path.startsWith("/")) return `${base}/${path}`;
-    return base + path;
+  const buildImageUrl = (raw) => {
+    if (!raw) return null;
+    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
+    return encodeURI(fullUrl);
   };
 
-  const buildImageUrl = (raw) => {
-  if (!raw) return null;
-
-  const fullUrl = raw.startsWith("/")
-    ? `${config.API_URL}${raw}`
-    : raw;
-
-  return encodeURI(fullUrl); 
-};
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
@@ -49,6 +46,13 @@ export default function PendingClothesScreen() {
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "pending",
   });
+
+  const getYMD = (created_at) => {
+    if (typeof created_at === "string" && created_at.includes("T")) {
+      return created_at.split("T")[0];
+    }
+    return String(created_at || "").slice(0, 10);
+  };
 
   const assertConfig = () => {
     if (!config?.API_URL) {
@@ -64,16 +68,16 @@ export default function PendingClothesScreen() {
   // --- data ---
   const fetchPending = async () => {
     if (!assertConfig()) return;
+
     try {
       setErrorMsg("");
       setLoading(true);
+
       console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/pending`);
       const res = await axios.get(`${config.API_URL}/donations/clothes/pending`);
-      console.log("[FETCH] status", res.status);
-      console.log("[FETCH] payload", res.data);
+
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
-      const normalized = arr.map(normalizeDonation);
-      setPendingDonations(normalized);
+      setPendingDonations(arr.map(normalizeDonation));
     } catch (error) {
       console.error("[FETCH ERROR]", error?.response?.data || error?.message || error);
       setErrorMsg(
@@ -82,7 +86,6 @@ export default function PendingClothesScreen() {
           : "Failed to load pending donations"
       );
       setPendingDonations([]);
-     
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -99,7 +102,9 @@ export default function PendingClothesScreen() {
   };
 
   const removeFromUI = (id) => {
-    setPendingDonations((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
+    setPendingDonations((prev) =>
+      prev.filter((d) => String(d.donation_id) !== String(id))
+    );
   };
 
   const acceptDonation = async (id) => {
@@ -122,7 +127,7 @@ export default function PendingClothesScreen() {
   const rejectDonation = async (id) => {
     try {
       setSubmitting((s) => ({ ...s, [id]: "reject" }));
-      removeFromUI(id);
+      removeFromUI(id); // optimistic
       await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`);
     } catch (e) {
       Alert.alert("Error", "Could not reject. Restoring item.");
@@ -136,24 +141,36 @@ export default function PendingClothesScreen() {
     }
   };
 
-  const renderItem = ({ item }) => {
-    const dateStr =
-      typeof item.created_at === "string" && item.created_at.includes("T")
-        ? item.created_at.split("T")[0]
-        : (item.created_at || "").toString().slice(0, 10);
+  // ✅ All dates that exist in pending (dropdown options)
+  const allDates = useMemo(() => {
+    const set = new Set();
+    pendingDonations.forEach((d) => {
+      const ymd = getYMD(d.created_at);
+      if (ymd) set.add(ymd);
+    });
+    return ["ALL", ...Array.from(set).sort()];
+  }, [pendingDonations]);
 
+  // ✅ Filtered data
+  const filteredPending =
+    selectedDate === "ALL"
+      ? pendingDonations
+      : pendingDonations.filter((d) => getYMD(d.created_at) === selectedDate);
+
+  const renderItem = ({ item }) => {
+    const dateStr = getYMD(item.created_at);
     const isSubmitting = Boolean(submitting[item.donation_id]);
 
     return (
       <View style={styles.card}>
-        
+        {/* image */}
         {item.item_image ? (
           <Image source={{ uri: item.item_image }} style={styles.itemImage} />
         ) : (
           <Image source={require("../assets/icon.png")} style={styles.itemImage} />
         )}
 
-        
+        {/* texts */}
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.donor_name}</Text>
           <Text numberOfLines={2} style={styles.subtitle}>
@@ -187,9 +204,13 @@ export default function PendingClothesScreen() {
             <Text style={styles.btnText}>Reject</Text>
           </TouchableOpacity>
 
+          {/* ✅ DETAILS: open modal */}
           <TouchableOpacity
             style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => navigation.navigate("RequestDetails", { id: item.donation_id })}
+            onPress={() => {
+              setSelected(item);
+              setDetailsVisible(true);
+            }}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Details</Text>
@@ -204,21 +225,37 @@ export default function PendingClothesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerLarge}>
-      <Image
-        source={require("../assets/images/image.png")}
-        style={styles.welcomeLogo}
-        resizeMode="contain"
-      />
-      <View style={styles.headerTextContainer}>
-        <Text style={styles.headerMainTitle}>Pending Donations</Text>
+        <Image
+          source={require("../assets/images/image.png")}
+          style={styles.welcomeLogo}
+          resizeMode="contain"
+        />
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerMainTitle}>Pending Donations</Text>
+        </View>
       </View>
-    </View>
-      {/* show an error banner if something failed */}
+
       {!!errorMsg && (
         <View style={styles.errorBar}>
           <Text style={styles.errorText}>{errorMsg}</Text>
         </View>
       )}
+
+      {/* ✅ FILTER BY DATE */}
+      <View style={styles.filterBox}>
+        <Text style={styles.filterTitle}>Filter Pending by Date</Text>
+        <View style={styles.pickerWrap}>
+          <Picker selectedValue={selectedDate} onValueChange={(v) => setSelectedDate(v)}>
+            {allDates.map((d) => (
+              <Picker.Item
+                key={d}
+                label={d === "ALL" ? "All Pending Dates" : d}
+                value={d}
+              />
+            ))}
+          </Picker>
+        </View>
+      </View>
 
       <View style={styles.content}>
         {loading ? (
@@ -228,7 +265,7 @@ export default function PendingClothesScreen() {
           </View>
         ) : (
           <FlatList
-            data={pendingDonations}
+            data={filteredPending}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
@@ -237,18 +274,83 @@ export default function PendingClothesScreen() {
                 No pending donations
               </Text>
             }
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           />
         )}
       </View>
+
+      {/* ✅ DETAILS MODAL */}
+      <Modal
+        visible={detailsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailsVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setDetailsVisible(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Donation Details</Text>
+
+            {selected?.item_image ? (
+              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+            )}
+
+            <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
+
+            <Text style={styles.modalDesc}>
+              {selected?.note?.trim() ? selected.note : "No description"}
+            </Text>
+
+            <Text style={styles.modalDate}>
+              Date: {getYMD(selected?.created_at) || "-"}
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.btn, styles.acceptBtn]}
+                onPress={() => {
+                  const id = selected?.donation_id;
+                  setDetailsVisible(false);
+                  setSelected(null);
+                  if (id) acceptDonation(id);
+                }}
+              >
+                <Text style={styles.btnText}>Accept</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btn, styles.rejectBtn]}
+                onPress={() => {
+                  const id = selected?.donation_id;
+                  setDetailsVisible(false);
+                  setSelected(null);
+                  if (id) rejectDonation(id);
+                }}
+              >
+                <Text style={styles.btnText}>Reject</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.btn, styles.closeBtn]}
+                onPress={() => {
+                  setDetailsVisible(false);
+                  setSelected(null);
+                }}
+              >
+                <Text style={styles.btnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
+
   headerLarge: {
     backgroundColor: "#EBE1D7",
     paddingVertical: 16,
@@ -256,33 +358,50 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  headerIcon: { width: 36, height: 36, marginRight: 12, tintColor: "#8b6f69" },
-  headerIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
+
+  welcomeLogo: {
+    width: 135,
+    height: 135,
+    marginRight: 10,
+    marginLeft: -35,
+    marginTop: -50,
   },
+
   headerTextContainer: { flex: 1 },
-  headerMainTitle: {  fontFamily: 'Times New Roman',
-    fontFamily: 'Times New Roman',
+
+  headerMainTitle: {
+    fontFamily: "Times New Roman",
     fontSize: 23,
     marginTop: -50,
     marginLeft: -50,
-    color: '#8b6f69',},
+    color: "#8b6f69",
+  },
 
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
+
+  // ✅ filter
+  filterBox: {
+    backgroundColor: "#fff",
+    marginHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 12,
+    elevation: 2,
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#8b6f69",
+    marginBottom: 6,
+    fontFamily: "Times New Roman",
+  },
+  pickerWrap: {
+    backgroundColor: "#f3f3f3",
+    borderRadius: 10,
+    overflow: "hidden",
+  },
 
   content: { flex: 1, backgroundColor: "#EBE1D7" },
 
@@ -294,6 +413,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     elevation: 3,
   },
+
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
@@ -314,17 +434,65 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 15,
   },
-  welcomeLogo: {
-    width: 135,
-    height: 135,
-    marginRight: 10,
-    marginLeft: -35,
-    marginTop: -50,
-  },
-  
+
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10 },
   acceptBtn: { backgroundColor: "#4CAF50" },
   rejectBtn: { backgroundColor: "#f44336" },
   detailsBtn: { backgroundColor: "#A27571" },
+  closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
+
+  // ✅ Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 12,
+    textAlign: "center",
+    fontFamily: "Times New Roman",
+  },
+  modalImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: "#f2f2f2",
+  },
+  modalName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 6,
+  },
+  modalDesc: {
+    fontSize: 14,
+    color: "#555",
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  modalDate: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 14,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+  },
 });
