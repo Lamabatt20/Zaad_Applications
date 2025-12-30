@@ -18,11 +18,12 @@ export default function EditProfileScreen({ route, navigation }) {
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
 
+  const isAssociation = role === "association";
+
   const [editUsername, setEditUsername] = useState(username || "");
   const [editFullName, setEditFullName] = useState(full_name || "");
   const [editPhone, setEditPhone] = useState(phone || "");
   const [editAddress, setEditAddress] = useState(address || "");
-
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -78,10 +79,10 @@ export default function EditProfileScreen({ route, navigation }) {
   return (
     <LinearGradient
       colors={
-  darkMode
-    ? ["#2b2b2b", "#3a3a3a", "#1f1f1f"]  
-    : ["#A27571", "#FFDAB4", "rgba(162,117,113,0)"]
-}
+        darkMode
+          ? ["#2b2b2b", "#3a3a3a", "#1f1f1f"]
+          : ["#A27571", "#FFDAB4", "rgba(162,117,113,0)"]
+      }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.gradientBackground}
@@ -93,39 +94,38 @@ export default function EditProfileScreen({ route, navigation }) {
         />
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.chatbotBtn}
-        onPress={() => navigation.navigate("ChatBotScreen", {
-          user_id,
-          username: editUsername,
-          email,
-          full_name: editFullName,
-          phone: editPhone,
-          role,
-          address: editAddress
-        })}
-      >
-        <Image
-          source={require("../assets/images/zaadbot.png")}
-          style={{ width: 40, height: 40 }}
-        />
-      </TouchableOpacity>
+      {!isAssociation && (
+        <TouchableOpacity
+          style={styles.chatbotBtn}
+          onPress={() =>
+            navigation.navigate("ChatBotScreen", {
+              user_id,
+              username: editUsername,
+              email,
+              full_name: editFullName,
+              phone: editPhone,
+              role,
+              address: editAddress,
+            })
+          }
+        >
+          <Image
+            source={require("../assets/images/zaadbot.png")}
+            style={{ width: 40, height: 40 }}
+          />
+        </TouchableOpacity>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View
-          style={[
-            styles.profileCard,
-            { backgroundColor: theme.background }
-          ]}
-        >
+        <View style={[styles.profileCard, { backgroundColor: theme.background }]}>
           <View style={styles.profileImageContainer}>
             <Image
               source={require("../assets/images/profiles.png")}
-              style={{ width: 125, height: 110 }}
+              style={[
+                { width: 125, height: 110 },
+                { tintColor: theme.text },
+              ]}
             />
-            <TouchableOpacity style={styles.editIconBtn} onPress={updateAccount}>
-              <Ionicons name="pencil" size={18} color="#fff" />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.fieldBox}>
@@ -133,7 +133,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editUsername}
               onChangeText={setEditUsername}
@@ -145,7 +145,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editFullName}
               onChangeText={setEditFullName}
@@ -157,7 +157,7 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editAddress}
               onChangeText={setEditAddress}
@@ -169,13 +169,23 @@ export default function EditProfileScreen({ route, navigation }) {
             <TextInput
               style={[
                 styles.input,
-                { borderColor: theme.border, color: theme.text }
+                { borderColor: theme.border, color: theme.text },
               ]}
               value={editPhone}
               onChangeText={setEditPhone}
               keyboardType="number-pad"
             />
           </View>
+
+          <TouchableOpacity style={styles.saveBtn} onPress={updateAccount}>
+            <Ionicons
+              name="checkmark-done"
+              size={17}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.saveBtnText}>Save Changes</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.passwordBtn}
@@ -236,18 +246,6 @@ const styles = StyleSheet.create({
     marginTop: -90,
   },
 
-  editIconBtn: {
-    backgroundColor: "#000",
-    width: 30,
-    height: 30,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    right: 120,
-    top: 65,
-  },
-
   fieldBox: {
     marginTop: 15,
   },
@@ -265,11 +263,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
+  saveBtn: {
+    backgroundColor: "#A27571",
+    paddingVertical: 14,
+    borderRadius: 30,
+    marginTop: 175,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  saveBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
   passwordBtn: {
     backgroundColor: "#000",
     paddingVertical: 14,
     borderRadius: 30,
-    marginTop: 240,
+    marginTop: 16,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",

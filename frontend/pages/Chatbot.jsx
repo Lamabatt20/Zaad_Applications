@@ -15,6 +15,14 @@ import axios from "axios";
 import API from "../config";
 import SideMenu from "../components/SideMenu";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+const OPENAI_API_KEY = "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";
+const ASSISTANT_ID = "asst_vmzyZiX3S8mxG7Zvka3nNAEW";
+
+const openaiHeaders = {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${OPENAI_API_KEY}`,
+  "OpenAI-Beta": "assistants=v2",
+};
 
 export default function ChatBotScreen({ navigation, route }) {
   const [messages, setMessages] = useState([
@@ -30,40 +38,46 @@ export default function ChatBotScreen({ navigation, route }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const openSidebar = () => setSidebarOpen(true);
   const closeSidebar = () => setSidebarOpen(false);
-  const { user_id, username, email, full_name, phone, role, address } = route?.params || {};
-  const [user, setUser] = useState({ user_id, username, email, full_name, phone, role, address });
+
+  const { user_id, username, email, full_name, phone, role, address } =
+    route?.params || {};
+  const [user, setUser] = useState({
+    user_id,
+    username,
+    email,
+    full_name,
+    phone,
+    role,
+    address,
+  });
 
   useEffect(() => {
-    // Fetch user data: first from route params, then from AsyncStorage if not available, then from API
     const initializeUser = async () => {
       try {
-        // If user data provided via route params, use it
         if (user_id) {
           try {
             const res = await axios.get(`${API.API_URL}/accounts/${user_id}`);
             if (res && res.data) {
               setUser(res.data);
-              // Save to AsyncStorage for future use
               await AsyncStorage.setItem("user_data", JSON.stringify(res.data));
             }
           } catch (err) {
-            console.log('Error fetching user from API:', err.message || err);
+            console.log("Error fetching user from API:", err.message || err);
           }
           return;
         }
 
-        // If no user_id in params, try to get from AsyncStorage
         const savedUserData = await AsyncStorage.getItem("user_data");
         if (savedUserData) {
           const userData = JSON.parse(savedUserData);
           setUser(userData);
-          console.log('Loaded user from AsyncStorage:', userData);
+          console.log("Loaded user from AsyncStorage:", userData);
           return;
         }
 
-        console.log('No user data available');
+        console.log("No user data available");
       } catch (err) {
-        console.log('Error initializing user:', err.message || err);
+        console.log("Error initializing user:", err.message || err);
       }
     };
 
@@ -77,15 +91,15 @@ export default function ChatBotScreen({ navigation, route }) {
       try {
         const saved = await AsyncStorage.getItem("dark_mode");
         if (saved !== null) setDarkMode(saved === "true");
-      } catch (e) {
-        
-      }
+      } catch (e) {}
     };
     loadTheme();
+
     const unsubscribe = navigation?.addListener?.("focus", loadTheme);
     return unsubscribe;
   }, [navigation]);
 
+  
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const headerBg = bg;
   const textColor = darkMode ? "#fff" : "#333";
@@ -98,29 +112,122 @@ export default function ChatBotScreen({ navigation, route }) {
   const botBubbleBg = "#A27571";
   const userBubbleBg = "#C6AAA3";
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+  const callZaadBot = async (text, user) => {
+  try {
+    const threadRes = await axios.post(
+      "https://api.openai.com/v1/threads",
+      {},
+      { headers: openaiHeaders }
+    );
+    const threadId = threadRes.data.id;
 
-    const userMessage = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: input,
-    };
+    
+    await axios.post(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      {
+        role: "user",
+        content: text,
+        metadata: {
+          donor_id: user?.user_id?.toString() || "",
+          location: user?.address || "",
+        },
+      },
+      { headers: openaiHeaders }
+    );
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
+    let runRes = await axios.post(
+      `https://api.openai.com/v1/threads/${threadId}/runs`,
+      { assistant_id: ASSISTANT_ID },
+      { headers: openaiHeaders }
+    );
 
-    setTimeout(() => {
-      const botMessage = {
-        id: Date.now().toString() + "b",
-        sender: "bot",
-        text: "This is a sample reply from ZaadBot",
-      };
+    let run = runRes.data;
+    while (
+      run.status === "queued" ||
+      run.status === "in_progress" ||
+      run.status === "requires_action"
+    ) {
+      if (run.status === "requires_action") {
+        const calls = run.required_action.submit_tool_outputs.tool_calls;
+        const tool_outputs = [];
 
-      setMessages((prev) => [...prev, botMessage]);
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 600);
+        for (const call of calls) {
+          if (call.function.name === "getRecommendations") {
+            const args = JSON.parse(call.function.arguments);
+
+            const donation_type = args.donation_type;
+            const donor_id = args.donor_id || user?.user_id;
+            const location = args.location || user?.address;
+
+            const resApi = await axios.get(`${API.API_URL}/recommend`, {
+              params: { donation_type, donor_id, location },
+            });
+
+            tool_outputs.push({
+              tool_call_id: call.id,
+              output: JSON.stringify(resApi.data),
+            });
+          }
+        }
+
+        const submit = await axios.post(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${run.id}/submit_tool_outputs`,
+          { tool_outputs },
+          { headers: openaiHeaders }
+        );
+
+        run = submit.data;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const poll = await axios.get(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${run.id}`,
+          { headers: openaiHeaders }
+        );
+        run = poll.data;
+      }
+    }
+
+    const msgs = await axios.get(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      { headers: openaiHeaders }
+    );
+
+    const assistantMsg = msgs.data.data.find((m) => m.role === "assistant");
+
+    return assistantMsg?.content?.[0]?.text?.value || "No response.";
+
+  } catch (err) {
+    console.log("ZaadBot Error:", err.response?.data || err.message);
+    return "Error contacting ZaadBot.";
+  }
+};
+
+
+  const sendMessage = async () => {
+  if (!input.trim()) return;
+
+  const userMessage = {
+    id: Date.now().toString(),
+    sender: "user",
+    text: input,
   };
+
+  setMessages((prev) => [...prev, userMessage]);
+  const messageToSend = input;
+  setInput("");
+
+  const botReply = await callZaadBot(messageToSend, user);
+
+  const botMessage = {
+    id: Date.now().toString() + "b",
+    sender: "bot",
+    text: botReply,
+  };
+
+  setMessages((prev) => [...prev, botMessage]);
+  flatListRef.current?.scrollToEnd({ animated: true });
+};
+
 
   const renderMessage = ({ item }) => {
     const isUser = item.sender === "user";
@@ -169,9 +276,8 @@ export default function ChatBotScreen({ navigation, route }) {
       style={[styles.container, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      
-      <View style={styles.header}>
-        {/* left placeholder so logo stays centered */}
+      {/* HEADER */}
+      <View style={[styles.header, { backgroundColor: headerBg }]}>
         <View style={{ width: 45 }} />
 
         <Image
@@ -182,11 +288,12 @@ export default function ChatBotScreen({ navigation, route }) {
         <TouchableOpacity onPress={openSidebar}>
           <Image
             source={require("../assets/menu.png")}
-            style={styles.menuIcon}
+            style={[styles.menuIcon, { tintColor: menuTint }]}
           />
         </TouchableOpacity>
       </View>
 
+      {/* MESSAGES */}
       <FlatList
         ref={flatListRef}
         data={messages}
@@ -198,6 +305,7 @@ export default function ChatBotScreen({ navigation, route }) {
         }
       />
 
+      {/* INPUT */}
       <View
         style={[
           styles.inputContainer,
@@ -207,7 +315,11 @@ export default function ChatBotScreen({ navigation, route }) {
         <TextInput
           style={[
             styles.input,
-            { backgroundColor: inputBg, color: inputText, borderColor: inputBorder },
+            {
+              backgroundColor: inputBg,
+              color: inputText,
+              borderColor: inputBorder,
+            },
           ]}
           placeholder="Type your message..."
           placeholderTextColor={darkMode ? "#aaa" : "#888"}
@@ -219,12 +331,14 @@ export default function ChatBotScreen({ navigation, route }) {
           <Text style={{ color: "#fff", fontWeight: "bold" }}>➤</Text>
         </TouchableOpacity>
       </View>
+
       <SideMenu
         visible={sidebarOpen}
         onClose={closeSidebar}
         navigation={navigation}
         user={user}
         sourceScreen="ChatBotScreen"
+        darkMode={darkMode}
       />
     </KeyboardAvoidingView>
   );
@@ -233,12 +347,10 @@ export default function ChatBotScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EBE1D7",
   },
 
   header: {
     height: 70,
-    backgroundColor: "#EBE1D7",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -246,16 +358,15 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
 
-  headerIcon: {
-    width: 30,
-    height: 30,
-    tintColor: "#5A3D36",
-  },
-
   headerLogo: {
     width: 100,
     height: 30,
     resizeMode: "contain",
+  },
+
+  menuIcon: {
+    width: 45,
+    height: 45,
   },
 
   messageContainer: {
@@ -287,44 +398,27 @@ const styles = StyleSheet.create({
   },
 
   userBubble: {
-    backgroundColor: "#C6AAA3",
     borderBottomRightRadius: 0,
     opacity: 0.85,
   },
 
   botBubble: {
-    backgroundColor: "#A27571",
     borderBottomLeftRadius: 0,
-  },
-
-  userText: {
-    color: "#fff",
-  },
-
-  botText: {
-    color: "#333",
-  },
-
-  menuIcon: {
-    width: 45,
-    height: 45,
   },
 
   inputContainer: {
     flexDirection: "row",
     padding: 10,
-    backgroundColor: "#EBE1D7",
     borderTopWidth: 1,
-    borderColor: "#A27571",
     paddingBottom: 30,
   },
 
   input: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#fff",
     borderRadius: 25,
     paddingHorizontal: 20,
+    borderWidth: 1,
   },
 
   sendButton: {

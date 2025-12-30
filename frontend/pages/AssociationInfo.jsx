@@ -13,7 +13,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
-  const { association, donationType } = route.params;
+  const { association } = route.params || {};
+  let donationType = route.params?.donationType ||
+    association?.donationType ||
+    association?.type ||
+    association?.category ||
+    association?.donation_type ||
+    "clothes";
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -100,12 +106,13 @@ export default function AssociationInfo({ route, navigation }) {
             style={[styles.btnYes, { backgroundColor: btnYesBg }]}
             activeOpacity={0.8}
             onPress={() =>
-              navigation.navigate(
-                donationType === "food"
-                  ? "DonateFoodScreen"
-                  : "DonateClothesScreen",
-                { association }
-              )
+              navigation.navigate("EnterQuantityScreen", {
+                nextScreen:
+                  donationType === "food"
+                    ? "DonateFoodScreen"
+                    : "DonateClothesScreen",
+                association,
+              })
             }
           >
             <Ionicons
@@ -162,9 +169,10 @@ header: {
   borderBottomWidth: 0,
 },
   headerLogo: {
-    width: 90,
+    /////////////////////////////////////
+    width: 1,
     height: 60,
-  
+  ///////////////////////////////////////
     
   },
 

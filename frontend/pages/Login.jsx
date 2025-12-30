@@ -25,7 +25,6 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState('EN');
   const [langModalVisible, setLangModalVisible] = useState(false);
-
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -66,7 +65,6 @@ export default function LoginScreen({ navigation }) {
     try {
       const res = await API.post('/login', { username, password });
       if (res.data.success) {
-        // Save user data to AsyncStorage for use throughout the app
         const userData = {
           user_id: res.data.user_id,
           username: res.data.username,
@@ -75,13 +73,33 @@ export default function LoginScreen({ navigation }) {
           phone: res.data.phone,
           role: res.data.role,
           address: res.data.address,
+          food: res.data.food === true || res.data.food === 'true',
+          clothes: res.data.clothes === true || res.data.clothes === 'true',
+
         };
+
         await AsyncStorage.setItem("user_data", JSON.stringify(userData));
 
         switch (res.data.role) {
+          case 'association':
+              if (userData.food && userData.clothes) {
+                navigation.navigate('DashboardAssociationAll', userData);
+              } else if (userData.food && !userData.clothes) {
+                navigation.navigate('DashboardAssociationFood', userData);
+              } else if (!userData.food && userData.clothes) {
+                navigation.navigate('DashboardAssociationClothes', userData);
+              } else {
+                setGeneralError('No donation type assigned');
+              }
+              break;
+
           case 'donor':
             navigation.navigate("ChooseDonationType", userData);
             break;
+
+          case 'admin':
+            break;
+
           default:
             setGeneralError('Unknown role');
         }
@@ -90,6 +108,7 @@ export default function LoginScreen({ navigation }) {
         if (res.data.passwordIncorrect) setPasswordError('Password is incorrect');
       }
     } catch (error) {
+      setGeneralError('Cannot connect to server');
     } finally {
       setLoading(false);
     }
@@ -102,13 +121,10 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-
       <TouchableOpacity
         style={[
           styles.langButton,
-          lang === 'EN'
-            ? { right: 20, flexDirection: 'row' }
-            : { left: 20, flexDirection: 'row-reverse' },
+          lang === 'EN' ? { right: 20 } : { left: 20 },
         ]}
         onPress={() => setLangModalVisible(true)}
       >
@@ -118,7 +134,7 @@ export default function LoginScreen({ navigation }) {
           color="#A27571"
           style={{ transform: [{ scaleX: lang === 'AR' ? -1 : 1 }] }}
         />
-        <Text style={[styles.langText, { color: text }]}>{lang}</Text>
+        <Text style={[styles.langText, { color: text, position: 'absolute' }]}>{lang}</Text>
       </TouchableOpacity>
 
       <Image source={require('../assets/images/logo3.png')} style={styles.logoTop} />
@@ -175,7 +191,7 @@ export default function LoginScreen({ navigation }) {
       </TouchableOpacity>
 
       {generalError !== '' && (
-        <Text style={[styles.generalErrorText, { color: generalError.includes('successful') ? 'green' : 'red' }]}>
+        <Text style={[styles.generalErrorText, { color: 'red' }]}>
           {generalError}
         </Text>
       )}
@@ -220,172 +236,37 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 30,
-  },
-  langButton: {
-    position: 'absolute',
-    top: 50,
-    zIndex: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  langText: {
-    fontWeight: '400',
-    fontSize: 12,
-    position: 'absolute',
-  },
-  logoTop: {
-    width: 190,
-    height: 190,
-    resizeMode: 'contain',
-    marginBottom: 80,
-  },
-  inputContainer: {
-    width: '100%',
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: Platform.OS === 'ios' ? 14 : 12,
-    marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 6,
-    padding: 10,
-    marginBottom: 6,
-    fontSize: Platform.OS === 'ios' ? 14 : 12,
-  },
-  loginButton: {
-    paddingVertical: 12,
-    borderRadius: 25,
-    width: '100%',
-    alignItems: 'center',
-  },
-  loginText: {
-    color: '#fff',
-    fontSize: Platform.OS === 'ios' ? 16 : 12,
-    fontWeight: '400',
-  },
-  forgotPassword: {
-    marginTop: 12,
-    textDecorationLine: 'underline',
-    fontSize: Platform.OS === 'ios' ? 15 : 12,
-  },
-  createAccountButton: {
-    borderWidth: 1,
-    paddingVertical: 12,
-    borderRadius: 25,
-    width: '100%',
-    alignItems: 'center',
-    marginTop: Platform.OS === 'ios' ? 170 : 155,
-  },
-  createText: {
-    fontSize: Platform.OS === 'ios' ? 15 : 12,
-  },
-  bottomLogoContainer: {
-    position: 'absolute',
-    bottom: 10,
-    alignItems: 'center',
-  },
-  logoBottom: {
-    width: Platform.OS === 'ios' ? 80 : 70,
-    height: Platform.OS === 'ios' ? 80 : 70,
-    resizeMode: 'contain',
-  },
-  errorContainer: {
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    position: 'relative',
-  },
-  errorText: {
-    color: '#fff',
-    fontSize: Platform.OS === 'ios' ? 12 : 10,
-  },
-  errorArrow: {
-    position: 'absolute',
-    top: -6,
-    left: 10,
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderBottomWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: 'red',
-  },
-  generalErrorText: {
-    fontSize: Platform.OS === 'ios' ? 14 : 12,
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  passwordContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    marginBottom: 6,
-  },
-  inputPassword: {
-    flex: 1,
-    fontSize: Platform.OS === 'ios' ? 14 : 12,
-    paddingVertical: 10,
-  },
-  fullScreenModal: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    alignItems: 'center',
-  },
-  closeIcon: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    zIndex: 10,
-  },
-  closeText: {
-    fontSize: 20,
-    fontWeight: '300',
-  },
-  modalTitleContainer: {
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  modalTitleEn: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  modalTitleAr: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  optionButton: {
-    width: '100%',
-    paddingVertical: 15,
-    borderWidth: 1,
-    borderRadius: 10,
-    marginBottom: 20,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  optionText: {
-    fontSize: 18,
-    textAlign: 'center',
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 },
+  langButton: { position: 'absolute', top: 50, zIndex: 50, width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  langText: { fontWeight: '700', fontSize: 12 },
+  logoTop: { width: 190, height: 190, resizeMode: 'contain', marginBottom: 80 },
+  inputContainer: { width: '100%', marginBottom: 20 },
+  label: { fontSize: Platform.OS === 'ios' ? 14 : 12, marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 6, padding: 10, marginBottom: 6 },
+  loginButton: { paddingVertical: 12, borderRadius: 25, width: '100%', alignItems: 'center' },
+  loginText: { color: '#fff', fontSize: Platform.OS === 'ios' ? 16 : 12 },
+  forgotPassword: { marginTop: 12, textDecorationLine: 'underline' },
+  createAccountButton: { borderWidth: 1, paddingVertical: 12, borderRadius: 25, width: '100%', alignItems: 'center', marginTop: 170 },
+  createText: { fontSize: Platform.OS === 'ios' ? 15 : 12 },
+  bottomLogoContainer: { position: 'absolute', bottom: 10 },
+  logoBottom: { width: 80, height: 80, resizeMode: 'contain' },
+  errorContainer: { backgroundColor: 'red', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 2 },
+  errorText: { color: '#fff', fontSize: 12 },
+  errorArrow: { position: 'absolute', top: -6, left: 10, width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: 'red' },
+  generalErrorText: { fontSize: 14, textAlign: 'center', marginTop: 10 },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 6, paddingHorizontal: 10 },
+  inputPassword: { flex: 1, paddingVertical: 10 },
+  fullScreenModal: { flex: 1, paddingHorizontal: 20, paddingTop: 60, alignItems: 'center' },
+  closeIcon: { position: 'absolute', top: 60, right: 20 },
+  closeText: { fontSize: 20 },
+  modalTitleContainer: { marginBottom: 40, alignItems: 'center' },
+  modalTitleEn: { fontSize: 22, fontWeight: 'bold' },
+  modalTitleAr: { fontSize: 20, fontWeight: 'bold', marginTop: 5 },
+  optionButton: { width: '100%', paddingVertical: 15, borderWidth: 1, borderRadius: 10, marginBottom: 20, alignItems: 'center' },
+  optionText: { fontSize: 18 },
 });

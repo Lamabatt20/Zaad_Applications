@@ -32,12 +32,11 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
       const data = Array.isArray(res.data) ? res.data : res.data.items || [];
       setAssociations(data);
     } catch (err) {
-      // keep associations empty on error
     }
   };
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
-  const text = darkMode ? "#fff" : "#000";
+  const text = darkMode ? "#fff" : "#2f2f2f";
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -63,17 +62,17 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.header}>
         <Image
           source={require("../assets/images/image.png")}
           style={styles.topLogo}
         />
 
-        <Text style={styles.headerTitle}>Clothes Donation</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>Clothes Donation</Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
-          <Image source={require("../assets/menu.png")} style={styles.menuIcon} />
+          <Image source={require("../assets/menu.png")} style={[styles.menuIcon, { tintColor: text }]} />
         </TouchableOpacity>
       </View>
 
@@ -113,6 +112,7 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
         navigation={navigation}
         user={{ user_id, username, email, full_name, phone, role, address }}
         sourceScreen="ClothesAssociationsScreen"
+        darkMode={darkMode}
       />
     </View>
   );

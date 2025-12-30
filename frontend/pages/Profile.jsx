@@ -14,6 +14,9 @@ export default function ProfileScreen({ route, navigation }) {
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
 
+  // ✅ role check
+  const isAssociation = role === "association";
+
   const [darkMode, setDarkMode] = useState(false);
   const [editUsername, setUsername] = useState(username || "");
   const [editFullName, setFullName] = useState(full_name || "");
@@ -73,7 +76,9 @@ export default function ProfileScreen({ route, navigation }) {
           />
         </TouchableOpacity>
 
-        <Text style={[styles.title, { color: theme.text }]}>My Profile</Text>
+        <Text style={[styles.title, { color: theme.text }]}>
+          My Profile
+        </Text>
 
         <TouchableOpacity onPress={handleLogout}>
           <Image
@@ -83,6 +88,7 @@ export default function ProfileScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
+     
       <View style={styles.profileSection}>
         <TouchableOpacity style={styles.profileBtn}>
           <Ionicons
@@ -94,7 +100,7 @@ export default function ProfileScreen({ route, navigation }) {
 
         <View>
           <Text style={[styles.name, { color: theme.text }]}>
-            {username || "User Name"}
+            {editUsername || "User Name"}
           </Text>
 
           <Text style={[styles.email, { color: theme.subText }]}>
@@ -106,12 +112,12 @@ export default function ProfileScreen({ route, navigation }) {
             onPress={() =>
               navigation.navigate("EditProfileScreen", {
                 user_id,
-                username,
+                username: editUsername,
                 email,
-                full_name,
-                phone,
+                full_name: editFullName,
+                phone: editPhone,
                 role,
-                address,
+                address: editAddress,
               })
             }
           >
@@ -120,47 +126,54 @@ export default function ProfileScreen({ route, navigation }) {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.row}>
-        <Image
-          source={require("../assets/images/heart.png")}
-          style={[styles.icon, { tintColor: theme.iconColor }]}
-        />
-        <Text style={[styles.rowText, { color: theme.text }]}>Reward</Text>
+     
+      {!isAssociation && (
+        <TouchableOpacity style={styles.row}>
+          <Image
+            source={require("../assets/images/heart.png")}
+            style={[styles.icon, { tintColor: theme.iconColor }]}
+          />
+          <Text style={[styles.rowText, { color: theme.text }]}>
+            Reward
+          </Text>
+          <Image
+            source={require("../assets/images/arrow.png")}
+            style={[styles.arrowIcon, { tintColor: theme.iconColor }]}
+          />
+        </TouchableOpacity>
+      )}
 
-        <Image
-          source={require("../assets/images/arrow.png")}
-          style={[styles.arrowIcon, { tintColor: theme.iconColor }]}
-        />
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.row}>
-        <Image
-          source={require("../assets/images/history.png")}
-          style={[styles.icon, { tintColor: theme.iconColor }]}
-        />
-        <Text style={[styles.rowText, { color: theme.text }]}>
-          View History
-        </Text>
-
-        <Image
-          source={require("../assets/images/arrow.png")}
-          style={[styles.arrowIcon, { tintColor: theme.iconColor }]}
-        />
-      </TouchableOpacity>
+      
+      {!isAssociation && (
+        <TouchableOpacity style={styles.row}>
+          <Image
+            source={require("../assets/images/history.png")}
+            style={[styles.icon, { tintColor: theme.iconColor }]}
+          />
+          <Text style={[styles.rowText, { color: theme.text }]}>
+            View History
+          </Text>
+          <Image
+            source={require("../assets/images/arrow.png")}
+            style={[styles.arrowIcon, { tintColor: theme.iconColor }]}
+          />
+        </TouchableOpacity>
+      )}
 
       <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
+      
       <TouchableOpacity
         style={styles.row}
         onPress={() =>
           navigation.navigate("EditProfileScreen", {
             user_id,
-            username,
+            username: editUsername,
             email,
-            full_name,
-            phone,
+            full_name: editFullName,
+            phone: editPhone,
             role,
-            address,
+            address: editAddress,
           })
         }
       >
@@ -171,7 +184,6 @@ export default function ProfileScreen({ route, navigation }) {
         <Text style={[styles.rowText, { color: theme.text }]}>
           Edit Profile
         </Text>
-
         <Image
           source={require("../assets/images/arrow.png")}
           style={[styles.arrowIcon, { tintColor: theme.iconColor }]}
@@ -180,33 +192,40 @@ export default function ProfileScreen({ route, navigation }) {
 
       <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
+      
       <View style={styles.row}>
         <Image
           source={require("../assets/images/moon.png")}
           style={[styles.icon, { tintColor: theme.iconColor }]}
         />
-        <Text style={[styles.rowText, { color: theme.text }]}>Dark Mode</Text>
-
+        <Text style={[styles.rowText, { color: theme.text }]}>
+          Dark Mode
+        </Text>
         <Switch value={darkMode} onValueChange={toggleDarkMode} />
       </View>
 
-      <TouchableOpacity
-        style={styles.chatbotBtn}
-        onPress={() => navigation.navigate("ChatBotScreen", {
-          user_id,
-          username,
-          email,
-          full_name,
-          phone,
-          role,
-          address
-        })}
-      >
-        <Image
-          source={require("../assets/images/zaadbot.png")}
-          style={{ width: 50, height: 50, resizeMode: "contain" }}
-        />
-      </TouchableOpacity>
+    
+      {!isAssociation && (
+        <TouchableOpacity
+          style={styles.chatbotBtn}
+          onPress={() =>
+            navigation.navigate("ChatBotScreen", {
+              user_id,
+              username: editUsername,
+              email,
+              full_name: editFullName,
+              phone: editPhone,
+              role,
+              address: editAddress,
+            })
+          }
+        >
+          <Image
+            source={require("../assets/images/zaadbot.png")}
+            style={{ width: 50, height: 50, resizeMode: "contain" }}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
