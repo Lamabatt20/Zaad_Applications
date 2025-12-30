@@ -160,12 +160,11 @@ header: {
   paddingHorizontal: 10,
   paddingVertical: 10,
   borderBottomWidth: 0,
-  justifyContent: "flex-start", // logo stays on the left
 },
   headerLogo: {
-    width: 80,
+    width: 90,
     height: 60,
-    resizeMode: "contain",
+  
     
   },
 
