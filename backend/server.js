@@ -79,6 +79,35 @@ async function changeAssociationAuthToText() {
 
 changeAssociationAuthToText();
 
+async function dropIsPerishableColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE food_donations
+      DROP COLUMN IF EXISTS is_perishable;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ is_perishable column dropped from food_donations (if it existed).');
+  } catch (error) {
+    console.error('❌ Error dropping is_perishable column:', error);
+  }
+}
+
+async function ensureDonationAddressColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE donations
+      ADD COLUMN IF NOT EXISTS address VARCHAR(255);
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ Address column verified/added successfully in donations table.');
+  } catch (error) {
+    console.error('❌ Error adding address column to donations:', error);
+  }
+}
+
+dropIsPerishableColumn();
+ensureDonationAddressColumn();
+
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
@@ -435,31 +464,46 @@ app.get('/donations', async (req, res) => {
 });
 
 app.post('/donations', upload.single("item_image"), async (req, res) => {
-  const { donor_id, donation_type, note, status } = req.body;
+  const { donor_id, donation_type, note, status, address, association_id, latitude, longitude } = req.body;
   const file = req.file;
   try {
     const imagePath = file ? `/uploads/${file.filename}` : null;
-    const result = await pool.query(
-      `INSERT INTO donations (donor_id, donation_type, item_image, note, status)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [donor_id, donation_type, imagePath, note, status || 'pending']
-    );
-    res.json(result.rows[0]);
+
+    // Try to insert with the new address/association/coords columns (if migration applied)
+    try {
+      const result = await pool.query(
+        `INSERT INTO donations (donor_id, donation_type, item_image, note, status, address, association_id, latitude, longitude)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [donor_id, donation_type, imagePath, note, status || 'pending', address || null, association_id || null, latitude || null, longitude || null]
+      );
+      return res.json(result.rows[0]);
+    } catch (errInsert) {
+      // Fallback: the DB might not have the new columns yet — try original insert
+      console.warn('Extended donations insert failed, falling back to original insert:', errInsert.message);
+      const result = await pool.query(
+        `INSERT INTO donations (donor_id, donation_type, item_image, note, status)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [donor_id, donation_type, imagePath, note, status || 'pending']
+      );
+      return res.json(result.rows[0]);
+    }
   } catch (err) {
+    console.error('DONATIONS ERROR:', err);
     res.status(500).send('Server error');
   }
 });
 
 app.post('/food_donations', async (req, res) => {
-  const { donation_id, is_perishable, food_type, expiration_date } = req.body;
+  const { donation_id, food_type, expiration_date } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO food_donations (donation_id, is_perishable, food_type, expiration_date)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [donation_id, is_perishable, food_type, expiration_date]
+      `INSERT INTO food_donations (donation_id, food_type, expiration_date)
+       VALUES ($1,$2,$3) RETURNING *`,
+      [donation_id, food_type, expiration_date]
     );
     res.json(result.rows[0]);
   } catch (err) {
+    console.error('FOOD_DONATIONS ERROR:', err);
     res.status(500).send('Server error');
   }
 });
@@ -1052,7 +1096,6 @@ app.get("/donations/food/accepted", async (req, res) => {
              d.note,
              d.status,
              d.created_at,
-             fd.is_perishable,
              fd.food_type,
              fd.expiration_date
       FROM donations d
@@ -1083,7 +1126,6 @@ app.get("/donations/food/approved", async (req, res) => {
              d.note,
              d.status,
              d.created_at,
-             fd.is_perishable,
              fd.food_type,
              fd.expiration_date
       FROM donations d

@@ -13,7 +13,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
-  const { association, donationType } = route.params;
+  const { association } = route.params || {};
+  let donationType = route.params?.donationType ||
+    association?.donationType ||
+    association?.type ||
+    association?.category ||
+    association?.donation_type ||
+    "clothes";
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -41,7 +47,7 @@ export default function AssociationInfo({ route, navigation }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
-
+      {/* Header */}
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
         <Image
           source={require("../assets/images/image.png")}
@@ -50,12 +56,10 @@ export default function AssociationInfo({ route, navigation }) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: 220 } // ←⬅⬅⬅ حل المشكلة هنا
-        ]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Hero: logo left + name next to it */}
         <View style={styles.heroRow}>
           <Image
             source={{ uri: `${API.API_URL}${association.association_logo}` }}
@@ -70,6 +74,7 @@ export default function AssociationInfo({ route, navigation }) {
           </View>
         </View>
 
+        {/* Description */}
         <View
           style={[
             styles.descriptionSection,
@@ -87,6 +92,7 @@ export default function AssociationInfo({ route, navigation }) {
           </Text>
         </View>
 
+        {/* Donation Question */}
         <View style={styles.questionContainer}>
           <Ionicons name="help-circle" size={24} color={btnYesBg} />
           <Text style={[styles.questionText, { color: textColor }]}>
@@ -94,17 +100,19 @@ export default function AssociationInfo({ route, navigation }) {
           </Text>
         </View>
 
+        {/* Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.btnYes, { backgroundColor: btnYesBg }]}
             activeOpacity={0.8}
             onPress={() =>
-              navigation.navigate(
-                donationType === "food"
-                  ? "DonateFoodScreen"
-                  : "DonateClothesScreen",
-                { association }
-              )
+              navigation.navigate("EnterQuantityScreen", {
+                nextScreen:
+                  donationType === "food"
+                    ? "DonateFoodScreen"
+                    : "DonateClothesScreen",
+                association,
+              })
             }
           >
             <Ionicons
@@ -136,6 +144,7 @@ export default function AssociationInfo({ route, navigation }) {
         </View>
       </ScrollView>
 
+      {/* Fixed Footer */}
       <View style={styles.fixedFooter}>
         <Image
           source={require("../assets/images/Z A A D.png")}
@@ -152,40 +161,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 0,
-    justifyContent: "flex-start",
-  },
-
+header: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingHorizontal: 10,
+  paddingVertical: 10,
+  borderBottomWidth: 0,
+},
   headerLogo: {
-    width: 160,
-    height: 90,
-    marginRight: 20,
-    marginLeft: -25,
+    /////////////////////////////////////
+    width: 1,
+    height: 60,
+  ///////////////////////////////////////
+    
   },
 
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 20,
+    paddingBottom: 100,
   },
 
+  /* Hero: logo + name side by side */
   heroRow: {
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
   },
 
-  heroLogoLeft: {
-    width: 140,
-    height: 140,
-    borderRadius: 12,
-    resizeMode: "contain",
-    marginRight: 16,
-  },
+heroLogoLeft: {
+  width: 140,  // increase from 100
+  height: 140, // increase from 100
+  borderRadius: 12,
+  resizeMode: "contain",
+  marginRight: 16,
+},
+
 
   heroTextContainer: {
     flex: 1,
@@ -204,6 +215,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 4,
     textAlign: "center",
+
   },
 
   descriptionSection: {

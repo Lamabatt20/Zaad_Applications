@@ -83,11 +83,11 @@ export default function LoginScreen({ navigation }) {
         switch (res.data.role) {
           case 'association':
               if (userData.food && userData.clothes) {
-                navigation.navigate('DashbordAssociationAll', userData);
+                navigation.navigate('DashboardAssociationAll', userData);
               } else if (userData.food && !userData.clothes) {
-                navigation.navigate('DashbordAssociationFoods', userData);
+                navigation.navigate('DashboardAssociationFood', userData);
               } else if (!userData.food && userData.clothes) {
-                navigation.navigate('DashbordAssociationClothes', userData);
+                navigation.navigate('DashboardAssociationClothes', userData);
               } else {
                 setGeneralError('No donation type assigned');
               }

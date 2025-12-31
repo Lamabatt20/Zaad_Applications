@@ -40,8 +40,16 @@ export default function FoodAssociationsScreen({ navigation, route }) {
 
   const fetchAssociations = async () => {
     try {
-      const res = await axios.get(`${API.API_URL}/associations/food`);
-      setAssociations(res.data);
+      // Some backends don't expose a /associations/food endpoint.
+      // Request all associations and filter for those with `food` flag.
+      const res = await axios.get(`${API.API_URL}/associations`);
+      const all = Array.isArray(res.data) ? res.data : res.data.items || [];
+      const filtered = all.filter((a) => {
+        if (a == null) return false;
+        // accept boolean true or string 'true' or numeric 1
+        return a.food === true || a.food === 'true' || a.food === 1 || a.food === '1';
+      });
+      setAssociations(filtered);
     } catch (err) {
       console.log("Error fetching associations:", err);
     }

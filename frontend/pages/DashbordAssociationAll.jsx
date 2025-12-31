@@ -24,14 +24,14 @@ export default function DashbordAssociationAll({ route }) {
       title: "Food Donations",
       subtitle: "Accepted & Approved",
       icon: "fast-food-outline",
-      screen: "DashbordAssociationFoods", 
+      screen: "DashboardAssociationFood",
     },
     {
       id: "2",
       title: "Clothes Donations",
       subtitle: "Pending, Accepted, Approved, Rejected",
       icon: "shirt-outline",
-      screen: "DashbordAssociationClothes", 
+      screen: "DashboardAssociationClothes",
     },
   ];
 

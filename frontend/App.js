@@ -12,6 +12,7 @@ import FoodAssociationsScreen from './pages/FoodAssociationsScreen';
 import AssociationInfo from "./pages/AssociationInfo";
 import DonateClothesScreen from "./pages/DonateClothesScreen";
 import DonateFoodScreen from "./pages/DonateFoodScreen";
+import EnterQuantityScreen from "./pages/EnterQuantityScreen";
 import ChooseDonationType from './pages/ChooseDonationType';
 import DashbordAssociationClothes from './pages/DashbordAssociationClothes';
 import DashbordAssociationFoods from './pages/DashbordAssociationFoods';
@@ -46,9 +47,10 @@ export default function App() {
           <Stack.Screen name="FoodAssociationsScreen" component={FoodAssociationsScreen} />
           <Stack.Screen name="SearchAssociation" component={SearchAssociation} />
           <Stack.Screen name="AssociationInfo" component={AssociationInfo} />
+          <Stack.Screen name="EnterQuantityScreen" component={EnterQuantityScreen} />
           <Stack.Screen name="DonateClothesScreen" component={DonateClothesScreen} />
-          <Stack.Screen name="DashbordAssociationClothes" component={DashbordAssociationClothes} />
-          <Stack.Screen name="DashbordAssociationFoods" component={DashbordAssociationFoods} />
+          <Stack.Screen name="DashboardAssociationClothes" component={DashbordAssociationClothes} />
+          <Stack.Screen name="DashboardAssociationFood" component={DashbordAssociationFoods} />
           <Stack.Screen name="PendingClothesScreen" component={PendingClothesScreen} />
           <Stack.Screen name="AcceptedClothesScreen" component={AcceptedClothesScreen} />
           <Stack.Screen name="RejectedClothesScreen" component={RejectedClothesScreen} />
@@ -60,7 +62,7 @@ export default function App() {
           <Stack.Screen name="ApprovedClothesScreen" component={ApprovedClothesScreen} /> 
           <Stack.Screen name="AcceptedFoodsScreen" component={AcceptedFoodsScreen} />
           <Stack.Screen name="ApprovedFoodsScreen" component={ApprovedFoodsScreen} />
-          <Stack.Screen name="DashbordAssociationAll" component={DashbordAssociationAll} />
+          <Stack.Screen name="DashboardAssociationAll" component={DashbordAssociationAll} />
 
           </Stack.Navigator>
       </NavigationContainer>

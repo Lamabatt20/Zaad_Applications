@@ -86,7 +86,7 @@ export default function SearchAssociation({ navigation, route }) {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: cardBg }]}
-      onPress={() => navigation.navigate('AssociationInfo', { association: item })}
+      onPress={() => navigation.navigate('AssociationInfo', { association: item, donationType })}
     >
       <Image
         source={
