@@ -16,12 +16,28 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
 
+  // ✅ البيانات كما تصلك من Login / Dashboard
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
 
-  
+  // ✅ إعادة بناء user بشكل صحيح (هذا هو المفتاح)
+  const user =
+    user_id
+      ? {
+          account_id: user_id,
+          user_id: user_id,
+          username,
+          email,
+          full_name,
+          phone,
+          role,
+          address,
+        }
+      : null;
+
   useEffect(() => {
     loadDarkMode();
+    fetchAssociations();
   }, []);
 
   const loadDarkMode = async () => {
@@ -34,20 +50,13 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const text = darkMode ? "#fff" : "#2f2f2f";
 
-  useEffect(() => {
-    fetchAssociations();
-  }, []);
-
   const fetchAssociations = async () => {
     try {
-      // Some backends don't expose a /associations/food endpoint.
-      // Request all associations and filter for those with `food` flag.
       const res = await axios.get(`${API.API_URL}/associations`);
-      const all = Array.isArray(res.data) ? res.data : res.data.items || [];
+      const all = Array.isArray(res.data) ? res.data : [];
       const filtered = all.filter((a) => {
-        if (a == null) return false;
-        // accept boolean true or string 'true' or numeric 1
-        return a.food === true || a.food === 'true' || a.food === 1 || a.food === '1';
+        if (!a) return false;
+        return a.food === true || a.food === "true" || a.food === 1 || a.food === "1";
       });
       setAssociations(filtered);
     } catch (err) {
@@ -62,6 +71,7 @@ export default function FoodAssociationsScreen({ navigation, route }) {
         navigation.navigate("AssociationInfo", {
           association: item,
           donationType: "food",
+          user, // ✅ الآن user مضمون
         })
       }
     >
@@ -77,7 +87,6 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const openSidebar = () => setSidebarOpen(true);
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -86,10 +95,12 @@ export default function FoodAssociationsScreen({ navigation, route }) {
       <View style={styles.header}>
         <Image
           source={require("../assets/images/image.png")}
-          style={[styles.topLogo]}
+          style={styles.topLogo}
         />
 
-        <Text style={[styles.headerTitle, { color: text }]}>Food Donation</Text>
+        <Text style={[styles.headerTitle, { color: text }]}>
+          Food Donation
+        </Text>
 
         <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
           <Image
@@ -143,7 +154,7 @@ export default function FoodAssociationsScreen({ navigation, route }) {
         visible={sidebarOpen}
         onClose={closeSidebar}
         navigation={navigation}
-        user={{ user_id, username, email, full_name, phone, role, address }}
+        user={user}   // ✅ نفس object
         sourceScreen="FoodAssociationsScreen"
         darkMode={darkMode}
       />
@@ -157,7 +168,6 @@ const styles = StyleSheet.create({
     paddingTop: 25,
     paddingHorizontal: 10,
   },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -165,7 +175,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     justifyContent: "space-between",
   },
-
   topLogo: {
     width: 150,
     height: 100,
@@ -175,56 +184,46 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     marginTop: -10,
   },
-
   headerTitle: {
     fontFamily: "Times New Roman",
     fontSize: 25,
     marginLeft: -150,
     marginBottom: 30,
   },
-
   menuButtonRight: {
-    padding: -10,
     marginTop: -15,
   },
-
   menuIcon: {
     width: 45,
     height: 45,
   },
-
   logo: {
     width: 140,
     height: 140,
     borderRadius: 10,
     margin: 10,
   },
-
   bottomContainer: {
     position: "absolute",
     bottom: 10,
     width: "100%",
     alignItems: "center",
   },
-
   bottomLogo: {
     width: 80,
     height: 80,
     resizeMode: "contain",
   },
-
   chatbotButton: {
     position: "absolute",
     bottom: 100,
     right: 20,
   },
-
   chatbotIcon: {
     width: 50,
     height: 50,
     resizeMode: "contain",
   },
-
   card: {
     width: "47%",
     alignItems: "center",
@@ -232,7 +231,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: "transparent",
   },
-
   associationName: {
     fontSize: 16,
     fontWeight: "500",

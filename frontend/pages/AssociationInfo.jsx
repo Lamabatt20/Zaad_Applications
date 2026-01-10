@@ -13,7 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
-  const { association } = route.params || {};
+  const { association , user} = route.params || {};
   let donationType = route.params?.donationType ||
     association?.donationType ||
     association?.type ||
@@ -107,12 +107,10 @@ export default function AssociationInfo({ route, navigation }) {
             activeOpacity={0.8}
             onPress={() =>
               navigation.navigate("EnterQuantityScreen", {
-                nextScreen:
-                  donationType === "food"
-                    ? "DonateFoodScreen"
-                    : "DonateClothesScreen",
-                association,
-              })
+              donationType,   
+              association,
+              user,
+            })
             }
           >
             <Ionicons

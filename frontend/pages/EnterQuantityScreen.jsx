@@ -7,12 +7,15 @@ import {
 	StyleSheet,
 	SafeAreaView,
 	Image,
+	Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function EnterQuantityScreen({ navigation, route }) {
 	const initial = route?.params?.quantity ?? "";
+	const { donationType, association, user } = route.params || {};
+
 	const [quantity, setQuantity] = useState(String(initial));
 	const [darkMode, setDarkMode] = useState(false);
 
@@ -31,38 +34,79 @@ export default function EnterQuantityScreen({ navigation, route }) {
 	const nextBtnBg = "#A27571";
 
 	const handleNext = () => {
-		const value = quantity === "" ? null : quantity;
-		if (route?.params?.onComplete && typeof route.params.onComplete === "function") {
-			route.params.onComplete({ quantity: value });
-			navigation.goBack();
+		const value = parseInt(quantity, 10);
+
+		if (!value || value < 1) {
+			Alert.alert("Validation", "Please enter a valid quantity");
 			return;
 		}
-		const nextScreen = route?.params?.nextScreen || "DonateFood";
-		navigation.navigate(nextScreen, { quantity: value });
+		if (donationType === "clothes") {
+			if (value > 1) {
+				navigation.navigate("MultiDonateClothesStep", {
+					total: value,
+					index: 1,
+					association,
+					user,
+				});
+			} else {
+				navigation.navigate("DonateClothesScreen", {
+					quantity: 1,
+					association,
+					user,
+				});
+			}
+			return;
+		}
+
+		if (donationType === "food") {
+			if (value > 1) {
+				navigation.navigate("MultiDonateStep", {
+					total: value,
+					index: 1,
+					donationType: "food",
+					association,
+					user,
+				});
+			} else {
+				navigation.navigate("DonateFoodScreen", {
+					quantity: 1,
+					association,
+					user,
+				});
+			}
+		}
 	};
 
 	return (
-		<SafeAreaView style={[styles.container, { backgroundColor: bg }]}> 
-			<View style={[styles.header, { borderBottomColor: border }]}> 
+		<SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
+			<View style={[styles.header, { borderBottomColor: border }]}>
 				<TouchableOpacity onPress={() => navigation.goBack()}>
 					<Ionicons name="chevron-back" size={28} color={text} />
 				</TouchableOpacity>
-				<Text style={[styles.headerTitle, { color: text }]}>Enter Quantity</Text>
+				<Text style={[styles.headerTitle, { color: text }]}>
+					Enter Quantity
+				</Text>
 				<View style={{ width: 28 }} />
 			</View>
 
 			<View style={styles.content}>
 				<Text style={[styles.label, { color: text }]}>Quantity</Text>
 				<TextInput
-					style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
+					style={[
+						styles.input,
+						{ backgroundColor: inputBg, borderColor: border, color: text },
+					]}
 					placeholder="Enter quantity (e.g. 3, 5)"
 					placeholderTextColor="#999"
 					value={quantity}
 					onChangeText={setQuantity}
-					keyboardType="default"
+					keyboardType="numeric"
 				/>
 
-				<TouchableOpacity style={[styles.nextBtn, { backgroundColor: nextBtnBg }]} onPress={handleNext}>
+				<TouchableOpacity
+					style={[styles.nextBtn, { backgroundColor: nextBtnBg }]}
+					onPress={handleNext}
+				>
 					<Text style={styles.nextText}>Next</Text>
 				</TouchableOpacity>
 			</View>
@@ -100,7 +144,17 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 	},
 	nextBtn: { paddingVertical: 14, borderRadius: 10, marginTop: 10 },
-	nextText: { color: "#fff", textAlign: "center", fontSize: 16, fontWeight: "600" },
-	footerContainer: { position: "absolute", bottom: 10, width: "100%", alignItems: "center" },
+	nextText: {
+		color: "#fff",
+		textAlign: "center",
+		fontSize: 16,
+		fontWeight: "600",
+	},
+	footerContainer: {
+		position: "absolute",
+		bottom: 10,
+		width: "100%",
+		alignItems: "center",
+	},
 	footerLogo: { width: 80, height: 80, resizeMode: "contain" },
 });

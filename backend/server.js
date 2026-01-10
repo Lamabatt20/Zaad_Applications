@@ -8,6 +8,9 @@ const { Pool } = require('pg');
 require('dotenv').config();
 const vision = require("@google-cloud/vision");
 const dayjs = require("dayjs");
+const minMax = require("dayjs/plugin/minMax");
+
+dayjs.extend(minMax);
 
 
 const app = express();
@@ -29,6 +32,84 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT,
 });
+function hasUsefulText(text) {
+  return text && text.length > 20;
+}
+
+function mapVisionLabelToCategory(label) {
+  label = label.toLowerCase();
+
+ 
+  if (label.includes("bread") || label.includes("toast") || label.includes("bakery"))
+    return "خبز ومخبوزات";
+
+  
+  if (label.includes("flour") || label.includes("grain") || label.includes("wheat"))
+    return "طحين وحبوب";
+
+  if (label.includes("rice"))
+    return "رز";
+
+  
+  if (label.includes("pasta") || label.includes("spaghetti") || label.includes("noodle"))
+    return "معكرونة";
+
+  
+  if (
+    label.includes("bean") ||
+    label.includes("lentil") ||
+    label.includes("chickpea") ||
+    label.includes("peas")
+  )
+    return "بقوليات";
+
+ 
+  if (label.includes("canned") || label.includes("tin") || label.includes("preserved"))
+    return "معلبات";
+
+  if (label.includes("tuna") || label.includes("sardine"))
+    return "معلبات سمك";
+
+
+  if (label.includes("oil"))
+    return "زيوت";
+
+ 
+  if (label.includes("sugar"))
+    return "سكر";
+
+  
+  if (
+    label.includes("spice") ||
+    label.includes("seasoning") ||
+    label.includes("pepper") ||
+    label.includes("salt")
+  )
+    return "بهارات وتوابل";
+
+  if (label.includes("snack") || label.includes("chips"))
+    return "سناك";
+
+  if (label.includes("chocolate") || label.includes("candy"))
+    return "حلويات";
+
+  if (label.includes("milk") || label.includes("cheese") || label.includes("yogurt"))
+    return "ألبان";
+
+ 
+  if (label.includes("meat") || label.includes("chicken") || label.includes("beef"))
+    return "لحوم";
+
+ 
+  if (label.includes("vegetable"))
+    return "خضار";
+
+  if (label.includes("fruit"))
+    return "فواكه";
+
+  return null;
+}
+
 
 async function ensureAddressColumn() {
   try {
@@ -42,6 +123,7 @@ async function ensureAddressColumn() {
     console.error('❌ Error adding address column:', error);
   }
 }
+
 
 
 
@@ -60,6 +142,7 @@ async function ensureAssociationColumns() {
     console.error('❌ Error adding association columns:', error);
   }
 }
+
 
 ensureAssociationColumns();
 async function changeAssociationAuthToText() {
@@ -104,7 +187,21 @@ async function ensureDonationAddressColumn() {
     console.error('❌ Error adding address column to donations:', error);
   }
 }
+async function ensureDonationAssociationColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE donations
+      ADD COLUMN IF NOT EXISTS association_id INTEGER;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ association_id column verified/added successfully in donations table.');
+  } catch (error) {
+    console.error('❌ Error adding association_id column to donations:', error);
+  }
+}
 
+
+ ensureDonationAssociationColumn();
 dropIsPerishableColumn();
 ensureDonationAddressColumn();
 
@@ -255,68 +352,71 @@ app.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    const result = await pool.query(
+    // =====================
+    // 1️⃣ Get account
+    // =====================
+    const accRes = await pool.query(
       'SELECT * FROM accounts WHERE username = $1',
       [username]
     );
 
-    let usernameIncorrect = false;
-    let passwordIncorrect = false;
-
-    if (result.rows.length === 0) {
-      usernameIncorrect = true;
+    if (accRes.rows.length === 0) {
+      return res.json({ success: false, usernameIncorrect: true });
     }
 
-    const user = result.rows[0];
+    const account = accRes.rows[0];
+    const match = await bcrypt.compare(password, account.password_hash);
 
-    if (!usernameIncorrect) {
-      const match = await bcrypt.compare(password, user.password_hash);
-      if (!match) passwordIncorrect = true;
+    if (!match) {
+      return res.json({ success: false, passwordIncorrect: true });
     }
 
-    if (usernameIncorrect || passwordIncorrect) {
-      return res.json({
-        success: false,
-        usernameIncorrect,
-        passwordIncorrect,
-      });
-    }
-
-    
-    let responseData = {
+    // =====================
+    // 2️⃣ Base response
+    // =====================
+    const responseData = {
       success: true,
-      role: user.role,
-      user_id: user.account_id,
-      username: user.username,
-      email: user.email,
-      full_name: user.full_name,
-      address: user.address,
-      phone: user.phone,
+      role: account.role,
+      user_id: account.account_id,
+      username: account.username,
+      email: account.email,
+      full_name: account.full_name,
+      address: account.address,
+      phone: account.phone,
+      food: false,
+      clothes: false,
     };
 
-    
-    if (user.role === 'association') {
-      const assocResult = await pool.query(
-        'SELECT food, clothes FROM associations WHERE user_id = $1',
-        [user.account_id]
-      );
+    // =====================
+    // 3️⃣ Association logic (CORRECT JOIN)
+    // =====================
+    if (account.role === 'association') {
+      const assocRes = await pool.query(`
+        SELECT a.food, a.clothes
+        FROM associations a
+        JOIN users u ON u.user_id = a.user_id
+        WHERE u.account_id = $1
+        LIMIT 1
+      `, [account.account_id]);
 
-      if (assocResult.rows.length > 0) {
-        responseData.food = assocResult.rows[0].food;
-        responseData.clothes = assocResult.rows[0].clothes;
-      } else {
-        responseData.food = false;
-        responseData.clothes = false;
+      if (assocRes.rows.length > 0) {
+        responseData.food = assocRes.rows[0].food === true;
+        responseData.clothes = assocRes.rows[0].clothes === true;
       }
     }
 
-    res.json(responseData);
+    return res.json(responseData);
 
   } catch (err) {
     console.error('LOGIN ERROR:', err);
-    res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 });
+
+
 
 app.post('/reset-password', async (req, res) => {
   const { usernameOrEmail, newPassword } = req.body;
@@ -464,32 +564,21 @@ app.get('/donations', async (req, res) => {
 });
 
 app.post('/donations', upload.single("item_image"), async (req, res) => {
-  const { donor_id, donation_type, note, status, address, association_id, latitude, longitude } = req.body;
+ const { donor_id, donation_type, note, status, address, association_id } = req.body;
   const file = req.file;
   try {
     const imagePath = file ? `/uploads/${file.filename}` : null;
-
-    // Try to insert with the new address/association/coords columns (if migration applied)
-    try {
-      const result = await pool.query(
-        `INSERT INTO donations (donor_id, donation_type, item_image, note, status, address, association_id, latitude, longitude)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [donor_id, donation_type, imagePath, note, status || 'pending', address || null, association_id || null, latitude || null, longitude || null]
-      );
-      return res.json(result.rows[0]);
-    } catch (errInsert) {
-      // Fallback: the DB might not have the new columns yet — try original insert
-      console.warn('Extended donations insert failed, falling back to original insert:', errInsert.message);
-      const result = await pool.query(
-        `INSERT INTO donations (donor_id, donation_type, item_image, note, status)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [donor_id, donation_type, imagePath, note, status || 'pending']
-      );
-      return res.json(result.rows[0]);
-    }
+    const result = await pool.query(
+      `INSERT INTO donations (donor_id, donation_type, item_image, note, status, address, association_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [donor_id, donation_type, imagePath, note, status || 'pending', address,association_id || null]
+    );
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error('DONATIONS ERROR:', err);
-    res.status(500).send('Server error');
+   res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+});
   }
 });
 
@@ -497,14 +586,16 @@ app.post('/food_donations', async (req, res) => {
   const { donation_id, food_type, expiration_date } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO food_donations (donation_id, food_type, expiration_date)
+      `INSERT INTO food_donations (donation_id,food_type, expiration_date)
        VALUES ($1,$2,$3) RETURNING *`,
       [donation_id, food_type, expiration_date]
     );
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('FOOD_DONATIONS ERROR:', err);
-    res.status(500).send('Server error');
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+});
   }
 });
 
@@ -897,176 +988,186 @@ app.post('/assoc/donations/:id/restore', async (req, res) => {
     res.status(500).json({ ok:false, error:'Failed to restore donation' });
   }
 });
-//ai expiration check
-// ================================
-// AI – Expiry + Food Category Check
-// ================================
-// =======================================
-// AI – Food Analysis (Category + Expiry + Safety)
-// =======================================
-// =======================================
-// AI – Food Analysis (Category + Expiry + Safety)
-// =======================================
+
 app.post(
   "/ai/check-expiry",
-  upload.single("image"),
+  upload.array("images", 5),
   async (req, res) => {
     try {
-      if (!req.file) {
+      if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           success: false,
-          message: "Image is required"
+          message: "Images are required"
         });
       }
 
-      // ==========================
-      // 1️⃣ OCR – extract text
-      // ==========================
-      const [ocrResult] = await visionClient.textDetection(req.file.path);
-      const detectedText =
-        ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
+      let categoryVotes = {};
+      let expiryDates = [];
+      let detectedTexts = [];
 
-      // ==========================
-      // 2️⃣ Vision Labels
-      // ==========================
-      const [labelResult] = await visionClient.labelDetection(req.file.path);
-      const labels =
-        labelResult.labelAnnotations?.map(l =>
-          l.description.toLowerCase()
-        ) || [];
+      for (const file of req.files) {
 
-      // ==========================
-      // 3️⃣ FOOD CATEGORY DETECTION
-      // ==========================
-      let foodCategory = "غير محدد";
+        /* =========================
+           1️⃣ OCR – extract text
+        ========================= */
+        const [ocrResult] = await visionClient.textDetection(file.path);
+        const detectedText =
+          ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
 
-      if (detectedText.includes("flour") || detectedText.includes("wheat")) {
-        foodCategory = "طحين";
-      } else if (detectedText.includes("sugar")) {
-        foodCategory = "سكر";
-      } else if (detectedText.includes("rice")) {
-        foodCategory = "رز";
-      } else if (
-        detectedText.includes("beans") ||
-        detectedText.includes("fava") ||
-        detectedText.includes("chickpeas")
-      ) {
-        foodCategory = "علب فول / حمص";
-      } else if (detectedText.includes("lentils")) {
-        foodCategory = "عدس";
-      } else if (detectedText.includes("pasta")) {
-        foodCategory = "معكرونة";
-      } else if (detectedText.includes("oil")) {
-        foodCategory = "زيت";
-      } else if (detectedText.includes("tuna")) {
-        foodCategory = "تونة";
-      }
+        detectedTexts.push(detectedText);
 
-      // ==========================
-      // 4️⃣ FOOD SAFETY CHECKS
-      // ==========================
-      let rejectReasons = [];
+        /* =========================
+           2️⃣ CATEGORY FROM TEXT
+        ========================= */
+        let foodCategory = null;
 
-      // ---- 4.1 Cooked food detection (PRIORITY) ----
-      const cookedKeywords = [
-        "cooked",
-        "meal",
-        "dish",
-        "plate",
-        "restaurant food"
-      ];
+        if (
+          detectedText.includes("bread") ||
+          detectedText.includes("toast") ||
+          detectedText.includes("خبز") ||
+          detectedText.includes("توست")
+        ) foodCategory = "خبز ومخبوزات";
+        else if (
+          detectedText.includes("flour") ||
+          detectedText.includes("wheat")
+        ) foodCategory = "طحين وحبوب";
+        else if (detectedText.includes("rice")) foodCategory = "رز";
+        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
+        else if (detectedText.includes("sugar")) foodCategory = "سكر";
+        else if (
+          detectedText.includes("bean") ||
+          detectedText.includes("lentil") ||
+          detectedText.includes("chickpea")
+        ) foodCategory = "بقوليات";
+        else if (detectedText.includes("oil")) foodCategory = "زيوت";
+        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
 
-      const isCookedFood = labels.some(l =>
-        cookedKeywords.some(k => l.includes(k))
-      );
+        /* =========================
+           3️⃣ CATEGORY FROM IMAGE (Fallback)
+        ========================= */
+        if (!foodCategory || !hasUsefulText(detectedText)) {
+          const [labelResult] = await visionClient.labelDetection(file.path);
+          const labels =
+            labelResult.labelAnnotations?.map(l =>
+              l.description.toLowerCase()
+            ) || [];
 
-      if (isCookedFood) {
-        rejectReasons.push("طعام مطبوخ (غير مقبول للتبرع)");
-      }
-
-      // ---- 4.2 Damaged / Rust ----
-      const damageKeywords = [
-        "rust",
-        "corrosion",
-        "damaged",
-        "dirty",
-        "old"
-      ];
-
-      if (labels.some(l => damageKeywords.some(k => l.includes(k)))) {
-        rejectReasons.push("العبوة تالفة أو مصدية");
-      }
-
-      // ---- 4.3 Mold / Spoiled ----
-      const moldKeywords = [
-        "mold",
-        "spoiled",
-        "fungus",
-        "bread mold"
-      ];
-
-      if (labels.some(l => moldKeywords.some(k => l.includes(k)))) {
-        rejectReasons.push("مؤشرات عفن أو تلف في الطعام");
-      }
-
-      // ---- 4.4 No label (ONLY if NOT cooked) ----
-      if (!isCookedFood && detectedText.trim().length < 10) {
-        rejectReasons.push("لا يوجد ليبل أو معلومات كافية على المنتج");
-      }
-
-      // ==========================
-      // 5️⃣ EXPIRY DATE DETECTION
-      // ==========================
-      const dateRegex =
-        /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}|\d{1,2}[\/\-.]\d{4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
-
-      const match = detectedText.match(dateRegex);
-
-      let expiryDate = null;
-      let expired = null;
-
-      if (match) {
-        expiryDate = dayjs(match[1], [
-          "D/M/YYYY",
-          "DD/MM/YYYY",
-          "D-M-YYYY",
-          "DD-MM-YYYY",
-          "D.M.YYYY",
-          "DD.MM.YYYY",
-          "M/YYYY",
-          "MM/YYYY",
-          "M-YYYY",
-          "MM-YYYY",
-          "M.YYYY",
-          "MM.YYYY",
-          "D MMM YYYY",
-          "DD MMM YYYY"
-        ], true);
-
-        if (expiryDate.isValid()) {
-          expired = expiryDate.isBefore(dayjs());
+          for (const label of labels) {
+            const mapped = mapVisionLabelToCategory(label);
+            if (mapped) {
+              foodCategory = mapped;
+              break;
+            }
+          }
         }
+
+        if (!foodCategory) foodCategory = "مواد غذائية";
+
+        categoryVotes[foodCategory] =
+          (categoryVotes[foodCategory] || 0) + 1;
+
+        /* =========================
+           4️⃣ EXPIRY DATE DETECTION (SAFE)
+        ========================= */
+
+        let match = null;
+
+        const expDateRegex = /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+
+        const expMatch = detectedText.match(expDateRegex);
+        if (expMatch) {
+          match = expMatch[2];
+        }
+
+        if (!match) {
+          const generalDateRegex = /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+          const generalMatch = detectedText.match(generalDateRegex);
+          if (generalMatch) {
+            match = generalMatch[1];
+          }
+        }
+
+
+        if (match) {
+          let parsedDate = null;
+
+          // 🟢 DDMMYYYY
+          if (/^\d{8}$/.test(match)) {
+            const day = match.substring(0, 2);
+            const month = match.substring(2, 4);
+            const year = match.substring(4, 8);
+            parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
+          } 
+          
+          else {
+            parsedDate = dayjs(match, [
+              "D/M/YYYY",
+              "DD/MM/YYYY",
+              "D-M-YYYY",
+              "DD-MM-YYYY",
+              "D.M.YYYY",
+              "DD.MM.YYYY",
+              "D MMM YYYY",
+              "DD MMM YYYY",
+              "D/M/YY",
+              "DD/MM/YY",
+              "D-M-YY",
+              "DD-MM-YY",
+              "MM/YYYY"
+            ], true);
+          }
+
+          if (parsedDate && parsedDate.isValid()) {
+            expiryDates.push(parsedDate);
+          }
+        }
+
+        fs.unlinkSync(file.path);
       }
 
-      // ==========================
-      // 6️⃣ FINAL DECISION
-      // ==========================
-      const rejected = rejectReasons.length > 0;
+      /* =========================
+         5️⃣ FINAL DECISION
+      ========================= */
+
+      const foodCategory =
+  Object.keys(categoryVotes).sort(
+    (a, b) => categoryVotes[b] - categoryVotes[a]
+  )[0];
+
+const expiryDate =
+  expiryDates.length > 0
+    ? expiryDates.reduce((latest, current) =>
+        current.isAfter(latest) ? current : latest
+      )
+    : null;
+
+      const expired =
+        expiryDate ? expiryDate.isBefore(dayjs()) : false;
+
+      // ✅ FIX: define expiryConfidence
+      let expiryConfidence = "low";
+      if (expiryDates.length > 0) {
+        expiryConfidence = "high";
+      }
 
       res.json({
         success: true,
         food_category: foodCategory,
-        expiry_date: expiryDate ? expiryDate.format("YYYY-MM-DD") : null,
+        expiry_date: expiryDate
+          ? expiryDate.format("YYYY-MM-DD")
+          : null,
         expired,
-        rejected,
-        reject_reasons: rejectReasons,
-        result: rejected
-          ? "❌ مرفوض"
-          : expired
-          ? "❌ منتهي"
-          : "✅ صالح",
-        detected_text: detectedText
+        expiry_confidence: expiryConfidence,
+        need_clear_image: expiryConfidence !== "high",
+        result:
+          expiryConfidence !== "high"
+            ? "❗ تاريخ غير واضح – يرجى إعادة التصوير"
+            : expired
+            ? "❌ منتهي"
+            : "✅ صالح",
+        detected_texts: detectedTexts
       });
+
 
     } catch (error) {
       console.error("AI Expiry Error:", error);
@@ -1077,10 +1178,6 @@ app.post(
     }
   }
 );
-
-
-
-
 // =======================
 // FOOD DONATIONS ROUTES
 // =======================

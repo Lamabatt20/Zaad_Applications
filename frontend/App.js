@@ -13,6 +13,7 @@ import AssociationInfo from "./pages/AssociationInfo";
 import DonateClothesScreen from "./pages/DonateClothesScreen";
 import DonateFoodScreen from "./pages/DonateFoodScreen";
 import EnterQuantityScreen from "./pages/EnterQuantityScreen";
+import MultiDonateStep from './pages/MultiDonateStep';
 import ChooseDonationType from './pages/ChooseDonationType';
 import DashbordAssociationClothes from './pages/DashbordAssociationClothes';
 import DashbordAssociationFoods from './pages/DashbordAssociationFoods';
@@ -28,6 +29,7 @@ import ApprovedClothesScreen from './pages/ApprovedClothesScreen';
 import AcceptedFoodsScreen from './pages/AcceptedFoodsScreen';
 import ApprovedFoodsScreen from './pages/ApprovedFoodsScreen';  
 import DashbordAssociationAll from './pages/DashbordAssociationAll';
+import MultiDonateClothesStep from './pages/MultiDonateClothesStep';
 
 const Stack = createNativeStackNavigator();
 
@@ -63,6 +65,8 @@ export default function App() {
           <Stack.Screen name="AcceptedFoodsScreen" component={AcceptedFoodsScreen} />
           <Stack.Screen name="ApprovedFoodsScreen" component={ApprovedFoodsScreen} />
           <Stack.Screen name="DashboardAssociationAll" component={DashbordAssociationAll} />
+          <Stack.Screen name="MultiDonateStep" component={MultiDonateStep} />
+          <Stack.Screen name="MultiDonateClothesStep" component={MultiDonateClothesStep} />
 
           </Stack.Navigator>
       </NavigationContainer>

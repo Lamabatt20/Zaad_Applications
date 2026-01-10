@@ -58,61 +58,82 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!validateFields()) return;
+
     setLoading(true);
     setGeneralError('');
     const API = axios.create({ baseURL: config.API_URL });
 
     try {
       const res = await API.post('/login', { username, password });
-      if (res.data.success) {
-        const userData = {
-          user_id: res.data.user_id,
-          username: res.data.username,
-          email: res.data.email,
-          full_name: res.data.full_name,
-          phone: res.data.phone,
-          role: res.data.role,
-          address: res.data.address,
-          food: res.data.food === true || res.data.food === 'true',
-          clothes: res.data.clothes === true || res.data.clothes === 'true',
 
-        };
-
-        await AsyncStorage.setItem("user_data", JSON.stringify(userData));
-
-        switch (res.data.role) {
-          case 'association':
-              if (userData.food && userData.clothes) {
-                navigation.navigate('DashboardAssociationAll', userData);
-              } else if (userData.food && !userData.clothes) {
-                navigation.navigate('DashboardAssociationFood', userData);
-              } else if (!userData.food && userData.clothes) {
-                navigation.navigate('DashboardAssociationClothes', userData);
-              } else {
-                setGeneralError('No donation type assigned');
-              }
-              break;
-
-          case 'donor':
-            navigation.navigate("ChooseDonationType", userData);
-            break;
-
-          case 'admin':
-            break;
-
-          default:
-            setGeneralError('Unknown role');
-        }
-      } else {
+      if (!res.data.success) {
         if (res.data.usernameIncorrect) setUsernameError('Username is incorrect');
         if (res.data.passwordIncorrect) setPasswordError('Password is incorrect');
+        return;
       }
+
+      // ✅ تحويل القيم إلى Boolean حقيقي
+      const food = res.data.food === true || res.data.food === 'true' || res.data.food === 1;
+      const clothes = res.data.clothes === true || res.data.clothes === 'true' || res.data.clothes === 1;
+
+      const userData = {
+        user_id: res.data.user_id,
+        username: res.data.username,
+        email: res.data.email,
+        full_name: res.data.full_name,
+        phone: res.data.phone,
+        role: res.data.role,
+        address: res.data.address,
+        food,
+        clothes,
+      };
+
+      await AsyncStorage.setItem("user_data", JSON.stringify(userData));
+
+      // ======================
+      // 🔀 Navigation Logic
+      // ======================
+      if (userData.role === 'association') {
+
+        if (food && clothes) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'DashboardAssociationAll', params: userData }],
+          });
+
+        } else if (food) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'DashboardAssociationFood', params: userData }],
+          });
+
+        } else if (clothes) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'DashboardAssociationClothes', params: userData }],
+          });
+
+        } else {
+          setGeneralError('No donation type assigned');
+        }
+
+      } else if (userData.role === 'donor') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'ChooseDonationType', params: userData }],
+        });
+
+      } else {
+        setGeneralError('Unknown role');
+      }
+
     } catch (error) {
       setGeneralError('Cannot connect to server');
     } finally {
       setLoading(false);
     }
   };
+
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const text = darkMode ? "#fff" : "#000";
