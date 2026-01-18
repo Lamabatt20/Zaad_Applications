@@ -1061,7 +1061,382 @@ app.post('/assoc/donations/:id/restore', async (req, res) => {
   }
 });
 
+
+// =======================
+// NEW AI ENDPOINT - Using ai_services_new models
+// =======================
 app.post(
+  "/ai/check-food-new",
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Images are required"
+        });
+      }
+
+      let categoryVotes = {};
+      let expiryDates = [];
+      let detectedTexts = [];
+
+      for (const file of req.files) {
+
+        /* =========================
+           0️⃣ CAN DAMAGE CHECK (NEW MODEL) - CHECK FIRST
+        ========================= */
+        console.log(`\n[IMAGE] Processing: ${file.originalname}`);
+        console.log(`[CHECK-0] Checking for can damage (NEW MODEL)...`);
+        const canDamageResult = await callAIService(
+          AI_NEW_CAN_DAMAGE_URL,
+          file.path
+        );
+        console.log(`[CAN-DAMAGE-RESULT-NEW]`, {
+          status: canDamageResult.status,
+          confidence: canDamageResult.confidence.toFixed(2),
+          details: canDamageResult.details
+        });
+
+        if (canDamageResult.status === "damaged") {
+          console.log(`[REJECTED] Can is damaged - REJECTED`);
+          
+          // Build detailed rejection message
+          let damageDetails = [];
+          if (canDamageResult.details?.rust_detected) {
+            damageDetails.push(`صدأ (${canDamageResult.details.rust_percentage?.toFixed(1)}%)`);
+          }
+          if (canDamageResult.details?.dent_detected) {
+            damageDetails.push("انبعاج");
+          }
+          if (canDamageResult.details?.corrosion_detected) {
+            damageDetails.push("تآكل");
+          }
+          
+          const detailsText = damageDetails.length > 0 
+            ? ` - ${damageDetails.join(", ")}` 
+            : "";
+          
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: `❌ المعلب تالف أو متضرر${detailsText}`,
+            confidence: canDamageResult.confidence,
+            details: canDamageResult.details,
+            model: "new"
+          });
+        }
+
+        /* =========================
+           1️⃣ PACKAGED vs COOKED (NEW MODEL)
+        ========================= */
+        console.log(`[CHECK-1] Checking if food is packaged or cooked (NEW MODEL)...`);
+        const packagedResult = await callAIService(
+          AI_NEW_COOKED_URL,
+          file.path
+        );
+        console.log(`[PACKAGED-RESULT-NEW]`, {
+          status: packagedResult.status,
+          confidence: packagedResult.confidence.toFixed(2)
+        });
+
+        if (packagedResult.status === "cooked") {
+          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
+            confidence: packagedResult.confidence,
+            model: "new"
+          });
+        }
+
+        /* =========================
+           2️⃣ OCR – extract text
+        ========================= */
+        console.log(`[OCR] Extracting text from image...`);
+        const [ocrResult] = await visionClient.textDetection(file.path);
+        const detectedText =
+          ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
+        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
+
+        detectedTexts.push(detectedText);
+
+        /* =========================
+           2️⃣ CATEGORY FROM TEXT
+        ========================= */
+        let foodCategory = null;
+
+        if (
+          detectedText.includes("bread") ||
+          detectedText.includes("toast") ||
+          detectedText.includes("خبز") ||
+          detectedText.includes("توست")
+        ) foodCategory = "خبز ومخبوزات";
+        else if (
+          detectedText.includes("flour") ||
+          detectedText.includes("wheat")
+        ) foodCategory = "طحين وحبوب";
+        else if (detectedText.includes("rice")) foodCategory = "رز";
+        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
+        else if (detectedText.includes("sugar")) foodCategory = "سكر";
+        else if (
+          detectedText.includes("bean") ||
+          detectedText.includes("lentil") ||
+          detectedText.includes("chickpea")
+        ) foodCategory = "بقوليات";
+        else if (detectedText.includes("oil")) foodCategory = "زيوت";
+        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
+
+        /* =========================
+           3️⃣ CATEGORY FROM IMAGE (Fallback)
+        ========================= */
+        if (!foodCategory || !hasUsefulText(detectedText)) {
+          const [labelResult] = await visionClient.labelDetection(file.path);
+          const labels =
+            labelResult.labelAnnotations?.map(l =>
+              l.description.toLowerCase()
+            ) || [];
+
+          for (const label of labels) {
+            const mapped = mapVisionLabelToCategory(label);
+            if (mapped) {
+              foodCategory = mapped;
+              break;
+            }
+          }
+        }
+
+        if (!foodCategory) foodCategory = "مواد غذائية";
+
+        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
+
+        categoryVotes[foodCategory] =
+          (categoryVotes[foodCategory] || 0) + 1;
+
+        /* =========================
+           4️⃣ EXPIRY DATE DETECTION
+        ========================= */
+        console.log(`[EXPIRY] Extracting expiry date from text...`);
+
+        let match = null;
+
+        const expDateRegex =
+          /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+
+        const expMatch = detectedText.match(expDateRegex);
+        if (expMatch) match = expMatch[2];
+
+        if (!match) {
+          const generalDateRegex =
+            /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+          const generalMatch = detectedText.match(generalDateRegex);
+          if (generalMatch) match = generalMatch[1];
+        }
+
+        if (match) {
+          let parsedDate = null;
+
+          if (/^\d{8}$/.test(match)) {
+            const day = match.substring(0, 2);
+            const month = match.substring(2, 4);
+            const year = match.substring(4, 8);
+            parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
+          } else {
+            parsedDate = dayjs(match, [
+              "D/M/YYYY",
+              "DD/MM/YYYY",
+              "D-M-YYYY",
+              "DD-MM-YYYY",
+              "D.M.YYYY",
+              "DD.MM.YYYY",
+              "D MMM YYYY",
+              "DD MMM YYYY",
+              "D/M/YY",
+              "DD/MM/YY",
+              "D-M-YY",
+              "DD-MM-YY",
+              "MM/YYYY"
+            ], true);
+          }
+
+          if (parsedDate && parsedDate.isValid()) {
+            expiryDates.push(parsedDate);
+            console.log(`[EXPIRY-FOUND] Date: ${parsedDate.format("YYYY-MM-DD")}`);
+          }
+        }
+
+        fs.unlinkSync(file.path);
+      }
+
+      /* =========================
+         5️⃣ FINAL DECISION
+      ========================= */
+      console.log(`\n========== FINAL RESULT (NEW MODEL) ==========`);
+      
+      // Get most voted category
+      const foodCategory = Object.keys(categoryVotes).length > 0 
+        ? Object.keys(categoryVotes).reduce((a, b) => 
+            categoryVotes[a] > categoryVotes[b] ? a : b
+          )
+        : "مواد غذائية";
+      
+      console.log(`[CATEGORY] Food: ${foodCategory}`);
+      const expiryDate =
+        expiryDates.length > 0
+          ? expiryDates.reduce((latest, current) =>
+              current.isAfter(latest) ? current : latest
+            )
+          : null;
+      console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
+
+      const expired =
+        expiryDate ? expiryDate.isBefore(dayjs()) : false;
+
+      let expiryConfidence = expiryDates.length > 0 ? "high" : "low";
+
+      console.log(`[STATUS] ${expired ? "EXPIRED" : "VALID"} (Confidence: ${expiryConfidence})`);
+      console.log(`==============================================\n`);
+
+      res.json({
+        success: true,
+        food_category: foodCategory,
+        expiry_date: expiryDate
+          ? expiryDate.format("YYYY-MM-DD")
+          : null,
+        expired,
+        expiry_confidence: expiryConfidence,
+        need_clear_image: expiryConfidence !== "high",
+        result:
+          expiryConfidence !== "high"
+            ? "❗ تاريخ غير واضح – يرجى إعادة التصوير"
+            : expired
+            ? "❌ منتهي"
+            : "✅ صالح",
+        detected_texts: detectedTexts,
+        model: "new"
+      });
+
+    } catch (error) {
+      console.error("AI Expiry Error (NEW):", error);
+      res.status(500).json({
+        success: false,
+        message: "AI processing failed"
+      });
+    }
+  }
+);
+// =======================
+// FOOD DONATIONS ROUTES
+// =======================
+
+
+// GET /donations/food/accepted  -> list accepted food donations
+app.get("/donations/food/accepted", async (req, res) => {
+  const { association_id } = req.query;
+  try {
+    let query = `
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             fd.food_type,
+             fd.expiration_date
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u   ON u.user_id  = dr.user_id
+      JOIN accounts a ON a.account_id = u.account_id
+      JOIN food_donations fd ON fd.donation_id = d.donation_id
+      WHERE d.donation_type = 'food'
+        AND d.status = 'accepted'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch accepted food donations" });
+  }
+});
+
+
+// GET /donations/food/approved  -> list approved food donations
+app.get("/donations/food/approved", async (req, res) => {
+  const { association_id } = req.query;
+  try {
+    let query = `
+      SELECT d.donation_id,
+             COALESCE(a.full_name, 'Donor') AS donor_name,
+             d.item_image,
+             d.note,
+             d.status,
+             d.created_at,
+             fd.food_type,
+             fd.expiration_date
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u   ON u.user_id  = dr.user_id
+      JOIN accounts a ON a.account_id = u.account_id
+      JOIN food_donations fd ON fd.donation_id = d.donation_id
+      WHERE d.donation_type = 'food'
+        AND d.status = 'approved'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch approved food donations" });
+  }
+});
+
+app.use((req, res, next) => {
+  console.log("REQ:", req.method, req.url);
+  next();
+});
+
+// (اختياري) GET /donations/food/accepted/dates  -> distinct dates
+app.get("/donations/food/accepted/dates", async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT DISTINCT to_char(d.created_at, 'YYYY-MM-DD') AS date
+      FROM donations d
+      WHERE d.donation_type = 'food'
+        AND d.status = 'accepted'
+      ORDER BY date DESC
+    `);
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: "Failed to fetch dates" });
+  }
+});
+
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});app.post(
   "/ai/check-expiry",
   upload.array("images", 5),
   async (req, res) => {
@@ -1318,378 +1693,3 @@ app.post(
     }
   }
 );
-// =======================
-// NEW AI ENDPOINT - Using ai_services_new models
-// =======================
-app.post(
-  "/ai/check-food-new",
-  upload.array("images", 5),
-  async (req, res) => {
-    try {
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Images are required"
-        });
-      }
-
-      let categoryVotes = {};
-      let expiryDates = [];
-      let detectedTexts = [];
-
-      for (const file of req.files) {
-
-        /* =========================
-           0️⃣ PACKAGED vs COOKED (NEW MODEL)
-        ========================= */
-        console.log(`\n[IMAGE] Processing: ${file.originalname}`);
-        console.log(`[CHECK-0] Checking if food is packaged or cooked (NEW MODEL)...`);
-        const packagedResult = await callAIService(
-          AI_NEW_COOKED_URL,
-          file.path
-        );
-        console.log(`[PACKAGED-RESULT-NEW]`, {
-          status: packagedResult.status,
-          confidence: packagedResult.confidence.toFixed(2)
-        });
-
-        if (packagedResult.status === "cooked") {
-          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
-          fs.unlinkSync(file.path);
-          return res.json({
-            success: false,
-            rejected: true,
-            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
-            confidence: packagedResult.confidence,
-            model: "new"
-          });
-        }
-
-        /* =========================
-           1️⃣ OCR – extract text
-        ========================= */
-        console.log(`[OCR] Extracting text from image...`);
-        const [ocrResult] = await visionClient.textDetection(file.path);
-        const detectedText =
-          ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
-        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
-
-        detectedTexts.push(detectedText);
-
-        /* =========================
-           2️⃣ CATEGORY FROM TEXT
-        ========================= */
-        let foodCategory = null;
-
-        if (
-          detectedText.includes("bread") ||
-          detectedText.includes("toast") ||
-          detectedText.includes("خبز") ||
-          detectedText.includes("توست")
-        ) foodCategory = "خبز ومخبوزات";
-        else if (
-          detectedText.includes("flour") ||
-          detectedText.includes("wheat")
-        ) foodCategory = "طحين وحبوب";
-        else if (detectedText.includes("rice")) foodCategory = "رز";
-        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
-        else if (detectedText.includes("sugar")) foodCategory = "سكر";
-        else if (
-          detectedText.includes("bean") ||
-          detectedText.includes("lentil") ||
-          detectedText.includes("chickpea")
-        ) foodCategory = "بقوليات";
-        else if (detectedText.includes("oil")) foodCategory = "زيوت";
-        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
-
-        /* =========================
-           3️⃣ CATEGORY FROM IMAGE (Fallback)
-        ========================= */
-        if (!foodCategory || !hasUsefulText(detectedText)) {
-          const [labelResult] = await visionClient.labelDetection(file.path);
-          const labels =
-            labelResult.labelAnnotations?.map(l =>
-              l.description.toLowerCase()
-            ) || [];
-
-          for (const label of labels) {
-            const mapped = mapVisionLabelToCategory(label);
-            if (mapped) {
-              foodCategory = mapped;
-              break;
-            }
-          }
-        }
-
-        if (!foodCategory) foodCategory = "مواد غذائية";
-
-        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
-
-        /* =========================
-           3.5️⃣ CAN DAMAGE CHECK (NEW MODEL)
-        ========================= */
-        console.log(`[CHECK-1] Checking for can damage (NEW MODEL)...`);
-        const canDamageResult = await callAIService(
-          AI_NEW_CAN_DAMAGE_URL,
-          file.path
-        );
-        console.log(`[CAN-DAMAGE-RESULT-NEW]`, {
-          status: canDamageResult.status,
-          confidence: canDamageResult.confidence.toFixed(2),
-          details: canDamageResult.details
-        });
-
-        if (canDamageResult.status === "damaged") {
-          console.log(`[REJECTED] Can is damaged - REJECTED`);
-          
-          // Build detailed rejection message
-          let damageDetails = [];
-          if (canDamageResult.details?.rust_detected) {
-            damageDetails.push(`صدأ (${canDamageResult.details.rust_percentage?.toFixed(1)}%)`);
-          }
-          if (canDamageResult.details?.dent_detected) {
-            damageDetails.push("انبعاج");
-          }
-          if (canDamageResult.details?.corrosion_detected) {
-            damageDetails.push("تآكل");
-          }
-          
-          const detailsText = damageDetails.length > 0 
-            ? ` - ${damageDetails.join(", ")}` 
-            : "";
-          
-          fs.unlinkSync(file.path);
-          return res.json({
-            success: false,
-            rejected: true,
-            reason: `❌ المعلب تالف أو متضرر${detailsText}`,
-            confidence: canDamageResult.confidence,
-            details: canDamageResult.details,
-            model: "new"
-          });
-        }
-
-        categoryVotes[foodCategory] =
-          (categoryVotes[foodCategory] || 0) + 1;
-
-        /* =========================
-           4️⃣ EXPIRY DATE DETECTION
-        ========================= */
-        console.log(`[EXPIRY] Extracting expiry date from text...`);
-
-        let match = null;
-
-        const expDateRegex =
-          /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
-
-        const expMatch = detectedText.match(expDateRegex);
-        if (expMatch) match = expMatch[2];
-
-        if (!match) {
-          const generalDateRegex =
-            /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
-          const generalMatch = detectedText.match(generalDateRegex);
-          if (generalMatch) match = generalMatch[1];
-        }
-
-        if (match) {
-          let parsedDate = null;
-
-          if (/^\d{8}$/.test(match)) {
-            const day = match.substring(0, 2);
-            const month = match.substring(2, 4);
-            const year = match.substring(4, 8);
-            parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
-          } else {
-            parsedDate = dayjs(match, [
-              "D/M/YYYY",
-              "DD/MM/YYYY",
-              "D-M-YYYY",
-              "DD-MM-YYYY",
-              "D.M.YYYY",
-              "DD.MM.YYYY",
-              "D MMM YYYY",
-              "DD MMM YYYY",
-              "D/M/YY",
-              "DD/MM/YY",
-              "D-M-YY",
-              "DD-MM-YY",
-              "MM/YYYY"
-            ], true);
-          }
-
-          if (parsedDate && parsedDate.isValid()) {
-            expiryDates.push(parsedDate);
-            console.log(`[EXPIRY-FOUND] Date: ${parsedDate.format("YYYY-MM-DD")}`);
-          }
-        }
-
-        fs.unlinkSync(file.path);
-      }
-
-      /* =========================
-         5️⃣ FINAL DECISION
-      ========================= */
-      console.log(`\n========== FINAL RESULT (NEW MODEL) ==========`);
-      
-      // Get most voted category
-      const foodCategory = Object.keys(categoryVotes).length > 0 
-        ? Object.keys(categoryVotes).reduce((a, b) => 
-            categoryVotes[a] > categoryVotes[b] ? a : b
-          )
-        : "مواد غذائية";
-      
-      console.log(`[CATEGORY] Food: ${foodCategory}`);
-      const expiryDate =
-        expiryDates.length > 0
-          ? expiryDates.reduce((latest, current) =>
-              current.isAfter(latest) ? current : latest
-            )
-          : null;
-      console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
-
-      const expired =
-        expiryDate ? expiryDate.isBefore(dayjs()) : false;
-
-      let expiryConfidence = expiryDates.length > 0 ? "high" : "low";
-
-      console.log(`[STATUS] ${expired ? "EXPIRED" : "VALID"} (Confidence: ${expiryConfidence})`);
-      console.log(`==============================================\n`);
-
-      res.json({
-        success: true,
-        food_category: foodCategory,
-        expiry_date: expiryDate
-          ? expiryDate.format("YYYY-MM-DD")
-          : null,
-        expired,
-        expiry_confidence: expiryConfidence,
-        need_clear_image: expiryConfidence !== "high",
-        result:
-          expiryConfidence !== "high"
-            ? "❗ تاريخ غير واضح – يرجى إعادة التصوير"
-            : expired
-            ? "❌ منتهي"
-            : "✅ صالح",
-        detected_texts: detectedTexts,
-        model: "new"
-      });
-
-    } catch (error) {
-      console.error("AI Expiry Error (NEW):", error);
-      res.status(500).json({
-        success: false,
-        message: "AI processing failed"
-      });
-    }
-  }
-);
-// =======================
-// FOOD DONATIONS ROUTES
-// =======================
-
-
-// GET /donations/food/accepted  -> list accepted food donations
-app.get("/donations/food/accepted", async (req, res) => {
-  const { association_id } = req.query;
-  try {
-    let query = `
-      SELECT d.donation_id,
-             COALESCE(a.full_name, 'Donor') AS donor_name,
-             d.item_image,
-             d.note,
-             d.status,
-             d.created_at,
-             fd.food_type,
-             fd.expiration_date
-      FROM donations d
-      JOIN donors dr ON dr.user_id = d.donor_id
-      JOIN users u   ON u.user_id  = dr.user_id
-      JOIN accounts a ON a.account_id = u.account_id
-      JOIN food_donations fd ON fd.donation_id = d.donation_id
-      WHERE d.donation_type = 'food'
-        AND d.status = 'accepted'`;
-    
-    const params = [];
-    if (association_id) {
-      query += ` AND d.association_id = $1`;
-      params.push(association_id);
-    }
-    
-    query += ` ORDER BY d.donation_id DESC`;
-    
-    const q = await pool.query(query, params);
-
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: "Failed to fetch accepted food donations" });
-  }
-});
-
-
-// GET /donations/food/approved  -> list approved food donations
-app.get("/donations/food/approved", async (req, res) => {
-  const { association_id } = req.query;
-  try {
-    let query = `
-      SELECT d.donation_id,
-             COALESCE(a.full_name, 'Donor') AS donor_name,
-             d.item_image,
-             d.note,
-             d.status,
-             d.created_at,
-             fd.food_type,
-             fd.expiration_date
-      FROM donations d
-      JOIN donors dr ON dr.user_id = d.donor_id
-      JOIN users u   ON u.user_id  = dr.user_id
-      JOIN accounts a ON a.account_id = u.account_id
-      JOIN food_donations fd ON fd.donation_id = d.donation_id
-      WHERE d.donation_type = 'food'
-        AND d.status = 'approved'`;
-    
-    const params = [];
-    if (association_id) {
-      query += ` AND d.association_id = $1`;
-      params.push(association_id);
-    }
-    
-    query += ` ORDER BY d.donation_id DESC`;
-    
-    const q = await pool.query(query, params);
-
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: "Failed to fetch approved food donations" });
-  }
-});
-
-app.use((req, res, next) => {
-  console.log("REQ:", req.method, req.url);
-  next();
-});
-
-// (اختياري) GET /donations/food/accepted/dates  -> distinct dates
-app.get("/donations/food/accepted/dates", async (req, res) => {
-  try {
-    const q = await pool.query(`
-      SELECT DISTINCT to_char(d.created_at, 'YYYY-MM-DD') AS date
-      FROM donations d
-      WHERE d.donation_type = 'food'
-        AND d.status = 'accepted'
-      ORDER BY date DESC
-    `);
-
-    res.json(q.rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: "Failed to fetch dates" });
-  }
-});
-
-
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
