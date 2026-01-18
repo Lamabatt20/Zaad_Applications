@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
 import { Picker } from "@react-native-picker/picker";
@@ -84,7 +85,16 @@ export default function RejectedClothesScreen() {
       setErrorMsg("");
       setLoading(true);
 
-      const res = await axios.get(`${config.API_URL}/donations/clothes/rejected`);
+      // ✅ Get association_id from AsyncStorage
+      const userDataStr = await AsyncStorage.getItem("user_data");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const associationId = userData?.association_id;
+
+      // ✅ CLOTHES rejected endpoint
+      const url = associationId
+        ? `${config.API_URL}/donations/clothes/rejected?association_id=${associationId}`
+        : `${config.API_URL}/donations/clothes/rejected`;
+      const res = await axios.get(url);
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
       setItems(normalized);

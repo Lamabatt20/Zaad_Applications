@@ -86,6 +86,7 @@ export default function LoginScreen({ navigation }) {
         address: res.data.address,
         food,
         clothes,
+        association_id: res.data.association_id, // Add association_id
       };
 
       await AsyncStorage.setItem("user_data", JSON.stringify(userData));

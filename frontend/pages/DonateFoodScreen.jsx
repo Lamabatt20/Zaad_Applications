@@ -99,43 +99,83 @@ export default function DonateFoodScreen({ navigation, route }) {
     try {
       /* ---------- 1️⃣ AI CHECK ---------- */
       const aiForm = new FormData();
-      images.forEach((uri, index) => {
-        aiForm.append("images", {
-          uri,
-          name: `img_${index}.jpg`,
-          type: "image/jpeg",
-        });
-      });
+images.forEach((uri, index) => {
+  aiForm.append("images", {
+    uri,
+    name: `img_${index}.jpg`,
+    type: "image/jpeg",
+  });
+});
 
-      const aiRes = await fetch(`${API.API_URL}/ai/check-expiry`, {
-        method: "POST",
-        body: aiForm,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+const aiRes = await fetch(`${API.API_URL}/ai/check-food-new`, {
+  method: "POST",
+  body: aiForm,
+  headers: { "Content-Type": "multipart/form-data" },
+});
 
-      const aiData = await aiRes.json();
+if (!aiRes.ok) {
+  const errorText = await aiRes.text();
+  setLoading(false);
+  Alert.alert(
+    "AI Check Failed",
+    `Unable to verify the item: ${errorText || 'Server error'}`
+  );
+  return;
+}
 
-      if (!aiData.success || aiData.need_clear_image) {
-        setLoading(false);
-        Alert.alert(
-          "Image not clear",
-          "Please retake the image and make sure the expiration date is clear"
-        );
-        return;
-      }
+const aiData = await aiRes.json();
 
-      if (aiData.expired) {
+if (aiData.rejected && aiData.reason?.includes("مطبوخ")) {
+  setLoading(false);
+  Alert.alert(
+    "❌ Rejected",
+    "This food appears to be cooked.\nOnly packaged food can be donated."
+  );
+  return;
+}
 
+/* ❌ MOLD */
+if (aiData.rejected && aiData.reason?.includes("متعفّن")) {
+  setLoading(false);
+  Alert.alert(
+    "❌ Rejected",
+    "The product shows signs of mold.\nPlease do not donate moldy items."
+  );
+  return;
+}
 
-        
-        setLoading(false);
-        Alert.alert(
-                  "Rejected",
-                  "This item is expired and will be skipped",
-                  [{ text: "OK", onPress: goNextItem }]
-                );
-        return;
-      }
+/* ❌ DAMAGED */
+if (aiData.rejected && aiData.reason?.includes("تالف")) {
+  setLoading(false);
+  Alert.alert(
+    "❌ Rejected",
+    "The product is damaged or unsafe.\nPlease check the packaging."
+  );
+  return;
+}
+
+/* ❌ EXPIRED */
+if (aiData.expired) {
+  setLoading(false);
+  Alert.alert(
+    "❌ Expired Item",
+    "This product is expired and cannot be donated."
+  );
+  return;
+}
+
+/* ⚠️ IMAGE NOT CLEAR (آخر شرط فقط) */
+if (aiData.need_clear_image) {
+  setLoading(false);
+  Alert.alert(
+    "⚠️ Image Not Clear",
+    "Please retake the image and make sure the expiration date is clearly visible."
+  );
+  return;
+}
+
+/* ✅ ACCEPTED - Continue with donation */
+// Item passed all AI checks
 
       /* ---------- 2️⃣ SET CATEGORY FROM AI ---------- */
       setCategory(aiData.food_category);
@@ -146,7 +186,10 @@ export default function DonateFoodScreen({ navigation, route }) {
       console.log("USER ARRIVED:", user);
 
       if (!user?.account_id) {
-        Alert.alert("Error", "User data missing");
+        Alert.alert(
+          "Session Error",
+          "User session data is missing. Please log in again."
+        );
         setLoading(false);
         return;
       }
@@ -158,6 +201,9 @@ export default function DonateFoodScreen({ navigation, route }) {
       const realUser = users.find(
         u => u.account_id === user.account_id
       );
+          "User Not Found",
+          "Your account information could not be found. Please log in again."
+        
 
       if (!realUser) {
         Alert.alert("Error", "User not found in users table");
@@ -175,6 +221,9 @@ export default function DonateFoodScreen({ navigation, route }) {
       const donor = donors.find(
         d => d.user_id === real_user_id
       );
+          "Registration Required",
+          "You need to register as a donor before making donations. Please complete your registration first."
+        
 
       if (!donor) {
         Alert.alert("Error", "User is not registered as donor");
@@ -206,18 +255,26 @@ export default function DonateFoodScreen({ navigation, route }) {
       });
 
       const donationRes = await fetch(`${API.API_URL}/donations`, {
-            method: "POST",
-            body: donationForm,
-          });
+        method: "POST",
+        body: donationForm,
+      });
 
-          const text = await donationRes.text();
+      const text = await donationRes.text();
 
-          if (!donationRes.ok) {
-            console.log("Donation API error:", text);
-            throw new Error(text);
-          }
+      if (!donationRes.ok) {
+        console.log("Donation API error:", text);
+        throw new Error(
+          text || `Server error: ${donationRes.status} ${donationRes.statusText}`
+        );
+      }
 
-          const donation = JSON.parse(text);
+      let donation;
+      try {
+        donation = JSON.parse(text);
+      } catch (parseErr) {
+        console.error("Failed to parse donation response:", text);
+        throw new Error("Invalid server response. Please try again.");
+      }
 
       /* ---------- 4️⃣ SAVE FOOD DETAILS ---------- */
       await fetch(`${API.API_URL}/food_donations`, {
@@ -231,12 +288,26 @@ export default function DonateFoodScreen({ navigation, route }) {
       });
 
       setLoading(false);
-      Alert.alert("Success", "Donation accepted");
+      Alert.alert("Success", "Your donation has been submitted successfully!");
       navigation.goBack();
     } catch (err) {
-      console.error(err);
+      console.error("Donation error:", err);
       setLoading(false);
-      Alert.alert("Error", "Something went wrong");
+      
+      let errorMessage = "An unexpected error occurred";
+      
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      Alert.alert(
+        "Donation Failed",
+        errorMessage.includes('network') || errorMessage.includes('fetch')
+          ? "Network error. Please check your internet connection and try again."
+          : errorMessage
+      );
     }
   };
 

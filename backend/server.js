@@ -9,6 +9,8 @@ require('dotenv').config();
 const vision = require("@google-cloud/vision");
 const dayjs = require("dayjs");
 const minMax = require("dayjs/plugin/minMax");
+const axios = require("axios");
+const FormData = require("form-data");
 
 dayjs.extend(minMax);
 
@@ -109,6 +111,39 @@ function mapVisionLabelToCategory(label) {
 
   return null;
 }
+
+async function callAIService(url, imagePath) {
+  try {
+    const fileBuffer = fs.readFileSync(imagePath);
+    const form = new FormData();
+    form.append("file", fileBuffer, { filename: path.basename(imagePath) });
+
+    const res = await axios.post(url, form, {
+      headers: form.getHeaders(),
+      timeout: 30000,
+      maxContentLength: 50 * 1024 * 1024,
+      maxBodyLength: 50 * 1024 * 1024
+    });
+
+    if (res.data.error) {
+      console.error(`❌ AI Service Error at ${url}:`, res.data.error);
+      throw new Error(res.data.error);
+    }
+
+    return res.data;
+  } catch (error) {
+    console.error(`❌ AI Service Failed at ${url}:`, error.message);
+    throw error;
+  }
+}
+
+const AI_PACKAGED_URL = "http://localhost:8001/predict-packaged-cooked";
+const AI_MOLD_URL = "http://localhost:8002/predict-mold";
+const AI_DAMAGE_URL = "http://localhost:8003/predict-damage";
+
+// New AI Services URLs
+const AI_NEW_COOKED_URL = "http://localhost:8004/predict-cooked";
+const AI_NEW_CAN_DAMAGE_URL = "http://localhost:8005/predict-can-damage";
 
 
 async function ensureAddressColumn() {
@@ -392,7 +427,7 @@ app.post('/login', async (req, res) => {
     // =====================
     if (account.role === 'association') {
       const assocRes = await pool.query(`
-        SELECT a.food, a.clothes
+        SELECT a.food, a.clothes, a.association_id
         FROM associations a
         JOIN users u ON u.user_id = a.user_id
         WHERE u.account_id = $1
@@ -402,6 +437,7 @@ app.post('/login', async (req, res) => {
       if (assocRes.rows.length > 0) {
         responseData.food = assocRes.rows[0].food === true;
         responseData.clothes = assocRes.rows[0].clothes === true;
+        responseData.association_id = assocRes.rows[0].association_id;
       }
     }
 
@@ -777,8 +813,9 @@ app.get("/recommend", async (req, res) => {
   }
 });
 app.get('/donations/clothes/pending', async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -790,9 +827,17 @@ app.get('/donations/clothes/pending', async (req, res) => {
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       LEFT JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type = 'clothes' AND d.status = 'pending'
-      ORDER BY d.donation_id DESC
-    `);
+      WHERE d.donation_type = 'clothes' AND d.status = 'pending'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
     res.json(q.rows);
   } catch (e) {
     console.error(e);
@@ -843,8 +888,9 @@ app.post('/assoc/donations/:id/reject', async (req, res) => {
 
 
 app.get('/donations/clothes/accepted', async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -857,9 +903,17 @@ app.get('/donations/clothes/accepted', async (req, res) => {
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type = 'clothes' AND d.status = 'accepted'
-      ORDER BY d.donation_id DESC
-    `);
+      WHERE d.donation_type = 'clothes' AND d.status = 'accepted'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
     res.json(q.rows);
   } catch (e) {
     console.error(e);
@@ -867,8 +921,9 @@ app.get('/donations/clothes/accepted', async (req, res) => {
   }
 });
 app.get('/donations/clothes/rejected', async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -889,9 +944,17 @@ app.get('/donations/clothes/rejected', async (req, res) => {
       JOIN accounts a  ON a.account_id = u.account_id
       JOIN clothes_donations cd ON cd.donation_id = d.donation_id
       WHERE d.donation_type = 'clothes'
-        AND d.status = 'rejected'
-      ORDER BY d.donation_id DESC
-    `);
+        AND d.status = 'rejected'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
 
     res.json(q.rows);
   } catch (e) {
@@ -929,8 +992,9 @@ app.post('/assoc/donations/:id/approve', async (req, res) => {
 
 // GET /donations/clothes/approved  -> list approved clothes
 app.get('/donations/clothes/approved', async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -943,9 +1007,17 @@ app.get('/donations/clothes/approved', async (req, res) => {
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type='clothes' AND d.status='approved'
-      ORDER BY d.donation_id DESC
-    `);
+      WHERE d.donation_type='clothes' AND d.status='approved'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
     res.json(q.rows);
   } catch (e) {
     console.error(e);
@@ -1008,11 +1080,38 @@ app.post(
       for (const file of req.files) {
 
         /* =========================
+           0️⃣ PACKAGED vs COOKED (NEW)
+        ========================= */
+        console.log(`\n[IMAGE] Processing: ${file.originalname}`);
+        console.log(`[CHECK-0] Checking if food is packaged or cooked...`);
+        const packagedResult = await callAIService(
+          AI_PACKAGED_URL,
+          file.path
+        );
+        console.log(`[PACKAGED-RESULT]`, {
+          status: packagedResult.status,
+          confidence: packagedResult.confidence.toFixed(2)
+        });
+
+        if (packagedResult.status === "cooked") {
+          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
+            confidence: packagedResult.confidence
+          });
+        }
+
+        /* =========================
            1️⃣ OCR – extract text
         ========================= */
+        console.log(`[OCR] Extracting text from image...`);
         const [ocrResult] = await visionClient.textDetection(file.path);
         const detectedText =
           ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
+        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
 
         detectedTexts.push(detectedText);
 
@@ -1063,43 +1162,88 @@ app.post(
 
         if (!foodCategory) foodCategory = "مواد غذائية";
 
+        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
+
+        /* =========================
+           3.5️⃣ CONDITION CHECK (NEW)
+        ========================= */
+        console.log(`[CHECK-1] Checking food condition...`);
+        if (foodCategory === "خبز ومخبوزات") {
+          console.log(`[MOLD] Checking for mold (bread category)...`);
+          const moldResult = await callAIService(
+            AI_MOLD_URL,
+            file.path
+          );
+          console.log(`[MOLD-RESULT]`, {
+            mold: moldResult.mold,
+            confidence: moldResult.confidence.toFixed(2)
+          });
+
+          if (moldResult.mold) {
+            console.log(`[REJECTED] Mold detected - REJECTED`);
+            fs.unlinkSync(file.path);
+            return res.json({
+              success: false,
+              rejected: true,
+              reason: "❌ المنتج متعفّن",
+              confidence: moldResult.confidence
+            });
+          }
+        } else {
+          console.log(`[DAMAGE] Checking for damage...`);
+          const damageResult = await callAIService(
+            AI_DAMAGE_URL,
+            file.path
+          );
+          console.log(`[DAMAGE-RESULT]`, {
+            status: damageResult.status,
+            confidence: damageResult.confidence.toFixed(2)
+          });
+
+          if (damageResult.status === "damaged") {
+            console.log(`[REJECTED] Damage detected - REJECTED`);
+            fs.unlinkSync(file.path);
+            return res.json({
+              success: false,
+              rejected: true,
+              reason: "❌ المنتج تالف أو متضرر",
+              confidence: damageResult.confidence
+            });
+          }
+        }
+
         categoryVotes[foodCategory] =
           (categoryVotes[foodCategory] || 0) + 1;
 
         /* =========================
            4️⃣ EXPIRY DATE DETECTION (SAFE)
         ========================= */
+        console.log(`[EXPIRY] Extracting expiry date from text...`);
 
         let match = null;
 
-        const expDateRegex = /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+        const expDateRegex =
+          /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
 
         const expMatch = detectedText.match(expDateRegex);
-        if (expMatch) {
-          match = expMatch[2];
-        }
+        if (expMatch) match = expMatch[2];
 
         if (!match) {
-          const generalDateRegex = /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+          const generalDateRegex =
+            /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
           const generalMatch = detectedText.match(generalDateRegex);
-          if (generalMatch) {
-            match = generalMatch[1];
-          }
+          if (generalMatch) match = generalMatch[1];
         }
-
 
         if (match) {
           let parsedDate = null;
 
-          // 🟢 DDMMYYYY
           if (/^\d{8}$/.test(match)) {
             const day = match.substring(0, 2);
             const month = match.substring(2, 4);
             const year = match.substring(4, 8);
             parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
-          } 
-          
-          else {
+          } else {
             parsedDate = dayjs(match, [
               "D/M/YYYY",
               "DD/MM/YYYY",
@@ -1119,6 +1263,7 @@ app.post(
 
           if (parsedDate && parsedDate.isValid()) {
             expiryDates.push(parsedDate);
+            console.log(`[EXPIRY-FOUND] Date: ${parsedDate.format("YYYY-MM-DD")}`);
           }
         }
 
@@ -1128,27 +1273,23 @@ app.post(
       /* =========================
          5️⃣ FINAL DECISION
       ========================= */
-
-      const foodCategory =
-  Object.keys(categoryVotes).sort(
-    (a, b) => categoryVotes[b] - categoryVotes[a]
-  )[0];
-
-const expiryDate =
-  expiryDates.length > 0
-    ? expiryDates.reduce((latest, current) =>
-        current.isAfter(latest) ? current : latest
-      )
-    : null;
+      console.log(`\n========== FINAL RESULT ==========`);
+      console.log(`[CATEGORY] Food: ${foodCategory}`);
+      const expiryDate =
+        expiryDates.length > 0
+          ? expiryDates.reduce((latest, current) =>
+              current.isAfter(latest) ? current : latest
+            )
+          : null;
+      console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
 
       const expired =
         expiryDate ? expiryDate.isBefore(dayjs()) : false;
 
-      // ✅ FIX: define expiryConfidence
-      let expiryConfidence = "low";
-      if (expiryDates.length > 0) {
-        expiryConfidence = "high";
-      }
+      let expiryConfidence = expiryDates.length > 0 ? "high" : "low";
+
+      console.log(`[STATUS] ${expired ? "EXPIRED" : "VALID"} (Confidence: ${expiryConfidence})`);
+      console.log(`==================================\n`);
 
       res.json({
         success: true,
@@ -1168,9 +1309,274 @@ const expiryDate =
         detected_texts: detectedTexts
       });
 
-
     } catch (error) {
       console.error("AI Expiry Error:", error);
+      res.status(500).json({
+        success: false,
+        message: "AI processing failed"
+      });
+    }
+  }
+);
+// =======================
+// NEW AI ENDPOINT - Using ai_services_new models
+// =======================
+app.post(
+  "/ai/check-food-new",
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Images are required"
+        });
+      }
+
+      let categoryVotes = {};
+      let expiryDates = [];
+      let detectedTexts = [];
+
+      for (const file of req.files) {
+
+        /* =========================
+           0️⃣ PACKAGED vs COOKED (NEW MODEL)
+        ========================= */
+        console.log(`\n[IMAGE] Processing: ${file.originalname}`);
+        console.log(`[CHECK-0] Checking if food is packaged or cooked (NEW MODEL)...`);
+        const packagedResult = await callAIService(
+          AI_NEW_COOKED_URL,
+          file.path
+        );
+        console.log(`[PACKAGED-RESULT-NEW]`, {
+          status: packagedResult.status,
+          confidence: packagedResult.confidence.toFixed(2)
+        });
+
+        if (packagedResult.status === "cooked") {
+          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
+            confidence: packagedResult.confidence,
+            model: "new"
+          });
+        }
+
+        /* =========================
+           1️⃣ OCR – extract text
+        ========================= */
+        console.log(`[OCR] Extracting text from image...`);
+        const [ocrResult] = await visionClient.textDetection(file.path);
+        const detectedText =
+          ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
+        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
+
+        detectedTexts.push(detectedText);
+
+        /* =========================
+           2️⃣ CATEGORY FROM TEXT
+        ========================= */
+        let foodCategory = null;
+
+        if (
+          detectedText.includes("bread") ||
+          detectedText.includes("toast") ||
+          detectedText.includes("خبز") ||
+          detectedText.includes("توست")
+        ) foodCategory = "خبز ومخبوزات";
+        else if (
+          detectedText.includes("flour") ||
+          detectedText.includes("wheat")
+        ) foodCategory = "طحين وحبوب";
+        else if (detectedText.includes("rice")) foodCategory = "رز";
+        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
+        else if (detectedText.includes("sugar")) foodCategory = "سكر";
+        else if (
+          detectedText.includes("bean") ||
+          detectedText.includes("lentil") ||
+          detectedText.includes("chickpea")
+        ) foodCategory = "بقوليات";
+        else if (detectedText.includes("oil")) foodCategory = "زيوت";
+        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
+
+        /* =========================
+           3️⃣ CATEGORY FROM IMAGE (Fallback)
+        ========================= */
+        if (!foodCategory || !hasUsefulText(detectedText)) {
+          const [labelResult] = await visionClient.labelDetection(file.path);
+          const labels =
+            labelResult.labelAnnotations?.map(l =>
+              l.description.toLowerCase()
+            ) || [];
+
+          for (const label of labels) {
+            const mapped = mapVisionLabelToCategory(label);
+            if (mapped) {
+              foodCategory = mapped;
+              break;
+            }
+          }
+        }
+
+        if (!foodCategory) foodCategory = "مواد غذائية";
+
+        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
+
+        /* =========================
+           3.5️⃣ CAN DAMAGE CHECK (NEW MODEL)
+        ========================= */
+        console.log(`[CHECK-1] Checking for can damage (NEW MODEL)...`);
+        const canDamageResult = await callAIService(
+          AI_NEW_CAN_DAMAGE_URL,
+          file.path
+        );
+        console.log(`[CAN-DAMAGE-RESULT-NEW]`, {
+          status: canDamageResult.status,
+          confidence: canDamageResult.confidence.toFixed(2),
+          details: canDamageResult.details
+        });
+
+        if (canDamageResult.status === "damaged") {
+          console.log(`[REJECTED] Can is damaged - REJECTED`);
+          
+          // Build detailed rejection message
+          let damageDetails = [];
+          if (canDamageResult.details?.rust_detected) {
+            damageDetails.push(`صدأ (${canDamageResult.details.rust_percentage?.toFixed(1)}%)`);
+          }
+          if (canDamageResult.details?.dent_detected) {
+            damageDetails.push("انبعاج");
+          }
+          if (canDamageResult.details?.corrosion_detected) {
+            damageDetails.push("تآكل");
+          }
+          
+          const detailsText = damageDetails.length > 0 
+            ? ` - ${damageDetails.join(", ")}` 
+            : "";
+          
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: `❌ المعلب تالف أو متضرر${detailsText}`,
+            confidence: canDamageResult.confidence,
+            details: canDamageResult.details,
+            model: "new"
+          });
+        }
+
+        categoryVotes[foodCategory] =
+          (categoryVotes[foodCategory] || 0) + 1;
+
+        /* =========================
+           4️⃣ EXPIRY DATE DETECTION
+        ========================= */
+        console.log(`[EXPIRY] Extracting expiry date from text...`);
+
+        let match = null;
+
+        const expDateRegex =
+          /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+
+        const expMatch = detectedText.match(expDateRegex);
+        if (expMatch) match = expMatch[2];
+
+        if (!match) {
+          const generalDateRegex =
+            /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
+          const generalMatch = detectedText.match(generalDateRegex);
+          if (generalMatch) match = generalMatch[1];
+        }
+
+        if (match) {
+          let parsedDate = null;
+
+          if (/^\d{8}$/.test(match)) {
+            const day = match.substring(0, 2);
+            const month = match.substring(2, 4);
+            const year = match.substring(4, 8);
+            parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
+          } else {
+            parsedDate = dayjs(match, [
+              "D/M/YYYY",
+              "DD/MM/YYYY",
+              "D-M-YYYY",
+              "DD-MM-YYYY",
+              "D.M.YYYY",
+              "DD.MM.YYYY",
+              "D MMM YYYY",
+              "DD MMM YYYY",
+              "D/M/YY",
+              "DD/MM/YY",
+              "D-M-YY",
+              "DD-MM-YY",
+              "MM/YYYY"
+            ], true);
+          }
+
+          if (parsedDate && parsedDate.isValid()) {
+            expiryDates.push(parsedDate);
+            console.log(`[EXPIRY-FOUND] Date: ${parsedDate.format("YYYY-MM-DD")}`);
+          }
+        }
+
+        fs.unlinkSync(file.path);
+      }
+
+      /* =========================
+         5️⃣ FINAL DECISION
+      ========================= */
+      console.log(`\n========== FINAL RESULT (NEW MODEL) ==========`);
+      
+      // Get most voted category
+      const foodCategory = Object.keys(categoryVotes).length > 0 
+        ? Object.keys(categoryVotes).reduce((a, b) => 
+            categoryVotes[a] > categoryVotes[b] ? a : b
+          )
+        : "مواد غذائية";
+      
+      console.log(`[CATEGORY] Food: ${foodCategory}`);
+      const expiryDate =
+        expiryDates.length > 0
+          ? expiryDates.reduce((latest, current) =>
+              current.isAfter(latest) ? current : latest
+            )
+          : null;
+      console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
+
+      const expired =
+        expiryDate ? expiryDate.isBefore(dayjs()) : false;
+
+      let expiryConfidence = expiryDates.length > 0 ? "high" : "low";
+
+      console.log(`[STATUS] ${expired ? "EXPIRED" : "VALID"} (Confidence: ${expiryConfidence})`);
+      console.log(`==============================================\n`);
+
+      res.json({
+        success: true,
+        food_category: foodCategory,
+        expiry_date: expiryDate
+          ? expiryDate.format("YYYY-MM-DD")
+          : null,
+        expired,
+        expiry_confidence: expiryConfidence,
+        need_clear_image: expiryConfidence !== "high",
+        result:
+          expiryConfidence !== "high"
+            ? "❗ تاريخ غير واضح – يرجى إعادة التصوير"
+            : expired
+            ? "❌ منتهي"
+            : "✅ صالح",
+        detected_texts: detectedTexts,
+        model: "new"
+      });
+
+    } catch (error) {
+      console.error("AI Expiry Error (NEW):", error);
       res.status(500).json({
         success: false,
         message: "AI processing failed"
@@ -1185,8 +1591,9 @@ const expiryDate =
 
 // GET /donations/food/accepted  -> list accepted food donations
 app.get("/donations/food/accepted", async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -1201,9 +1608,17 @@ app.get("/donations/food/accepted", async (req, res) => {
       JOIN accounts a ON a.account_id = u.account_id
       JOIN food_donations fd ON fd.donation_id = d.donation_id
       WHERE d.donation_type = 'food'
-        AND d.status = 'accepted'
-      ORDER BY d.donation_id DESC
-    `);
+        AND d.status = 'accepted'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
 
     res.json(q.rows);
   } catch (e) {
@@ -1215,8 +1630,9 @@ app.get("/donations/food/accepted", async (req, res) => {
 
 // GET /donations/food/approved  -> list approved food donations
 app.get("/donations/food/approved", async (req, res) => {
+  const { association_id } = req.query;
   try {
-    const q = await pool.query(`
+    let query = `
       SELECT d.donation_id,
              COALESCE(a.full_name, 'Donor') AS donor_name,
              d.item_image,
@@ -1231,9 +1647,17 @@ app.get("/donations/food/approved", async (req, res) => {
       JOIN accounts a ON a.account_id = u.account_id
       JOIN food_donations fd ON fd.donation_id = d.donation_id
       WHERE d.donation_type = 'food'
-        AND d.status = 'approved'
-      ORDER BY d.donation_id DESC
-    `);
+        AND d.status = 'approved'`;
+    
+    const params = [];
+    if (association_id) {
+      query += ` AND d.association_id = $1`;
+      params.push(association_id);
+    }
+    
+    query += ` ORDER BY d.donation_id DESC`;
+    
+    const q = await pool.query(query, params);
 
     res.json(q.rows);
   } catch (e) {

@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
 import { Picker } from "@react-native-picker/picker";
@@ -72,9 +73,17 @@ export default function AcceptedFoodScreen() {
       setErrorMsg("");
       setLoading(true);
 
+      // ✅ Get association_id from AsyncStorage
+      const userDataStr = await AsyncStorage.getItem("user_data");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const associationId = userData?.association_id;
+
       // ✅ FOOD accepted endpoint
-      console.log("[FETCH] GET", `${config.API_URL}/donations/food/accepted`);
-      const res = await axios.get(`${config.API_URL}/donations/food/accepted`);
+      const url = associationId
+        ? `${config.API_URL}/donations/food/accepted?association_id=${associationId}`
+        : `${config.API_URL}/donations/food/accepted`;
+      console.log("[FETCH] GET", url);
+      const res = await axios.get(url);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);

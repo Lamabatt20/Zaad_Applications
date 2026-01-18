@@ -136,34 +136,80 @@ export default function MultiDonateStep({ route, navigation }) {
         });
       });
 
-      const aiRes = await fetch(`${API.API_URL}/ai/check-expiry`, {
+      const aiRes = await fetch(`${API.API_URL}/ai/check-food-new`, {
         method: "POST",
         body: aiForm,
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const aiData = await aiRes.json();
-
-      
-      if (!aiData.success || aiData.need_clear_image) {
+      if (!aiRes.ok) {
+        const errorText = await aiRes.text();
         setLoading(false);
         Alert.alert(
-          "Image not clear",
-          "Please retake the image and make sure the expiration date is clear"
+          "AI Check Failed",
+          `Unable to verify the item: ${errorText || 'Server error'}`
         );
         return;
       }
 
-      
-      if (aiData.expired) {
+      const aiData = await aiRes.json();
+
+      /* ❌ COOKED */
+      if (aiData.rejected && aiData.reason?.includes("مطبوخ")) {
         setLoading(false);
         Alert.alert(
-          "Rejected",
-          "This item is expired and will be skipped",
+          "❌ Rejected",
+          "This food appears to be cooked.\nOnly packaged food can be donated.",
           [{ text: "OK", onPress: goNextItem }]
         );
         return;
       }
+
+      /* ❌ MOLD */
+      if (aiData.rejected && aiData.reason?.includes("متعفّن")) {
+        setLoading(false);
+        Alert.alert(
+          "❌ Rejected",
+          "The product shows signs of mold.\nPlease do not donate moldy items.",
+          [{ text: "OK", onPress: goNextItem }]
+        );
+        return;
+      }
+
+      /* ❌ DAMAGED */
+      if (aiData.rejected && aiData.reason?.includes("تالف")) {
+        setLoading(false);
+        Alert.alert(
+          "❌ Rejected",
+          "The product is damaged or unsafe.\nPlease check the packaging.",
+          [{ text: "OK", onPress: goNextItem }]
+        );
+        return;
+      }
+
+      /* ❌ EXPIRED */
+      if (aiData.expired) {
+        setLoading(false);
+        Alert.alert(
+          "❌ Expired Item",
+          "This product is expired and cannot be donated.",
+          [{ text: "OK", onPress: goNextItem }]
+        );
+        return;
+      }
+
+      /* ⚠️ IMAGE NOT CLEAR */
+      if (aiData.need_clear_image) {
+        setLoading(false);
+        Alert.alert(
+          "⚠️ Image Not Clear",
+          "Please retake the image and make sure the expiration date is clearly visible."
+        );
+        return;
+      }
+
+      /* ✅ ACCEPTED - Continue with donation */
+      // Item passed all AI checks
 
       /* ---------- 2️⃣ SET CATEGORY ---------- */
       setCategory(aiData.food_category);
@@ -177,7 +223,10 @@ export default function MultiDonateStep({ route, navigation }) {
       }
 
       if (!user?.account_id) {
-        Alert.alert("Error", "User data missing");
+        Alert.alert(
+          "Session Error",
+          "User session data is missing. Please log in again."
+        );
         setLoading(false);
         return;
       }
@@ -187,7 +236,10 @@ export default function MultiDonateStep({ route, navigation }) {
       const realUser = users.find(u => u.account_id === user.account_id);
 
       if (!realUser) {
-        Alert.alert("Error", "User not found");
+        Alert.alert(
+          "User Not Found",
+          "Your account information could not be found. Please log in again."
+        );
         setLoading(false);
         return;
       }
@@ -197,7 +249,10 @@ export default function MultiDonateStep({ route, navigation }) {
       const donor = donors.find(d => d.user_id === realUser.user_id);
 
       if (!donor) {
-        Alert.alert("Error", "User is not registered as donor");
+        Alert.alert(
+          "Registration Required",
+          "You need to register as a donor before making donations. Please complete your registration first."
+        );
         setLoading(false);
         return;
       }
@@ -225,10 +280,22 @@ export default function MultiDonateStep({ route, navigation }) {
       });
 
       const textRes = await donationRes.text();
-      if (!donationRes.ok) throw new Error(textRes);
+      
+      if (!donationRes.ok) {
+        console.log("Donation API error:", textRes);
+        throw new Error(
+          textRes || `Server error: ${donationRes.status} ${donationRes.statusText}`
+        );
+      }
 
       /* ---------- 5️⃣ FOOD DETAILS ---------- */
-      const donation = JSON.parse(textRes);
+      let donation;
+      try {
+        donation = JSON.parse(textRes);
+      } catch (parseErr) {
+        console.error("Failed to parse donation response:", textRes);
+        throw new Error("Invalid server response. Please try again.");
+      }
 
       await fetch(`${API.API_URL}/food_donations`, {
         method: "POST",
@@ -244,15 +311,29 @@ export default function MultiDonateStep({ route, navigation }) {
 
       /* ---------- 6️⃣ NEXT ---------- */
       Alert.alert(
-        "Accepted",
-        "Item accepted",
+        "✅ Item Accepted",
+        "Your donation has been submitted successfully!",
         [{ text: "OK", onPress: goNextItem }]
       );
 
     } catch (err) {
-      console.error(err);
+      console.error("Donation error:", err);
       setLoading(false);
-      Alert.alert("Error", "Something went wrong");
+      
+      let errorMessage = "An unexpected error occurred";
+      
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      Alert.alert(
+        "Donation Failed",
+        errorMessage.includes('network') || errorMessage.includes('fetch')
+          ? "Network error. Please check your internet connection and try again."
+          : errorMessage
+      );
     }
   };
 

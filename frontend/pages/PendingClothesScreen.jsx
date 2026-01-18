@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
 
@@ -71,8 +72,17 @@ export default function PendingClothesScreen() {
       setErrorMsg("");
       setLoading(true);
 
-      console.log("[FETCH] GET", `${config.API_URL}/donations/clothes/pending`);
-      const res = await axios.get(`${config.API_URL}/donations/clothes/pending`);
+      // ✅ Get association_id from AsyncStorage
+      const userDataStr = await AsyncStorage.getItem("user_data");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const associationId = userData?.association_id;
+
+      // ✅ CLOTHES pending endpoint
+      const url = associationId
+        ? `${config.API_URL}/donations/clothes/pending?association_id=${associationId}`
+        : `${config.API_URL}/donations/clothes/pending`;
+      console.log("[FETCH] GET", url);
+      const res = await axios.get(url);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
