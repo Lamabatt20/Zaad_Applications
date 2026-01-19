@@ -30,7 +30,9 @@ import AcceptedFoodsScreen from './pages/AcceptedFoodsScreen';
 import ApprovedFoodsScreen from './pages/ApprovedFoodsScreen';  
 import DashbordAssociationAll from './pages/DashbordAssociationAll';
 import MultiDonateClothesStep from './pages/MultiDonateClothesStep';
-
+import AssociationHomeClothe from './pages/AssociationHomeClothe';
+import AssociationHomeFood from './pages/AssociationHomeFood';
+import AssociationHomeAll from './pages/AssociationHomeAll';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -67,7 +69,10 @@ export default function App() {
           <Stack.Screen name="DashboardAssociationAll" component={DashbordAssociationAll} />
           <Stack.Screen name="MultiDonateStep" component={MultiDonateStep} />
           <Stack.Screen name="MultiDonateClothesStep" component={MultiDonateClothesStep} />
-
+          <Stack.Screen name="AssociationHomeClothe" component={AssociationHomeClothe} />
+          <Stack.Screen name="AssociationHomeFood" component={AssociationHomeFood} />
+          <Stack.Screen name="AssociationHomeAll" component={AssociationHomeAll} />
+          
           </Stack.Navigator>
       </NavigationContainer>
   );

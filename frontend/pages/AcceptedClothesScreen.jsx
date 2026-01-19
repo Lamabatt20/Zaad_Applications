@@ -16,7 +16,6 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
-import { Picker } from "@react-native-picker/picker";
 
 export default function AcceptedClothesScreen() {
   const [loading, setLoading] = useState(true);
@@ -47,18 +46,18 @@ export default function AcceptedClothesScreen() {
     note: x.note ?? "",
     created_at: x.created_at,
     status: x.status ?? "accepted",
+    delivery_method: x.delivery_method ?? "donor",
+    delivery_status: x.delivery_status ?? "pending",
   });
 
   const fetchData = async () => {
     try {
       setLoading(true);
 
-      // ✅ Get association_id from AsyncStorage
       const userDataStr = await AsyncStorage.getItem("user_data");
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
       const associationId = userData?.association_id;
 
-      // ✅ CLOTHES accepted endpoint
       const url = associationId
         ? `${config.API_URL}/donations/clothes/accepted?association_id=${associationId}`
         : `${config.API_URL}/donations/clothes/accepted`;
@@ -125,6 +124,22 @@ export default function AcceptedClothesScreen() {
       </Text>
       <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
 
+      {/* ✅ Delivery Method & Status */}
+      <Text style={styles.deliveryInfo}>
+        Delivery Method:{" "}
+        {item.delivery_method === "donor"
+          ? "Donor will deliver"
+          : "Association Pickup"}
+      </Text>
+      <Text style={styles.deliveryInfo}>
+        Delivery Status:{" "}
+        {item.delivery_status === "pending"
+          ? "Pending"
+          : item.delivery_status === "on_the_way"
+          ? "On the way"
+          : "Delivered"}
+      </Text>
+
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={styles.detailsBtn}
@@ -160,7 +175,6 @@ export default function AcceptedClothesScreen() {
         <Text style={styles.headerMainTitle}>Accepted Clothes Donations</Text>
       </View>
 
-      {/* Filter (button + modal like Pending) */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
           <Text style={styles.filterBtnTitle}>Filter by Date</Text>
@@ -193,7 +207,7 @@ export default function AcceptedClothesScreen() {
         />
       )}
 
-      {/* Filter Modal (copied from Pending) */}
+      {/* Filter Modal */}
       <Modal
         visible={filterVisible}
         transparent
@@ -203,7 +217,6 @@ export default function AcceptedClothesScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
           <Pressable style={styles.filterModalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Select Date</Text>
-
             <FlatList
               data={allDates}
               keyExtractor={(d) => d}
@@ -226,14 +239,13 @@ export default function AcceptedClothesScreen() {
                 );
               }}
             />
-              <View style={{ height: 12 }} />
-
-              <TouchableOpacity
-                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
+            <View style={{ height: 12 }} />
+            <TouchableOpacity
+              style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+              onPress={() => setFilterVisible(false)}
+            >
+              <Text style={styles.btnText}>Close</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -248,6 +260,20 @@ export default function AcceptedClothesScreen() {
             <Text style={styles.modalTitle}>Donation Details</Text>
             <Text>{selected?.donor_name}</Text>
             <Text>{selected?.note}</Text>
+            <Text>
+              Delivery Method:{" "}
+              {selected?.delivery_method === "donor"
+                ? "Donor will deliver"
+                : "Association Pickup"}
+            </Text>
+            <Text>
+              Delivery Status:{" "}
+              {selected?.delivery_status === "pending"
+                ? "Pending"
+                : selected?.delivery_status === "on_the_way"
+                ? "On the way"
+                : "Delivered"}
+            </Text>
           </View>
         </Pressable>
       </Modal>
@@ -258,39 +284,6 @@ export default function AcceptedClothesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
 
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#8b6f69",
-    textAlign: "center",
-    marginVertical: 10,
-  },
-
-  filterBox: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
-  },
-
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#8b6f69",
-    marginBottom: 6,
-  },
-
-  pickerWrap: {
-    backgroundColor: "#f3f3f3",
-    borderRadius: 10,
-    width: 340,
-    height: 44,
-    justifyContent: "center",
-  },
-
   headerLarge: {
     backgroundColor: "#EBE1D7",
     paddingVertical: 12,
@@ -298,109 +291,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  welcomeLogo: {
-    width: 120,
-    height: 120,
-    marginRight: 10,
-    marginLeft: -20,
-    marginTop: -40,
-  },
-  headerMainTitle: {
-    fontFamily: "Times New Roman",
-    fontSize: 22,
-    marginTop: -55,
-    marginLeft: -40,
-    color: "#8b6f69",
-  },
+  welcomeLogo: { width: 120, height: 120, marginRight: 10, marginLeft: -20, marginTop: -40 },
+  headerMainTitle: { fontFamily: "Times New Roman", fontSize: 22, marginTop: -55, marginLeft: -40, color: "#8b6f69" },
 
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 15,
-    marginBottom: 15,
-    elevation: 3,
-  },
-
+  card: { backgroundColor: "#fff", borderRadius: 14, padding: 15, marginBottom: 15, elevation: 3 },
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 8 },
   title: { fontSize: 16, fontWeight: "700" },
   subtitle: { color: "#555", marginVertical: 4 },
   deadline: { fontSize: 13, color: "#333" },
+  deliveryInfo: { fontSize: 13, color: "#333", marginTop: 2 },
 
   actionButtons: { flexDirection: "row", gap: 10, marginTop: 10 },
   detailsBtn: { backgroundColor: "#8b6f69", padding: 8, borderRadius: 8 },
   approveBtn: { backgroundColor: "#3b82f6", padding: 8, borderRadius: 8 },
   btnText: { color: "#fff", fontWeight: "700" },
 
-  // filter row (from Pending)
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  filterBtn: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    elevation: 2,
-  },
-  filterBtnTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#8b6f69",
-    marginBottom: 4,
-    fontFamily: "Times New Roman",
-  },
-  filterBtnValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
-  clearBtn: {
-    backgroundColor: "#8b6f69",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginBottom: 10 },
+  filterBtn: { flex: 1, backgroundColor: "#fff", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, elevation: 2 },
+  filterBtnTitle: { fontSize: 13, fontWeight: "800", color: "#8b6f69", marginBottom: 4, fontFamily: "Times New Roman" },
+  filterBtnValue: { fontSize: 14, fontWeight: "700", color: "#333" },
+  clearBtn: { backgroundColor: "#8b6f69", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
   clearBtnText: { color: "#fff", fontWeight: "800" },
-  filterModalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    elevation: 10,
-  },
+  filterModalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
   sep: { height: 10 },
-  dateRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#f3f3f3",
-  },
+  dateRow: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#f3f3f3" },
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalCard: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 14,
-    width: "80%",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
-    textAlign: "center",
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
+  modalCard: { backgroundColor: "#fff", padding: 20, borderRadius: 14, width: "80%" },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10, textAlign: "center" },
 });

@@ -1433,7 +1433,81 @@ app.get("/donations/food/accepted/dates", async (req, res) => {
   }
 });
 
+// ===== request_donations  =====
+async function createRequestDonationsTable() {
+  try {
+    const query = `
+      CREATE TABLE IF NOT EXISTS request_donations (
+        request_id SERIAL PRIMARY KEY,
+        association_id INT REFERENCES accounts(account_id ),
+        donation_type VARCHAR(30),
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'ACTIVE'
+      );
+    `;
+    await pool.query(query);
+    console.log("✅ Table request_donations ready");
+  } catch (err) {
+    console.error("❌ Error creating request_donations table:", err);
+  }
+}
+createRequestDonationsTable();
 
+app.post('/api/request-donation', async (req, res) => {
+  try {
+    const { association_id, donation_type, description } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO request_donations 
+       (association_id, donation_type, description) 
+       VALUES ($1, $2, $3) 
+       RETURNING *`,
+      [association_id, donation_type, description]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Request added successfully",
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: "Server Error" });
+  }
+});
+app.get('/assoc/request-donations/:association_id', async (req, res) => {
+  const { association_id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM request_donations WHERE association_id = $1 ORDER BY created_at DESC`,
+      [association_id]
+    );
+
+    res.json({ ok: true, requests: result.rows });
+  } catch (error) {
+    console.error("Error fetching request donations:", error);
+    res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+async function addDeliveryMethodColumn() {
+  try {
+    await db.query(`
+      ALTER TABLE donations
+      ADD COLUMN IF NOT EXISTS delivery_method TEXT DEFAULT 'donor';
+    `);
+
+    console.log("✅ delivery_method column added successfully");
+    process.exit();
+  } catch (err) {
+    console.error("❌ Failed to add delivery_method column", err);
+    process.exit(1);
+  }
+}
+
+addDeliveryMethodColumn();
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });app.post(

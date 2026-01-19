@@ -99,19 +99,19 @@ export default function LoginScreen({ navigation }) {
         if (food && clothes) {
           navigation.reset({
             index: 0,
-            routes: [{ name: 'DashboardAssociationAll', params: userData }],
+            routes: [{ name: 'AssociationHomeAll', params: userData }],
           });
 
         } else if (food) {
           navigation.reset({
             index: 0,
-            routes: [{ name: 'DashboardAssociationFood', params: userData }],
+            routes: [{ name: 'AssociationHomeFood', params: userData }],
           });
 
         } else if (clothes) {
           navigation.reset({
             index: 0,
-            routes: [{ name: 'DashboardAssociationClothes', params: userData }],
+            routes: [{ name: 'AssociationHomeClothe', params: userData }],
           });
 
         } else {

@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
 
-export default function PendingClothesScreen() {
+export default function PendingClothesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -45,6 +45,7 @@ export default function PendingClothesScreen() {
     note: x.note ?? x.description ?? "",
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "pending",
+    delivery_method: x.delivery_method ?? "donor", // ✅ جديد
   });
 
   const getYMD = (created_at) => {
@@ -77,25 +78,21 @@ export default function PendingClothesScreen() {
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
       const associationId = userData?.association_id;
 
-      // ✅ CLOTHES pending endpoint
       const url = associationId
         ? `${config.API_URL}/donations/clothes/pending?association_id=${associationId}`
         : `${config.API_URL}/donations/clothes/pending`;
-      console.log("[FETCH] GET", url);
       const res = await axios.get(url);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
       setPendingDonations(normalized);
 
-      // ✅ لو التاريخ المختار اختفى بعد refresh رجّعه ALL
+      // لو التاريخ المختار اختفى بعد refresh رجّعه ALL
       const datesSet = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
       if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) setSelectedDate("ALL");
     } catch (error) {
-      console.error("[FETCH ERROR]", error?.response?.data || error?.message || error);
-      setErrorMsg(
-        typeof error?.message === "string" ? error.message : "Failed to load pending donations"
-      );
+      console.error(error);
+      setErrorMsg("Failed to load pending donations");
       setPendingDonations([]);
     } finally {
       setLoading(false);
@@ -105,7 +102,6 @@ export default function PendingClothesScreen() {
 
   useEffect(() => {
     fetchPending();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = () => {
@@ -117,11 +113,16 @@ export default function PendingClothesScreen() {
     setPendingDonations((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
   };
 
-  const acceptDonation = async (id) => {
+  const acceptDonation = async (id, deliveryMethod) => {
     try {
       setSubmitting((s) => ({ ...s, [id]: "accept" }));
       removeFromUI(id); // optimistic
       await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`);
+
+      // إذا الجمعية مسؤولة عن التوصيل → انتقلي لشاشة تعيين موظف
+      if (deliveryMethod === "association") {
+        navigation.navigate("AssignDeliveryPerson", { donation_id: id });
+      }
     } catch (e) {
       Alert.alert("Error", "Could not accept. Restoring item.");
       fetchPending();
@@ -137,7 +138,7 @@ export default function PendingClothesScreen() {
   const rejectDonation = async (id) => {
     try {
       setSubmitting((s) => ({ ...s, [id]: "reject" }));
-      removeFromUI(id); // optimistic
+      removeFromUI(id);
       await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`);
     } catch (e) {
       Alert.alert("Error", "Could not reject. Restoring item.");
@@ -151,18 +152,15 @@ export default function PendingClothesScreen() {
     }
   };
 
-  // ✅ all dates
   const allDates = useMemo(() => {
     const set = new Set();
     pendingDonations.forEach((d) => {
       const ymd = getYMD(d.created_at);
       if (ymd) set.add(ymd);
     });
-    // newest first
     return ["ALL", ...Array.from(set).sort().reverse()];
   }, [pendingDonations]);
 
-  // ✅ filtered
   const filteredPending =
     selectedDate === "ALL"
       ? pendingDonations
@@ -188,6 +186,14 @@ export default function PendingClothesScreen() {
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
+          <Text style={styles.deadline}>
+            Delivery:{" "}
+            <Text style={{ fontWeight: "700" }}>
+              {item.delivery_method === "association"
+                ? "Association Pickup"
+                : "Donor will deliver"}
+            </Text>
+          </Text>
         </View>
 
         <View style={styles.statusContainer}>
@@ -197,7 +203,7 @@ export default function PendingClothesScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.btn, styles.acceptBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => acceptDonation(item.donation_id)}
+            onPress={() => acceptDonation(item.donation_id, item.delivery_method)}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Accept</Text>
@@ -250,22 +256,15 @@ export default function PendingClothesScreen() {
         </View>
       )}
 
-      {/* ✅ Filter Button (opens modal) */}
+      {/* Filter Row */}
       <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={styles.filterBtn}
-          onPress={() => setFilterVisible(true)}
-        >
+        <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
           <Text style={styles.filterBtnTitle}>Filter by Date</Text>
           <Text style={styles.filterBtnValue}>{filterLabel}</Text>
         </TouchableOpacity>
 
-        {/* quick clear */}
         {selectedDate !== "ALL" && (
-          <TouchableOpacity
-            style={styles.clearBtn}
-            onPress={() => setSelectedDate("ALL")}
-          >
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}>
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
@@ -285,26 +284,18 @@ export default function PendingClothesScreen() {
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
-              <Text style={{ textAlign: "center", marginTop: 30 }}>
-                No pending donations
-              </Text>
+              <Text style={{ textAlign: "center", marginTop: 30 }}>No pending donations</Text>
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           />
         )}
       </View>
 
-      {/* ✅ Filter Modal */}
-      <Modal
-        visible={filterVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setFilterVisible(false)}
-      >
+      {/* Filter Modal */}
+      <Modal visible={filterVisible} transparent animationType="fade" onRequestClose={() => setFilterVisible(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
           <Pressable style={styles.filterModalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Select Date</Text>
-
             <FlatList
               data={allDates}
               keyExtractor={(d) => d}
@@ -327,9 +318,7 @@ export default function PendingClothesScreen() {
                 );
               }}
             />
-
             <View style={{ height: 12 }} />
-
             <TouchableOpacity
               style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
               onPress={() => setFilterVisible(false)}
@@ -340,13 +329,8 @@ export default function PendingClothesScreen() {
         </Pressable>
       </Modal>
 
-      {/* ✅ Details Modal */}
-      <Modal
-        visible={detailsVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDetailsVisible(false)}
-      >
+      {/* Details Modal */}
+      <Modal visible={detailsVisible} transparent animationType="fade" onRequestClose={() => setDetailsVisible(false)}>
         <Pressable
           style={styles.modalOverlay}
           onPress={() => {
@@ -364,10 +348,16 @@ export default function PendingClothesScreen() {
             )}
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
-            <Text style={styles.modalDesc}>
-              {selected?.note?.trim() ? selected.note : "No description"}
-            </Text>
+            <Text style={styles.modalDesc}>{selected?.note?.trim() ? selected.note : "No description"}</Text>
             <Text style={styles.modalDate}>Date: {getYMD(selected?.created_at) || "-"}</Text>
+            <Text style={styles.modalDate}>
+              Delivery:{" "}
+              <Text style={{ fontWeight: "700" }}>
+                {selected?.delivery_method === "association"
+                  ? "Association Pickup"
+                  : "Donor will deliver"}
+              </Text>
+            </Text>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -376,7 +366,7 @@ export default function PendingClothesScreen() {
                   const id = selected?.donation_id;
                   setDetailsVisible(false);
                   setSelected(null);
-                  if (id) acceptDonation(id);
+                  if (id) acceptDonation(id, selected.delivery_method);
                 }}
               >
                 <Text style={styles.btnText}>Accept</Text>
@@ -411,9 +401,9 @@ export default function PendingClothesScreen() {
   );
 }
 
+// ✅ Styles يبقوا نفس ما عندك
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
-
   headerLarge: {
     backgroundColor: "#EBE1D7",
     paddingVertical: 16,
@@ -421,151 +411,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  welcomeLogo: {
-    width: 135,
-    height: 135,
-    marginRight: 10,
-    marginLeft: -35,
-    marginTop: -50,
-  },
+  welcomeLogo: { width: 135, height: 135, marginRight: 10, marginLeft: -35, marginTop: -50 },
   headerTextContainer: { flex: 1 },
-  headerMainTitle: {
-    fontFamily: "Times New Roman",
-    fontSize: 23,
-    marginTop: -50,
-    marginLeft: -50,
-    color: "#8b6f69",
-  },
-
+  headerMainTitle: { fontFamily: "Times New Roman", fontSize: 23, marginTop: -50, marginLeft: -50, color: "#8b6f69" },
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
-
-  // ✅ filter row
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  filterBtn: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    elevation: 2,
-  },
-  filterBtnTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#8b6f69",
-    marginBottom: 4,
-    fontFamily: "Times New Roman",
-  },
-  filterBtnValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
-  clearBtn: {
-    backgroundColor: "#8b6f69",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginBottom: 10 },
+  filterBtn: { flex: 1, backgroundColor: "#fff", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, elevation: 2 },
+  filterBtnTitle: { fontSize: 13, fontWeight: "800", color: "#8b6f69", marginBottom: 4, fontFamily: "Times New Roman" },
+  filterBtnValue: { fontSize: 14, fontWeight: "700", color: "#333" },
+  clearBtn: { backgroundColor: "#8b6f69", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
   clearBtnText: { color: "#fff", fontWeight: "800" },
-
   content: { flex: 1, backgroundColor: "#EBE1D7" },
-
-  card: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 15,
-    marginBottom: 20,
-    elevation: 3,
-  },
+  card: { backgroundColor: "#fff", padding: 15, borderRadius: 15, marginBottom: 20, elevation: 3 },
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
-
   statusContainer: { position: "absolute", right: 10, top: 10 },
-  statusPending: {
-    backgroundColor: "#6ea8fe",
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    fontWeight: "700",
-  },
-
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 15,
-  },
-
+  statusPending: { backgroundColor: "#6ea8fe", color: "#fff", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: "700" },
+  actionButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 15 },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
   acceptBtn: { backgroundColor: "#4CAF50" },
   rejectBtn: { backgroundColor: "#f44336" },
   detailsBtn: { backgroundColor: "#A27571" },
   closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
-
-  // ✅ shared modal overlay
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-
-  // ✅ filter modal
-  filterModalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    elevation: 10,
-  },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", padding: 20 },
+  filterModalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
   sep: { height: 10 },
-  dateRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#f3f3f3",
-  },
+  dateRow: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#f3f3f3" },
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
-
-  // ✅ details modal
-  modalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    elevation: 10,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#8b6f69",
-    marginBottom: 12,
-    textAlign: "center",
-    fontFamily: "Times New Roman",
-  },
-  modalImage: {
-    width: "100%",
-    height: 180,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: "#f2f2f2",
-  },
+  modalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#8b6f69", marginBottom: 12, textAlign: "center", fontFamily: "Times New Roman" },
+  modalImage: { width: "100%", height: 180, borderRadius: 12, marginBottom: 12, backgroundColor: "#f2f2f2" },
   modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
   modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
   modalDate: { fontSize: 13, color: "#666", marginBottom: 14 },
