@@ -72,7 +72,7 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      // ✅ تحويل القيم إلى Boolean حقيقي
+      
       const food = res.data.food === true || res.data.food === 'true' || res.data.food === 1;
       const clothes = res.data.clothes === true || res.data.clothes === 'true' || res.data.clothes === 1;
 
@@ -124,7 +124,13 @@ export default function LoginScreen({ navigation }) {
           routes: [{ name: 'ChooseDonationType', params: userData }],
         });
 
-      } else {
+      } else if (userData.role === 'admin') {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'AdminDashboard', params: userData }],
+        });
+      }
+       else {
         setGeneralError('Unknown role');
       }
 

@@ -33,6 +33,11 @@ import MultiDonateClothesStep from './pages/MultiDonateClothesStep';
 import AssociationHomeClothe from './pages/AssociationHomeClothe';
 import AssociationHomeFood from './pages/AssociationHomeFood';
 import AssociationHomeAll from './pages/AssociationHomeAll';
+import AdminDashboard from './pages/Admin Dashboard';
+import PendingAssociations from './pages/PendingAssociations';
+import WaitingApproval from './pages/WaitingForApprovalScreen';
+import VerifyPhone from './pages/VerifyPhone';
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -73,6 +78,11 @@ export default function App() {
           <Stack.Screen name="AssociationHomeFood" component={AssociationHomeFood} />
           <Stack.Screen name="AssociationHomeAll" component={AssociationHomeAll} />
           
+          <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+          <Stack.Screen name="PendingAssociations" component={PendingAssociations} />
+          <Stack.Screen name="WaitingApproval" component={WaitingApproval} />
+          <Stack.Screen name="VerifyPhone" component={VerifyPhone} />
+
           </Stack.Navigator>
       </NavigationContainer>
   );

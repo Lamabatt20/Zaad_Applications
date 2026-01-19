@@ -11,8 +11,10 @@ const dayjs = require("dayjs");
 const minMax = require("dayjs/plugin/minMax");
 const axios = require("axios");
 const FormData = require("form-data");
+const nodemailer = require("nodemailer");
 
 dayjs.extend(minMax);
+
 
 
 const app = express();
@@ -137,15 +139,26 @@ async function callAIService(url, imagePath) {
   }
 }
 
-const AI_PACKAGED_URL = "http://localhost:8001/predict-packaged-cooked";
-const AI_MOLD_URL = "http://localhost:8002/predict-mold";
-const AI_DAMAGE_URL = "http://localhost:8003/predict-damage";
 
 // New AI Services URLs
 const AI_NEW_COOKED_URL = "http://localhost:8004/predict-cooked";
 const AI_NEW_CAN_DAMAGE_URL = "http://localhost:8005/predict-can-damage";
 
+async function addDeliveryMethodColumn() {
+  try {
+    await pool.query(`
+      ALTER TABLE donations
+      ADD COLUMN IF NOT EXISTS delivery_method TEXT DEFAULT 'donor';
+    `);
 
+    console.log("✅ delivery_method column added successfully");
+  } catch (err) {
+    console.error("❌ Failed to add delivery_method column", err);
+  }
+}
+
+
+addDeliveryMethodColumn();
 async function ensureAddressColumn() {
   try {
     const alterQuery = `
@@ -158,10 +171,40 @@ async function ensureAddressColumn() {
     console.error('❌ Error adding address column:', error);
   }
 }
+async function ensureVerificationColumns() {
+  try {
+    const alterQuery = `
+      ALTER TABLE accounts
+      ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS verification_code VARCHAR(6),
+      ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ Verification columns verified/added successfully in accounts table.');
+  } catch (error) {
+    console.error('❌ Error adding verification columns:', error);
+  }
+}
+async function ensureEmailVerifiedColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE accounts
+      ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ email_verified column verified/added successfully.');
+  } catch (error) {
+    console.error('❌ Error adding email_verified column:', error);
+  }
+}
+
+ensureEmailVerifiedColumn();
 
 
 
 
+ensureVerificationColumns();
 ensureAddressColumn();
 async function ensureAssociationColumns() {
   try {
@@ -234,11 +277,101 @@ async function ensureDonationAssociationColumn() {
     console.error('❌ Error adding association_id column to donations:', error);
   }
 }
+async function ensureAdminAccount() {
+  try {
+    // 1️⃣ Check if admin already exists
+    const check = await pool.query(
+      `SELECT * FROM accounts WHERE username = $1`,
+      ['zaad']
+    );
+
+    if (check.rows.length > 0) {
+      console.log('ℹ️ Admin account (zaad) already exists.');
+      return;
+    }
+
+    // 2️⃣ Create account
+    const hashedPassword = await bcrypt.hash("Zaad@1234", 10);
+
+    const accountRes = await pool.query(`
+      INSERT INTO accounts
+      (
+        username,
+        password_hash,
+        role,
+        full_name,
+        email,
+        phone,
+        address,
+        phone_verified,
+        is_approved
+      )
+      VALUES ($1,$2,'admin',$3,$4,$5,$6,true,true)
+      RETURNING account_id
+    `, [
+      'zaad',
+      hashedPassword,
+      'Zaad System Admin',
+      'admin@zaad.ps',
+      '0590000000',
+      'Zaad Headquarters'
+    ]);
+
+    const accountId = accountRes.rows[0].account_id;
+
+    // 3️⃣ Create user
+    const userRes = await pool.query(
+      `INSERT INTO users (account_id)
+       VALUES ($1)
+       RETURNING user_id`,
+      [accountId]
+    );
+
+    const userId = userRes.rows[0].user_id;
+
+    // 4️⃣ Create admin (same logic as /admins endpoint)
+    await pool.query(
+      `INSERT INTO admins (user_id, privileges)
+       VALUES ($1, $2)`,
+      [
+        userId,
+        {
+          approve_associations: true,
+          manage_users: true,
+          view_reports: true
+        }
+      ]
+    );
+
+    console.log('✅ Admin account (zaad) created successfully.');
+
+  } catch (error) {
+    console.error('❌ Error creating admin account:', error);
+  }
+}
 
 
+ensureAdminAccount();
  ensureDonationAssociationColumn();
 dropIsPerishableColumn();
 ensureDonationAddressColumn();
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.ADMIN_EMAIL,
+    pass: process.env.ADMIN_EMAIL_PASSWORD,
+  },
+});
+
+async function sendEmail(to, subject, html) {
+  return transporter.sendMail({
+    from: `"Zaad Admin" <${process.env.ADMIN_EMAIL}>`,
+    to,
+    subject,
+    html,
+  });
+}
+
 
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -283,28 +416,155 @@ app.get('/accounts/:id', async (req, res) => {
 app.post('/accounts', async (req, res) => {
   const { username, password, role, email, phone, full_name, address } = req.body;
 
-  if (!username || !password || !role) {
-    return res.status(400).json({ success: false, message: "Missing required fields" });
+  if (!username || !password || !role || !phone) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required fields"
+    });
   }
 
   try {
+    // 1️⃣ Check username or phone already exists
+    const exists = await pool.query(
+      `SELECT 1 FROM accounts WHERE username=$1 OR phone=$2`,
+      [username, phone]
+    );
+
+    if (exists.rows.length > 0) {
+      return res.json({
+        success: false,
+        message: "Username or phone already exists"
+      });
+    }
+
+    // 2️⃣ Generate verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 3️⃣ Approval logic
+    const isApproved = role === 'donor'; // donor approved مباشرة
+    const phoneVerified = false;
+
+    // 4️⃣ Insert account
     const result = await pool.query(
-      `INSERT INTO accounts (username, password_hash, role, email, phone, full_name, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [username, hashedPassword, role, email, phone, full_name, address]
+      `
+      INSERT INTO accounts (
+  username,
+  password_hash,
+  role,
+  email,
+  phone,
+  full_name,
+  address,
+  phone_verified,
+  email_verified,
+  is_approved,
+  verification_code,
+  verification_expires
+)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$10,$11)
+
+      RETURNING account_id, phone
+      `,
+          [
+      username,
+      hashedPassword,
+      role,
+      email,
+      phone,
+      full_name,
+      address,
+      phoneVerified,
+      isApproved,
+      verificationCode,
+      expiresAt
+    ]
+
     );
+
+   await sendEmail(
+  email,
+  "رمز التحقق – منصة زاد",
+  `
+  <div style="font-family: Arial; direction: rtl">
+    <h2>مرحباً ${full_name || username} 👋</h2>
+    <p>رمز التحقق الخاص بك هو:</p>
+    <h1 style="letter-spacing: 4px">${verificationCode}</h1>
+    <p>الرمز صالح لمدة <b>5 دقائق</b>.</p>
+    <br/>
+    <p>فريق زاد 🤍</p>
+  </div>
+  `
+);
+
 
     res.json({
       success: true,
-      account: result.rows[0]
+      message: "Account created. Verification code sent.",
+      account_id: result.rows[0].account_id,
+      next_step: "verify_phone"
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+});
+app.post('/accounts/verify-email', async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.json({
+      success: false,
+      message: "Missing email or code"
+    });
+  }
+
+  try {
+    const cleanCode = code.toString().trim();
+
+    const result = await pool.query(
+      `
+      SELECT account_id
+      FROM accounts
+      WHERE email = $1
+        AND verification_code = $2
+        AND verification_expires > NOW()
+      `,
+      [email, cleanCode]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: "Invalid or expired code"
+      });
+    }
+
+    await pool.query(
+      `
+      UPDATE accounts
+      SET email_verified = true,
+          verification_code = NULL,
+          verification_expires = NULL
+      WHERE email = $1
+      `,
+      [email]
+    );
+
+    res.json({
+      success: true,
+      message: "Email verified successfully"
+    });
+
+  } catch (err) {
+    console.error("VERIFY EMAIL ERROR:", err);
+    res.status(500).json({ success: false });
   }
 });
 
@@ -383,15 +643,12 @@ app.put('/accounts/user/:account_id', async (req, res) => {
 
 
 
-app.post('/login', async (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    // =====================
-    // 1️⃣ Get account
-    // =====================
     const accRes = await pool.query(
-      'SELECT * FROM accounts WHERE username = $1',
+      "SELECT * FROM accounts WHERE username=$1",
       [username]
     );
 
@@ -400,55 +657,73 @@ app.post('/login', async (req, res) => {
     }
 
     const account = accRes.rows[0];
-    const match = await bcrypt.compare(password, account.password_hash);
 
+    const match = await bcrypt.compare(password, account.password_hash);
     if (!match) {
       return res.json({ success: false, passwordIncorrect: true });
     }
 
-    // =====================
-    // 2️⃣ Base response
-    // =====================
-    const responseData = {
+    if (!account.email_verified) {
+      return res.json({
+        success: false,
+        notVerified: true,
+        message: "Account not verified",
+      });
+    }
+
+    if (account.role === "association" && !account.is_approved) {
+      return res.json({
+        success: false,
+        notApproved: true,
+        message: "Waiting admin approval",
+      });
+    }
+
+    // ==========================
+    // ✅ Association extra data
+    // ==========================
+    let food = false;
+    let clothes = false;
+    let association_id = null;
+
+    if (account.role === "association") {
+      const assocRes = await pool.query(
+        `
+        SELECT a.association_id, a.food, a.clothes
+        FROM associations a
+        JOIN users u ON a.user_id = u.user_id
+        WHERE u.account_id = $1
+        `,
+        [account.account_id]
+      );
+
+      if (assocRes.rows.length > 0) {
+        food = assocRes.rows[0].food;
+        clothes = assocRes.rows[0].clothes;
+        association_id = assocRes.rows[0].association_id;
+      }
+    }
+
+    // ==========================
+    // ✅ Final response
+    // ==========================
+    res.json({
       success: true,
       role: account.role,
       user_id: account.account_id,
       username: account.username,
       email: account.email,
       full_name: account.full_name,
-      address: account.address,
       phone: account.phone,
-      food: false,
-      clothes: false,
-    };
-
-    // =====================
-    // 3️⃣ Association logic (CORRECT JOIN)
-    // =====================
-    if (account.role === 'association') {
-      const assocRes = await pool.query(`
-        SELECT a.food, a.clothes, a.association_id
-        FROM associations a
-        JOIN users u ON u.user_id = a.user_id
-        WHERE u.account_id = $1
-        LIMIT 1
-      `, [account.account_id]);
-
-      if (assocRes.rows.length > 0) {
-        responseData.food = assocRes.rows[0].food === true;
-        responseData.clothes = assocRes.rows[0].clothes === true;
-        responseData.association_id = assocRes.rows[0].association_id;
-      }
-    }
-
-    return res.json(responseData);
+      address: account.address,
+      food,
+      clothes,
+      association_id,
+    });
 
   } catch (err) {
-    console.error('LOGIN ERROR:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error',
-    });
+    console.error(err);
+    res.status(500).json({ success: false });
   }
 });
 
@@ -1433,6 +1708,74 @@ app.get("/donations/food/accepted/dates", async (req, res) => {
   }
 });
 
+app.post('/admin/approve-association/:account_id', async (req, res) => {
+  const { account_id } = req.params;
+
+  try {
+    // 1️⃣ Approve association + get email
+    const q = await pool.query(`
+      UPDATE accounts
+      SET is_approved = true
+      WHERE account_id = $1
+        AND role = 'association'
+        AND email_verified = true
+    `, [account_id]);
+
+    if (q.rowCount === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Association not found or phone not verified"
+      });
+    }
+
+    const { full_name, email } = q.rows[0];
+
+    // 2️⃣ Send approval email
+    await sendEmail(
+      email,
+      "تمت الموافقة على حساب جمعيتكم – منصة زاد",
+      `
+        <div style="font-family: Arial; direction: rtl">
+          <h2>مرحباً ${full_name} 🌸</h2>
+          <p>
+            يسعدنا إعلامكم بأنه تمت الموافقة على حساب جمعيتكم في منصة <b>زاد</b>.
+          </p>
+          <p>
+            يمكنكم الآن تسجيل الدخول وبدء استقبال التبرعات.
+          </p>
+          <br/>
+          <p>مع تحيات فريق زاد 🤍</p>
+        </div>
+      `
+    );
+
+    // 3️⃣ Response
+    res.json({
+      success: true,
+      message: "Association approved and email sent successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
+});
+
+app.get('/admin/pending-associations', async (req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT account_id, full_name, email, phone
+      FROM accounts
+      WHERE role = 'association'
+        AND phone_verified = true
+        AND is_approved = false
+    `);
+
+    res.json(q.rows);
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+});
 // ===== request_donations  =====
 async function createRequestDonationsTable() {
   try {
@@ -1453,6 +1796,7 @@ async function createRequestDonationsTable() {
   }
 }
 createRequestDonationsTable();
+
 
 app.post('/api/request-donation', async (req, res) => {
   try {
@@ -1492,278 +1836,7 @@ app.get('/assoc/request-donations/:association_id', async (req, res) => {
     res.status(500).json({ ok: false, error: "Server error" });
   }
 });
-async function addDeliveryMethodColumn() {
-  try {
-    await db.query(`
-      ALTER TABLE donations
-      ADD COLUMN IF NOT EXISTS delivery_method TEXT DEFAULT 'donor';
-    `);
 
-    console.log("✅ delivery_method column added successfully");
-    process.exit();
-  } catch (err) {
-    console.error("❌ Failed to add delivery_method column", err);
-    process.exit(1);
-  }
-}
-
-addDeliveryMethodColumn();
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-});app.post(
-  "/ai/check-expiry",
-  upload.array("images", 5),
-  async (req, res) => {
-    try {
-      if (!req.files || req.files.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Images are required"
-        });
-      }
-
-      let categoryVotes = {};
-      let expiryDates = [];
-      let detectedTexts = [];
-
-      for (const file of req.files) {
-
-        /* =========================
-           0️⃣ PACKAGED vs COOKED (NEW)
-        ========================= */
-        console.log(`\n[IMAGE] Processing: ${file.originalname}`);
-        console.log(`[CHECK-0] Checking if food is packaged or cooked...`);
-        const packagedResult = await callAIService(
-          AI_PACKAGED_URL,
-          file.path
-        );
-        console.log(`[PACKAGED-RESULT]`, {
-          status: packagedResult.status,
-          confidence: packagedResult.confidence.toFixed(2)
-        });
-
-        if (packagedResult.status === "cooked") {
-          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
-          fs.unlinkSync(file.path);
-          return res.json({
-            success: false,
-            rejected: true,
-            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
-            confidence: packagedResult.confidence
-          });
-        }
-
-        /* =========================
-           1️⃣ OCR – extract text
-        ========================= */
-        console.log(`[OCR] Extracting text from image...`);
-        const [ocrResult] = await visionClient.textDetection(file.path);
-        const detectedText =
-          ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
-        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
-
-        detectedTexts.push(detectedText);
-
-        /* =========================
-           2️⃣ CATEGORY FROM TEXT
-        ========================= */
-        let foodCategory = null;
-
-        if (
-          detectedText.includes("bread") ||
-          detectedText.includes("toast") ||
-          detectedText.includes("خبز") ||
-          detectedText.includes("توست")
-        ) foodCategory = "خبز ومخبوزات";
-        else if (
-          detectedText.includes("flour") ||
-          detectedText.includes("wheat")
-        ) foodCategory = "طحين وحبوب";
-        else if (detectedText.includes("rice")) foodCategory = "رز";
-        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
-        else if (detectedText.includes("sugar")) foodCategory = "سكر";
-        else if (
-          detectedText.includes("bean") ||
-          detectedText.includes("lentil") ||
-          detectedText.includes("chickpea")
-        ) foodCategory = "بقوليات";
-        else if (detectedText.includes("oil")) foodCategory = "زيوت";
-        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
-
-        /* =========================
-           3️⃣ CATEGORY FROM IMAGE (Fallback)
-        ========================= */
-        if (!foodCategory || !hasUsefulText(detectedText)) {
-          const [labelResult] = await visionClient.labelDetection(file.path);
-          const labels =
-            labelResult.labelAnnotations?.map(l =>
-              l.description.toLowerCase()
-            ) || [];
-
-          for (const label of labels) {
-            const mapped = mapVisionLabelToCategory(label);
-            if (mapped) {
-              foodCategory = mapped;
-              break;
-            }
-          }
-        }
-
-        if (!foodCategory) foodCategory = "مواد غذائية";
-
-        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
-
-        /* =========================
-           3.5️⃣ CONDITION CHECK (NEW)
-        ========================= */
-        console.log(`[CHECK-1] Checking food condition...`);
-        if (foodCategory === "خبز ومخبوزات") {
-          console.log(`[MOLD] Checking for mold (bread category)...`);
-          const moldResult = await callAIService(
-            AI_MOLD_URL,
-            file.path
-          );
-          console.log(`[MOLD-RESULT]`, {
-            mold: moldResult.mold,
-            confidence: moldResult.confidence.toFixed(2)
-          });
-
-          if (moldResult.mold) {
-            console.log(`[REJECTED] Mold detected - REJECTED`);
-            fs.unlinkSync(file.path);
-            return res.json({
-              success: false,
-              rejected: true,
-              reason: "❌ المنتج متعفّن",
-              confidence: moldResult.confidence
-            });
-          }
-        } else {
-          console.log(`[DAMAGE] Checking for damage...`);
-          const damageResult = await callAIService(
-            AI_DAMAGE_URL,
-            file.path
-          );
-          console.log(`[DAMAGE-RESULT]`, {
-            status: damageResult.status,
-            confidence: damageResult.confidence.toFixed(2)
-          });
-
-          if (damageResult.status === "damaged") {
-            console.log(`[REJECTED] Damage detected - REJECTED`);
-            fs.unlinkSync(file.path);
-            return res.json({
-              success: false,
-              rejected: true,
-              reason: "❌ المنتج تالف أو متضرر",
-              confidence: damageResult.confidence
-            });
-          }
-        }
-
-        categoryVotes[foodCategory] =
-          (categoryVotes[foodCategory] || 0) + 1;
-
-        /* =========================
-           4️⃣ EXPIRY DATE DETECTION (SAFE)
-        ========================= */
-        console.log(`[EXPIRY] Extracting expiry date from text...`);
-
-        let match = null;
-
-        const expDateRegex =
-          /(exp(?:iry)?\.?\s*date|ex\.?\s*date|exp|expiry|صالح لغاية)\s*[:\-]?\s*(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
-
-        const expMatch = detectedText.match(expDateRegex);
-        if (expMatch) match = expMatch[2];
-
-        if (!match) {
-          const generalDateRegex =
-            /(\d{8}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{1,2}\s(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s\d{4})/i;
-          const generalMatch = detectedText.match(generalDateRegex);
-          if (generalMatch) match = generalMatch[1];
-        }
-
-        if (match) {
-          let parsedDate = null;
-
-          if (/^\d{8}$/.test(match)) {
-            const day = match.substring(0, 2);
-            const month = match.substring(2, 4);
-            const year = match.substring(4, 8);
-            parsedDate = dayjs(`${year}-${month}-${day}`, "YYYY-MM-DD", true);
-          } else {
-            parsedDate = dayjs(match, [
-              "D/M/YYYY",
-              "DD/MM/YYYY",
-              "D-M-YYYY",
-              "DD-MM-YYYY",
-              "D.M.YYYY",
-              "DD.MM.YYYY",
-              "D MMM YYYY",
-              "DD MMM YYYY",
-              "D/M/YY",
-              "DD/MM/YY",
-              "D-M-YY",
-              "DD-MM-YY",
-              "MM/YYYY"
-            ], true);
-          }
-
-          if (parsedDate && parsedDate.isValid()) {
-            expiryDates.push(parsedDate);
-            console.log(`[EXPIRY-FOUND] Date: ${parsedDate.format("YYYY-MM-DD")}`);
-          }
-        }
-
-        fs.unlinkSync(file.path);
-      }
-
-      /* =========================
-         5️⃣ FINAL DECISION
-      ========================= */
-      console.log(`\n========== FINAL RESULT ==========`);
-      console.log(`[CATEGORY] Food: ${foodCategory}`);
-      const expiryDate =
-        expiryDates.length > 0
-          ? expiryDates.reduce((latest, current) =>
-              current.isAfter(latest) ? current : latest
-            )
-          : null;
-      console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
-
-      const expired =
-        expiryDate ? expiryDate.isBefore(dayjs()) : false;
-
-      let expiryConfidence = expiryDates.length > 0 ? "high" : "low";
-
-      console.log(`[STATUS] ${expired ? "EXPIRED" : "VALID"} (Confidence: ${expiryConfidence})`);
-      console.log(`==================================\n`);
-
-      res.json({
-        success: true,
-        food_category: foodCategory,
-        expiry_date: expiryDate
-          ? expiryDate.format("YYYY-MM-DD")
-          : null,
-        expired,
-        expiry_confidence: expiryConfidence,
-        need_clear_image: expiryConfidence !== "high",
-        result:
-          expiryConfidence !== "high"
-            ? "❗ تاريخ غير واضح – يرجى إعادة التصوير"
-            : expired
-            ? "❌ منتهي"
-            : "✅ صالح",
-        detected_texts: detectedTexts
-      });
-
-    } catch (error) {
-      console.error("AI Expiry Error:", error);
-      res.status(500).json({
-        success: false,
-        message: "AI processing failed"
-      });
-    }
-  }
-);
+});

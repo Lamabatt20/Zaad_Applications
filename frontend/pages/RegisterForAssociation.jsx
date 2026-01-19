@@ -175,8 +175,11 @@ export default function RegisterForAssociation({ navigation }) {
       setFood(false);
       setClothes(false);
       setErrors({});
-      setTimeout(() => navigation.navigate('Login'), 1000);
-
+      navigation.replace("VerifyPhone", {
+      phone,
+      role: "association",
+    });
+    
     } catch (error) {
       setErrors({ general: error.response?.data?.message || error.message || 'Server error. Please try again.' });
     } finally {

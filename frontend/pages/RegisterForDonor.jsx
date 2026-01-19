@@ -52,9 +52,9 @@ export default function RegisterForDonor({ navigation }) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email) newErrors.email = 'Email is required';
     else if (!emailRegex.test(email)) newErrors.email = 'Invalid email format';
-    const phoneRegex = /^\d{8,15}$/;
+   const phoneRegex = /^\+?\d{8,20}$/;
     if (!phone) newErrors.phone = 'Phone is required';
-    else if (!phoneRegex.test(phone)) newErrors.phone = 'Phone must be 8-15 digits';
+    else if (!phoneRegex.test(phone)) newErrors.phone = 'Phone must be 8-20 digits';
     if (!address) newErrors.address = 'Address is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -78,7 +78,7 @@ export default function RegisterForDonor({ navigation }) {
 
       if (!accountRes.data.success) throw new Error(accountRes.data.message || 'Failed to create account');
 
-      const accountId = accountRes.data.account.account_id;
+      const accountId = accountRes.data.account_id;
 
       const userRes = await API.post('/users', { account_id: accountId });
       if (!userRes.data.success || !userRes.data.user) throw new Error(userRes.data.message || 'Failed to create user');
@@ -97,7 +97,10 @@ export default function RegisterForDonor({ navigation }) {
       setEmail('');
       setErrors({});
 
-      setTimeout(() => navigation.navigate('Login'), 1000);
+      navigation.replace("VerifyPhone", {
+      phone,
+      role: "donor",
+    });
     } catch (error) {
       setErrors({ general: error.response?.data?.message || error.message || 'Server error. Please try again.' });
     } finally {
