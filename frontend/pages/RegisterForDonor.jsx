@@ -98,7 +98,7 @@ export default function RegisterForDonor({ navigation }) {
       setErrors({});
 
       navigation.replace("VerifyPhone", {
-      phone,
+      email,
       role: "donor",
     });
     } catch (error) {

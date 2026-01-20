@@ -14,10 +14,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function VerifyPhone({ route, navigation }) {
   const { email, role } = route.params;
+
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
 
+  /* ======================
+     LOAD DARK MODE
+  ====================== */
   useEffect(() => {
     const loadTheme = async () => {
       const saved = await AsyncStorage.getItem("dark_mode");
@@ -26,23 +32,43 @@ export default function VerifyPhone({ route, navigation }) {
     loadTheme();
   }, []);
 
+  /* ======================
+     COOLDOWN TIMER
+  ====================== */
+  useEffect(() => {
+    if (cooldown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCooldown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  /* ======================
+     THEME COLORS
+  ====================== */
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const textColor = darkMode ? "#fff" : "#2f2f2f";
   const inputBg = darkMode ? "#2a2a2a" : "#fff";
   const buttonBg = darkMode ? "#ed985f" : "#A27571";
+  const resendColor = cooldown > 0 ? "#999" : "#17477b";
 
+  /* ======================
+     VERIFY CODE
+  ====================== */
   const verify = async () => {
-    if (!code) return Alert.alert("Error", "Enter verification code");
+    if (!code) {
+      Alert.alert("Error", "Enter verification code");
+      return;
+    }
 
     try {
       setLoading(true);
 
       const res = await axios.post(
         `${config.API_URL}/accounts/verify-email`,
-        {
-          email,
-          code,
-        }
+        { email, code }
       );
 
       if (!res.data.success) {
@@ -50,11 +76,14 @@ export default function VerifyPhone({ route, navigation }) {
         return;
       }
 
+      Alert.alert("Success", "Email verified successfully");
+
       if (role === "donor") {
         navigation.replace("Login");
       } else {
         navigation.replace("WaitingApproval");
       }
+
     } catch (e) {
       console.error(e);
       Alert.alert("Error", "Verification failed");
@@ -63,6 +92,37 @@ export default function VerifyPhone({ route, navigation }) {
     }
   };
 
+  /* ======================
+     RESEND CODE
+  ====================== */
+  const resendCode = async () => {
+    try {
+      setResending(true);
+
+      const res = await axios.post(
+        `${config.API_URL}/accounts/resend-email-code`,
+        { email }
+      );
+
+      if (!res.data.success) {
+        Alert.alert("Error", res.data.message || "Failed to resend code");
+        return;
+      }
+
+      Alert.alert("Success", "Verification code sent again");
+      setCooldown(60); // 60 seconds lock
+
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to resend code");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  /* ======================
+     UI
+  ====================== */
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <Image
@@ -104,16 +164,35 @@ export default function VerifyPhone({ route, navigation }) {
             {loading ? "Verifying..." : "Verify"}
           </Text>
         </TouchableOpacity>
+
+        {/* ===== RESEND CODE ===== */}
+        <TouchableOpacity
+          onPress={resendCode}
+          disabled={resending || cooldown > 0}
+          style={{ marginTop: 18 }}
+        >
+          <Text style={{ color: resendColor, textAlign: "center", fontSize: 14 }}>
+            {cooldown > 0
+              ? `Resend code in ${cooldown}s`
+              : resending
+              ? "Sending..."
+              : "Resend verification code"}
+          </Text>
+        </TouchableOpacity>
+
       </View>
     </View>
   );
 }
 
+/* ======================
+   STYLES
+====================== */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 30,
-    paddingTop: 70, // يرفع اللوجو والمحتوى بدون لصق
+    paddingTop: 70,
   },
   logo: {
     width: 130,
@@ -125,14 +204,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 18,
     padding: 25,
-
-    // Shadow iOS
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
-
-    // Shadow Android
     elevation: 5,
   },
   title: {

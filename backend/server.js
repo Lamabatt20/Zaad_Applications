@@ -1783,18 +1783,28 @@ app.post('/admin/approve-association/:account_id', async (req, res) => {
 app.get('/admin/pending-associations', async (req, res) => {
   try {
     const q = await pool.query(`
-      SELECT account_id, full_name, email, phone
-      FROM accounts
-      WHERE role = 'association'
-        AND phone_verified = true
-        AND is_approved = false
+      SELECT 
+        acc.account_id,
+        acc.full_name,
+        acc.email,
+        acc.phone,
+        a.association_authentication
+      FROM accounts acc
+      JOIN users u ON u.account_id = acc.account_id
+      JOIN associations a ON a.user_id = u.user_id
+      WHERE acc.role = 'association'
+        AND acc.email_verified = true
+        AND acc.is_approved = false
     `);
 
     res.json(q.rows);
   } catch (e) {
+    console.error(e);
     res.status(500).json({ success: false });
   }
 });
+
+
 // ===== request_donations  =====
 async function createRequestDonationsTable() {
   try {
@@ -1868,6 +1878,61 @@ app.get('/assoc/request-donations/:association_id', async (req, res) => {
     res.status(500).json({ ok: false, success: false, error: "Server error" });
   }
 });
+app.post('/accounts/resend-email-code', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.json({ success: false, message: "Email is required" });
+  }
+
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+
+    const userRes = await pool.query(
+      `SELECT full_name FROM accounts WHERE LOWER(email) = $1`,
+      [cleanEmail]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.json({ success: false, message: "Account not found" });
+    }
+
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await pool.query(
+      `
+      UPDATE accounts
+      SET verification_code = $1,
+          verification_expires = $2
+      WHERE LOWER(email) = $3
+      `,
+      [verificationCode, expiresAt, cleanEmail]
+    );
+
+    await sendEmail(
+      cleanEmail,
+      "رمز التحقق الجديد – منصة زاد",
+      `
+      <div style="font-family: Arial; direction: rtl">
+        <h2>مرحباً ${userRes.rows[0].full_name || ''} 👋</h2>
+        <p>رمز التحقق الجديد هو:</p>
+        <h1 style="letter-spacing: 4px">${verificationCode}</h1>
+        <p>الرمز صالح لمدة <b>5 دقائق</b>.</p>
+        <br/>
+        <p>فريق زاد 🤍</p>
+      </div>
+      `
+    );
+
+    res.json({ success: true, message: "Verification code resent" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);

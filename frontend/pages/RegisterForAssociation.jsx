@@ -126,8 +126,7 @@ export default function RegisterForAssociation({ navigation }) {
         address,
       });
       if (!accountRes.data.success) throw new Error(accountRes.data.message || 'Failed to create account');
-      const accountId = accountRes.data.account.account_id;
-
+       const accountId = accountRes.data.account_id;
       const userRes = await API.post('/users', { account_id: accountId });
       if (!userRes.data.success || !userRes.data.user) throw new Error(userRes.data.message || 'Failed to create user');
       const userId = userRes.data.user.user_id;
@@ -176,7 +175,7 @@ export default function RegisterForAssociation({ navigation }) {
       setClothes(false);
       setErrors({});
       navigation.replace("VerifyPhone", {
-      phone,
+      email,
       role: "association",
     });
     
