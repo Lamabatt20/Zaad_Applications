@@ -61,7 +61,7 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     setGeneralError('');
-    const API = axios.create({ baseURL: config.API_URL });
+    const API = axios.create({ baseURL: config.API_URL, timeout: 10000 });
 
     try {
       const res = await API.post('/login', { username, password });
@@ -69,6 +69,9 @@ export default function LoginScreen({ navigation }) {
       if (!res.data.success) {
         if (res.data.usernameIncorrect) setUsernameError('Username is incorrect');
         if (res.data.passwordIncorrect) setPasswordError('Password is incorrect');
+        if (res.data.notVerified) setGeneralError('Account not verified. Please check your email.');
+        if (res.data.notApproved) setGeneralError('Waiting for admin approval');
+        setLoading(false);
         return;
       }
 

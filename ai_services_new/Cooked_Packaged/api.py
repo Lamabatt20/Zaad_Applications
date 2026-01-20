@@ -30,8 +30,9 @@ else:
     model = None
 
 IMG_SIZE = (224, 224)
-# Lower threshold to bias toward "packaged" for metal cans that were being misread as cooked
-PACKAGED_THRESHOLD = 0.35
+# Threshold for deciding "packaged" from model score (0=cooked, 1=packaged)
+# Slightly lower than 0.5 to reduce false "cooked" on packaged shots
+PACKAGED_THRESHOLD = 0.30
 
 def preprocess_image(image_path):
     """Preprocess image for model input"""
@@ -43,6 +44,18 @@ def preprocess_image(image_path):
     img = cv2.resize(img, IMG_SIZE)
     img = img.astype('float32') / 255.0
     return img
+
+def predict_score(img_rgb):
+    """Return averaged model score using simple test-time augmentation (TTA)."""
+    batch = []
+    # original
+    batch.append(img_rgb)
+    # horizontal flip
+    batch.append(np.flip(img_rgb, axis=1))
+
+    batch = np.stack(batch, axis=0)
+    preds = model.predict(batch, verbose=0).reshape(-1)
+    return float(np.mean(preds))
 
 @app.route('/predict-cooked', methods=['POST'])
 def predict_cooked():
@@ -72,17 +85,14 @@ def predict_cooked():
         temp_path = f"temp_{file.filename}"
         file.save(temp_path)
 
-        # Preprocess and predict
+        # Preprocess and predict (with simple TTA averaging)
         img = preprocess_image(temp_path)
-        img_batch = np.expand_dims(img, axis=0)
-        
-        prediction = model.predict(img_batch, verbose=0)[0][0]
+        prediction = predict_score(img)
         
         # Clean up
         os.remove(temp_path)
 
-        # Interpret results
-        # Model output: 0 = cooked, 1 = packaged
+        # Interpret results (0=cooked, 1=packaged)
         is_packaged = prediction >= PACKAGED_THRESHOLD
         status = 'packaged' if is_packaged else 'cooked'
         confidence = prediction if is_packaged else (1 - prediction)
@@ -116,6 +126,9 @@ if __name__ == '__main__':
     print("="*60)
     print("📡 Running on: http://localhost:8004")
     print("🔗 Endpoint: POST /predict-cooked")
+    print("⚙️ Using Waitress production WSGI server")
     print("="*60 + "\n")
     
-    app.run(host='0.0.0.0', port=8004, debug=False)
+    # For Windows production, use Waitress
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=8004)

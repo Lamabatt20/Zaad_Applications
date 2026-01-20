@@ -5,6 +5,7 @@ Train model on Zaad dataset
 from model import CannedFoodInspector
 import matplotlib.pyplot as plt
 import os
+import argparse
 
 
 def train_on_zaad_dataset():
@@ -15,31 +16,25 @@ def train_on_zaad_dataset():
     print("🥫 TRAINING ON ZAAD DATASET")
     print("="*70 + "\n")
     
-    # Dataset path
+    # Dataset path - uses clean/ and damaged/ structure
     dataset_path = r"C:\Users\Loor Ibrahim\Desktop\Zaad\Zaad_Applications\ai-services\damage_detection\dataset"
     
-    train_dir = os.path.join(dataset_path, "train")
-    val_dir = os.path.join(dataset_path, "val")
+    clean_dir = os.path.join(dataset_path, "clean")
+    damaged_dir = os.path.join(dataset_path, "damaged")
     
     # Verify dataset exists
-    if not os.path.exists(train_dir):
+    if not os.path.exists(clean_dir) or not os.path.exists(damaged_dir):
         print(f"❌ Error: Dataset not found at {dataset_path}")
         return False
     
     # Count images
-    train_good = len([f for f in os.listdir(os.path.join(train_dir, "good")) if f.endswith(('.jpg', '.png', '.jpeg'))])
-    train_damaged = len([f for f in os.listdir(os.path.join(train_dir, "damaged")) if f.endswith(('.jpg', '.png', '.jpeg'))])
-    
-    if os.path.exists(val_dir):
-        val_good = len([f for f in os.listdir(os.path.join(val_dir, "good")) if f.endswith(('.jpg', '.png', '.jpeg'))])
-        val_damaged = len([f for f in os.listdir(os.path.join(val_dir, "damaged")) if f.endswith(('.jpg', '.png', '.jpeg'))])
-    else:
-        val_good = val_damaged = 0
+    clean_count = len([f for f in os.listdir(clean_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
+    damaged_count = len([f for f in os.listdir(damaged_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg'))])
     
     print(f"📊 Dataset Summary:")
-    print(f"   Training - Good: {train_good}, Damaged: {train_damaged}")
-    print(f"   Validation - Good: {val_good}, Damaged: {val_damaged}")
-    print(f"   Total: {train_good + train_damaged + val_good + val_damaged} images\n")
+    print(f"   Clean: {clean_count}")
+    print(f"   Damaged: {damaged_count}")
+    print(f"   Total: {clean_count + damaged_count} images\n")
     
     # Initialize and build model
     print("📦 Building model with transfer learning...")
@@ -51,26 +46,27 @@ def train_on_zaad_dataset():
     print(f"✅ Model built - {params:,} parameters\n")
     
     # Training configuration
-    epochs = 100
+    epochs = 15
     batch_size = 16
     
     print(f"🚀 Starting training:")
     print(f"   Epochs: {epochs}")
     print(f"   Batch size: {batch_size}")
-    print(f"   Train dir: {train_dir}")
-    print(f"   Val dir: {val_dir}\n")
+    print(f"   Clean dir: {clean_dir}")
+    print(f"   Damaged dir: {damaged_dir}\n")
     
-    # Train
+    # Train using simple directory structure (train from clean/ and damaged/)
     try:
-        history = inspector.train(
-            train_dir=train_dir,
-            val_dir=val_dir if os.path.exists(val_dir) else None,
+        history = inspector.train_from_directories(
+            clean_dir=clean_dir,
+            damaged_dir=damaged_dir,
             epochs=epochs,
-            batch_size=batch_size
+            batch_size=batch_size,
+            val_split=0.2  # 20% validation split
         )
         
         # Save model
-        model_file = 'can_inspector_zaad_model.h5'
+        model_file = 'best_can_inspector_model.h5'
         inspector.save_model(model_file)
         
         print(f"\n✅ Training completed successfully!")
@@ -139,6 +135,10 @@ def plot_training_history(history):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Zaad damage detection model")
+    parser.add_argument("--force-train", action="store_true", help="Force retraining even if model exists")
+    args = parser.parse_args()
+    
     success = train_on_zaad_dataset()
     
     if success:

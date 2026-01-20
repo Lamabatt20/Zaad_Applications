@@ -28,6 +28,9 @@ export default function DonateFoodScreen({ navigation, route }) {
   const [images, setImages] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiValidated, setAiValidated] = useState(false);
+  const [aiData, setAiData] = useState(null);
+  const [checkingAI, setCheckingAI] = useState(false);
 
   useEffect(() => {
     const loadDark = async () => {
@@ -64,7 +67,114 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   /* ================= IMAGE PICK ================= */
+  const checkAI = async (imageUris) => {
+    if (imageUris.length === 0) {
+      setAiValidated(false);
+      setAiData(null);
+      return;
+    }
+
+    setCheckingAI(true);
+
+    try {
+      const aiForm = new FormData();
+      imageUris.forEach((uri, index) => {
+        aiForm.append("images", {
+          uri,
+          name: `img_${index}.jpg`,
+          type: "image/jpeg",
+        });
+      });
+
+      const aiRes = await fetch(`${API.API_URL}/ai/check-food-new`, {
+        method: "POST",
+        body: aiForm,
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (!aiRes.ok) {
+        const errorText = await aiRes.text();
+        setCheckingAI(false);
+        Alert.alert(
+          "AI Check Failed",
+          `Unable to verify the item: ${errorText || 'Server error'}`
+        );
+        setImages([]);
+        return;
+      }
+
+      const data = await aiRes.json();
+
+      if (data.rejected && data.reason?.includes("مطبوخ")) {
+        setCheckingAI(false);
+        Alert.alert(
+          "❌ Rejected",
+          "This food appears to be cooked.\nOnly packaged food can be donated."
+        );
+        setImages([]);
+        return;
+      }
+
+      if (data.rejected && data.reason?.includes("متعفّن")) {
+        setCheckingAI(false);
+        Alert.alert(
+          "❌ Rejected",
+          "The product shows signs of mold.\nPlease do not donate moldy items."
+        );
+        setImages([]);
+        return;
+      }
+
+      if (data.rejected && data.reason?.includes("تالف")) {
+        setCheckingAI(false);
+        Alert.alert(
+          "❌ Rejected",
+          "The product is damaged or unsafe.\nPlease check the packaging."
+        );
+        setImages([]);
+        return;
+      }
+
+      if (data.expired) {
+        setCheckingAI(false);
+        Alert.alert(
+          "❌ Expired Item",
+          "This product is expired and cannot be donated."
+        );
+        setImages([]);
+        return;
+      }
+
+      if (data.need_clear_image) {
+        setCheckingAI(false);
+        Alert.alert(
+          "⚠️ Image Not Clear",
+          "Please retake the image and make sure the expiration date is clearly visible."
+        );
+        setImages([]);
+        return;
+      }
+
+      // ✅ Passed all checks
+      setAiData(data);
+      setCategory(data.food_category);
+      setAiValidated(true);
+      setCheckingAI(false);
+      Alert.alert("✅ Verified", "Item validated successfully!");
+    } catch (err) {
+      console.error("AI check error:", err);
+      setCheckingAI(false);
+      Alert.alert("Error", "Failed to validate item. Please try again.");
+      setImages([]);
+    }
+  };
+
   const pickImage = async (fromCamera = false) => {
+    if (aiValidated) {
+      Alert.alert("Already validated", "You cannot add more photos after validation.");
+      return;
+    }
+
     const perm = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -79,12 +189,29 @@ export default function DonateFoodScreen({ navigation, route }) {
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
 
     if (!result.canceled) {
-      setImages((prev) => [...prev, result.assets[0].uri]);
+      const newImages = [...images, result.assets[0].uri];
+      setImages(newImages);
+      // Run AI check immediately after adding image
+      checkAI(newImages);
     }
   };
 
   const removeImage = (uri) => {
-    setImages((prev) => prev.filter((i) => i !== uri));
+    if (aiValidated) {
+      Alert.alert("Already validated", "You cannot remove photos after validation.");
+      return;
+    }
+
+    const newImages = images.filter((i) => i !== uri);
+    setImages(newImages);
+    // Re-check AI if there are still images, otherwise reset validation
+    if (newImages.length > 0) {
+      checkAI(newImages);
+    } else {
+      setAiValidated(false);
+      setAiData(null);
+      setCategory("");
+    }
   };
 
   /* ================= MAIN FLOW ================= */
@@ -94,91 +221,18 @@ export default function DonateFoodScreen({ navigation, route }) {
       return;
     }
 
+    if (!aiValidated) {
+      Alert.alert("Validation", "Please wait for AI validation to complete");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      /* ---------- 1️⃣ AI CHECK ---------- */
-      const aiForm = new FormData();
-images.forEach((uri, index) => {
-  aiForm.append("images", {
-    uri,
-    name: `img_${index}.jpg`,
-    type: "image/jpeg",
-  });
-});
-
-const aiRes = await fetch(`${API.API_URL}/ai/check-food-new`, {
-  method: "POST",
-  body: aiForm,
-  headers: { "Content-Type": "multipart/form-data" },
-});
-
-if (!aiRes.ok) {
-  const errorText = await aiRes.text();
-  setLoading(false);
-  Alert.alert(
-    "AI Check Failed",
-    `Unable to verify the item: ${errorText || 'Server error'}`
-  );
-  return;
-}
-
-const aiData = await aiRes.json();
-
-if (aiData.rejected && aiData.reason?.includes("مطبوخ")) {
-  setLoading(false);
-  Alert.alert(
-    "❌ Rejected",
-    "This food appears to be cooked.\nOnly packaged food can be donated."
-  );
-  return;
-}
-
-/* ❌ MOLD */
-if (aiData.rejected && aiData.reason?.includes("متعفّن")) {
-  setLoading(false);
-  Alert.alert(
-    "❌ Rejected",
-    "The product shows signs of mold.\nPlease do not donate moldy items."
-  );
-  return;
-}
-
-/* ❌ DAMAGED */
-if (aiData.rejected && aiData.reason?.includes("تالف")) {
-  setLoading(false);
-  Alert.alert(
-    "❌ Rejected",
-    "The product is damaged or unsafe.\nPlease check the packaging."
-  );
-  return;
-}
-
-/* ❌ EXPIRED */
-if (aiData.expired) {
-  setLoading(false);
-  Alert.alert(
-    "❌ Expired Item",
-    "This product is expired and cannot be donated."
-  );
-  return;
-}
-
-/* ⚠️ IMAGE NOT CLEAR (آخر شرط فقط) */
-if (aiData.need_clear_image) {
-  setLoading(false);
-  Alert.alert(
-    "⚠️ Image Not Clear",
-    "Please retake the image and make sure the expiration date is clearly visible."
-  );
-  return;
-}
-
-/* ✅ ACCEPTED - Continue with donation */
-// Item passed all AI checks
+      /* AI check already done, use stored aiData */
 
       /* ---------- 2️⃣ SET CATEGORY FROM AI ---------- */
-      setCategory(aiData.food_category);
+      // Category already set during AI check
 
       /* ---------- 3️⃣ SAVE DONATION ---------- */
       
@@ -383,15 +437,38 @@ if (aiData.need_clear_image) {
                 { text: "Cancel", style: "cancel" },
               ])
             }
+            disabled={checkingAI || aiValidated}
           >
-            <Text style={styles.plus}>+</Text>
+            {checkingAI ? (
+              <ActivityIndicator color="#A27571" />
+            ) : aiValidated ? (
+              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            ) : (
+              <Text style={styles.plus}>+</Text>
+            )}
           </TouchableOpacity>
         </View>
+
+        {checkingAI && (
+          <View style={{ marginTop: 10, alignItems: "center" }}>
+            <Text style={{ color: "#A27571", fontSize: 14 }}>
+              Validating item...
+            </Text>
+          </View>
+        )}
+
+        {aiValidated && (
+          <View style={{ marginTop: 10, alignItems: "center" }}>
+            <Text style={{ color: "#4CAF50", fontSize: 14, fontWeight: "600" }}>
+              ✅ Item validated successfully
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[styles.nextBtn, { backgroundColor: nextBtnBg }]}
           onPress={handleNext}
-          disabled={loading}
+          disabled={loading || checkingAI || !aiValidated}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />

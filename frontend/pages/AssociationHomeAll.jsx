@@ -26,9 +26,16 @@ export default function AssociationHomeAll({ route }) {
     try {
       const response = await fetch(`${SERVER_URL}/assoc/request-donations/${associationId}`);
       const data = await response.json();
-      if (data.ok) setRequests(data.data);
+      if (data.ok && Array.isArray(data.requests)) {
+        setRequests(data.requests);
+      } else if (data.ok && Array.isArray(data.data)) {
+        setRequests(data.data);
+      } else {
+        setRequests([]);
+      }
     } catch (error) {
-      console.log(error);
+      console.log('❌ Error loading requests:', error);
+      setRequests([]);
     }
   };
 
@@ -55,6 +62,9 @@ export default function AssociationHomeAll({ route }) {
     setIsFormVisible(false);
 
     try {
+      console.log('Sending request to:', `${SERVER_URL}/assoc/request-donation`);
+      console.log('Request body:', { association_id: associationId, donation_type: donationType, description: newRequestTemp.description });
+      
       const response = await fetch(`${SERVER_URL}/assoc/request-donation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,18 +75,25 @@ export default function AssociationHomeAll({ route }) {
         }),
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
+      
       if (data.ok && data.data) {
-        setRequests(prev => prev.map(r =>
-          r.request_id === newRequestTemp.request_id ? data.data : r
-        ));
+        setRequests(prev => {
+          if (!Array.isArray(prev)) return [data.data];
+          return prev.map(r =>
+            r.request_id === newRequestTemp.request_id ? data.data : r
+          );
+        });
         Alert.alert("تم بنجاح ✅", "تم نشر طلبك العام بنجاح.");
       } else {
-        Alert.alert("خطأ", "لم يتم نشر الطلب.");
+        console.error('Request failed:', data);
+        Alert.alert("خطأ", data.error || "لم يتم نشر الطلب.");
       }
     } catch (error) {
-      console.log(error);
-      Alert.alert("خطأ", "تأكد من الاتصال بالسيرفر.");
+      console.error('Request error:', error);
+      Alert.alert("خطأ", `تأكد من الاتصال بالسيرفر: ${error.message}`);
     }
   };
 

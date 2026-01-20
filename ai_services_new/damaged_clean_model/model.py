@@ -230,7 +230,75 @@ class CannedFoodInspector:
         
         return history
     
-    def predict(self, image_path, threshold=0.35, focus_can=False):
+    def train_from_directories(self, clean_dir, damaged_dir, epochs=50, batch_size=32, val_split=0.2):
+        """
+        Train the model from separate clean and damaged directories
+        
+        Args:
+            clean_dir: Directory containing clean/good can images
+            damaged_dir: Directory containing damaged can images
+            epochs: Number of training epochs
+            batch_size: Batch size for training
+            val_split: Validation split ratio (0-1)
+        """
+        # Create temporary directory structure for training
+        import shutil
+        import tempfile
+        
+        temp_dir = tempfile.mkdtemp()
+        train_dir = os.path.join(temp_dir, 'train')
+        val_dir = os.path.join(temp_dir, 'val')
+        
+        try:
+            # Create directory structure
+            os.makedirs(os.path.join(train_dir, 'good'), exist_ok=True)
+            os.makedirs(os.path.join(train_dir, 'damaged'), exist_ok=True)
+            os.makedirs(os.path.join(val_dir, 'good'), exist_ok=True)
+            os.makedirs(os.path.join(val_dir, 'damaged'), exist_ok=True)
+            
+            # Get list of images
+            clean_images = [os.path.join(clean_dir, f) for f in os.listdir(clean_dir) 
+                           if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+            damaged_images = [os.path.join(damaged_dir, f) for f in os.listdir(damaged_dir)
+                             if f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+            
+            # Split into train and val
+            import random
+            random.shuffle(clean_images)
+            random.shuffle(damaged_images)
+            
+            clean_split = int(len(clean_images) * (1 - val_split))
+            damaged_split = int(len(damaged_images) * (1 - val_split))
+            
+            clean_train = clean_images[:clean_split]
+            clean_val = clean_images[clean_split:]
+            damaged_train = damaged_images[:damaged_split]
+            damaged_val = damaged_images[damaged_split:]
+            
+            # Copy files to temporary structure
+            for img in clean_train:
+                shutil.copy2(img, os.path.join(train_dir, 'good'))
+            for img in clean_val:
+                shutil.copy2(img, os.path.join(val_dir, 'good'))
+            for img in damaged_train:
+                shutil.copy2(img, os.path.join(train_dir, 'damaged'))
+            for img in damaged_val:
+                shutil.copy2(img, os.path.join(val_dir, 'damaged'))
+            
+            print(f"📁 Training set: {len(clean_train)} clean, {len(damaged_train)} damaged")
+            print(f"📁 Validation set: {len(clean_val)} clean, {len(damaged_val)} damaged\n")
+            
+            # Train using the standard train method
+            history = self.train(train_dir, val_dir, epochs, batch_size)
+            
+            return history
+            
+        finally:
+            # Clean up temporary directory
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+    
+    def predict(self, image_path, threshold=0.30, focus_can=False):
         """
         Predict if a can is damaged or not
         

@@ -22,6 +22,7 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   console.log('➡', req.method, req.url);
   next();
@@ -122,7 +123,7 @@ async function callAIService(url, imagePath) {
 
     const res = await axios.post(url, form, {
       headers: form.getHeaders(),
-      timeout: 30000,
+      timeout: 90000,  // 90 seconds for AI processing
       maxContentLength: 50 * 1024 * 1024,
       maxBodyLength: 50 * 1024 * 1024
     });
@@ -644,7 +645,14 @@ app.put('/accounts/user/:account_id', async (req, res) => {
 
 
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "username and password are required",
+    });
+  }
 
   try {
     const accRes = await pool.query(
@@ -877,6 +885,7 @@ app.get('/donations', async (req, res) => {
 app.post('/donations', upload.single("item_image"), async (req, res) => {
  const { donor_id, donation_type, note, status, address, association_id } = req.body;
   const file = req.file;
+  console.log('📦 POST /donations - Received:', { donor_id, donation_type, note, status, address, association_id, file: file?.filename });
   try {
     const imagePath = file ? `/uploads/${file.filename}` : null;
     const result = await pool.query(
@@ -884,8 +893,10 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [donor_id, donation_type, imagePath, note, status || 'pending', address,association_id || null]
     );
+    console.log('✅ Donation created:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
+   console.error('❌ Donation creation error:', err);
    res.status(500).json({
       success: false,
       message: err.message || "Server error"
@@ -1358,11 +1369,39 @@ app.post(
 
       for (const file of req.files) {
 
-        /* =========================
-           0️⃣ CAN DAMAGE CHECK (NEW MODEL) - CHECK FIRST
-        ========================= */
         console.log(`\n[IMAGE] Processing: ${file.originalname}`);
-        console.log(`[CHECK-0] Checking for can damage (NEW MODEL)...`);
+
+        /* =========================
+           0️⃣ PACKAGED vs COOKED (NEW MODEL) - CHECK FIRST
+        ========================= */
+        console.log(`[CHECK-0] Checking if food is packaged or cooked (NEW MODEL)...`);
+        const packagedResult = await callAIService(
+          AI_NEW_COOKED_URL,
+          file.path
+        );
+        console.log(`[PACKAGED-RESULT-NEW]`, {
+          status: packagedResult.status,
+          confidence: packagedResult.confidence.toFixed(2)
+        });
+
+        if (packagedResult.status === "cooked") {
+          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
+          fs.unlinkSync(file.path);
+          return res.json({
+            success: false,
+            rejected: true,
+            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
+            confidence: packagedResult.confidence,
+            model: "new"
+          });
+        }
+
+        console.log(`✅ [PASS] Image passed packaged/cooked check - Status: ${packagedResult.status}`);
+
+        /* =========================
+           1️⃣ CAN DAMAGE CHECK (NEW MODEL)
+        ========================= */
+        console.log(`[CHECK-1] Checking for can damage (NEW MODEL)...`);
         const canDamageResult = await callAIService(
           AI_NEW_CAN_DAMAGE_URL,
           file.path
@@ -1403,30 +1442,7 @@ app.post(
           });
         }
 
-        /* =========================
-           1️⃣ PACKAGED vs COOKED (NEW MODEL)
-        ========================= */
-        console.log(`[CHECK-1] Checking if food is packaged or cooked (NEW MODEL)...`);
-        const packagedResult = await callAIService(
-          AI_NEW_COOKED_URL,
-          file.path
-        );
-        console.log(`[PACKAGED-RESULT-NEW]`, {
-          status: packagedResult.status,
-          confidence: packagedResult.confidence.toFixed(2)
-        });
-
-        if (packagedResult.status === "cooked") {
-          console.log(`[REJECTED] Food is cooked - REJECTED\n`);
-          fs.unlinkSync(file.path);
-          return res.json({
-            success: false,
-            rejected: true,
-            reason: "❌ الطعام مطبوخ – لا يمكن التبرع به",
-            confidence: packagedResult.confidence,
-            model: "new"
-          });
-        }
+        console.log(`✅ [PASS] Image passed damage check - Status: ${canDamageResult.status}`);
 
         /* =========================
            2️⃣ OCR – extract text
@@ -1712,25 +1728,29 @@ app.post('/admin/approve-association/:account_id', async (req, res) => {
   const { account_id } = req.params;
 
   try {
-    // 1️⃣ Approve association + get email
-    const q = await pool.query(`
-      UPDATE accounts
-      SET is_approved = true
-      WHERE account_id = $1
-        AND role = 'association'
-        AND email_verified = true
-    `, [account_id]);
+    // 1️⃣ Get account first (to retrieve email & name)
+    const accountRes = await pool.query(
+      `SELECT account_id, full_name, email FROM accounts 
+       WHERE account_id = $1 AND role = 'association' AND email_verified = true`,
+      [account_id]
+    );
 
-    if (q.rowCount === 0) {
+    if (accountRes.rows.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Association not found or phone not verified"
+        message: "Association not found or email not verified"
       });
     }
 
-    const { full_name, email } = q.rows[0];
+    const { full_name, email } = accountRes.rows[0];
 
-    // 2️⃣ Send approval email
+    // 2️⃣ Update to approve
+    await pool.query(
+      `UPDATE accounts SET is_approved = true WHERE account_id = $1`,
+      [account_id]
+    );
+
+    // 3️⃣ Send approval email
     await sendEmail(
       email,
       "تمت الموافقة على حساب جمعيتكم – منصة زاد",
@@ -1749,7 +1769,6 @@ app.post('/admin/approve-association/:account_id', async (req, res) => {
       `
     );
 
-    // 3️⃣ Response
     res.json({
       success: true,
       message: "Association approved and email sent successfully"
@@ -1757,7 +1776,7 @@ app.post('/admin/approve-association/:account_id', async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1779,10 +1798,14 @@ app.get('/admin/pending-associations', async (req, res) => {
 // ===== request_donations  =====
 async function createRequestDonationsTable() {
   try {
+    // Drop old table if exists
+    await pool.query(`DROP TABLE IF EXISTS request_donations CASCADE;`);
+    
+    // Create new table without FK constraint
     const query = `
       CREATE TABLE IF NOT EXISTS request_donations (
         request_id SERIAL PRIMARY KEY,
-        association_id INT REFERENCES accounts(account_id ),
+        association_id INT NOT NULL,
         donation_type VARCHAR(30),
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1790,7 +1813,7 @@ async function createRequestDonationsTable() {
       );
     `;
     await pool.query(query);
-    console.log("✅ Table request_donations ready");
+    console.log("✅ Table request_donations recreated successfully (no FK constraint)");
   } catch (err) {
     console.error("❌ Error creating request_donations table:", err);
   }
@@ -1798,9 +1821,11 @@ async function createRequestDonationsTable() {
 createRequestDonationsTable();
 
 
-app.post('/api/request-donation', async (req, res) => {
+app.post('/assoc/request-donation', async (req, res) => {
   try {
     const { association_id, donation_type, description } = req.body;
+    
+    console.log('📝 POST /assoc/request-donation - Received:', { association_id, donation_type, description });
 
     const result = await pool.query(
       `INSERT INTO request_donations 
@@ -1810,15 +1835,18 @@ app.post('/api/request-donation', async (req, res) => {
       [association_id, donation_type, description]
     );
 
+    console.log('✅ Request created:', result.rows[0]);
+
     res.status(201).json({
+      ok: true,
       success: true,
       message: "Request added successfully",
       data: result.rows[0]
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: "Server Error" });
+    console.error('❌ Request creation error:', error);
+    res.status(500).json({ ok: false, success: false, error: "Server Error" });
   }
 });
 app.get('/assoc/request-donations/:association_id', async (req, res) => {
@@ -1830,13 +1858,26 @@ app.get('/assoc/request-donations/:association_id', async (req, res) => {
       [association_id]
     );
 
-    res.json({ ok: true, requests: result.rows });
+    res.json({ 
+      ok: true, 
+      success: true,
+      requests: result.rows 
+    });
   } catch (error) {
     console.error("Error fetching request donations:", error);
-    res.status(500).json({ ok: false, error: "Server error" });
+    res.status(500).json({ ok: false, success: false, error: "Server error" });
   }
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(`API available at http://localhost:${port}`);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
 });

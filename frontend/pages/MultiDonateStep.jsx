@@ -14,19 +14,25 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
-import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 
 export default function MultiDonateStep({ route, navigation }) {
-  const { association, donationType, total = 1, index = 1 } = route.params || {};
+  const {
+    association,
+    donationType,
+    total = 1,
+    index = 1,
+    firstAddress,
+    firstCoords,
+  } = route.params || {};
 
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
-  const [coords, setCoords] = useState(null);
   const [images, setImages] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiValidated, setAiValidated] = useState(false);
 
   useEffect(() => {
     const loadDark = async () => {
@@ -34,6 +40,8 @@ export default function MultiDonateStep({ route, navigation }) {
       if (saved !== null) setDarkMode(saved === "true");
     };
     loadDark();
+
+    if (firstAddress) setAddress(firstAddress);
   }, []);
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
@@ -47,9 +55,9 @@ export default function MultiDonateStep({ route, navigation }) {
   const resetForm = () => {
     setCategory("");
     setDescription("");
-    setAddress("");
-    setCoords(null);
+    setAddress(firstAddress || "");
     setImages([]);
+    setAiValidated(false);
   };
 
   const goNextItem = () => {
@@ -62,6 +70,8 @@ export default function MultiDonateStep({ route, navigation }) {
         donationType,
         total,
         index: index + 1,
+        firstAddress: firstAddress || address,
+        firstCoords,
       });
     } 
     
@@ -70,29 +80,14 @@ export default function MultiDonateStep({ route, navigation }) {
     }
   };
 
-  /* ================= LOCATION ================= */
-
-  const requestAndFetchLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission denied", "Location permission is required");
-      return;
-    }
-
-    const pos = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = pos.coords;
-    setCoords({ latitude, longitude });
-
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
-    );
-    const data = await res.json();
-    setAddress(data.display_name || `${latitude}, ${longitude}`);
-  };
-
   /* ================= IMAGE PICK ================= */
 
   const pickImage = async (fromCamera = false) => {
+    if (aiValidated) {
+      Alert.alert("Already validated", "You cannot add more photos after validation.");
+      return;
+    }
+
     const perm = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -112,6 +107,11 @@ export default function MultiDonateStep({ route, navigation }) {
   };
 
   const removeImage = (uri) => {
+    if (aiValidated) {
+      Alert.alert("Already validated", "You cannot remove photos after validation.");
+      return;
+    }
+
     setImages((prev) => prev.filter((i) => i !== uri));
   };
 
@@ -127,6 +127,7 @@ export default function MultiDonateStep({ route, navigation }) {
 
     try {
       /* ---------- 1️⃣ AI CHECK ---------- */
+      setAiValidated(false);
       const aiForm = new FormData();
       images.forEach((uri, i) => {
         aiForm.append("images", {
@@ -210,6 +211,8 @@ export default function MultiDonateStep({ route, navigation }) {
 
       /* ✅ ACCEPTED - Continue with donation */
       // Item passed all AI checks
+
+      setAiValidated(true);
 
       /* ---------- 2️⃣ SET CATEGORY ---------- */
       setCategory(aiData.food_category);
@@ -370,20 +373,6 @@ export default function MultiDonateStep({ route, navigation }) {
           onChangeText={setDescription}
         />
 
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity
-            style={[styles.input, { flex: 1, backgroundColor: inputBg, borderColor: border }]}
-            onPress={requestAndFetchLocation}
-          >
-            <Text style={{ color: text }}>
-              {address || "Use current location"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={requestAndFetchLocation}>
-            <Ionicons name="location" size={28} color={btnColor} />
-          </TouchableOpacity>
-        </View>
-
         <Text style={[styles.label, { color: text }]}>
           Take pictures of the Donated Item
         </Text>
@@ -410,8 +399,13 @@ export default function MultiDonateStep({ route, navigation }) {
                 { text: "Cancel", style: "cancel" },
               ])
             }
+            disabled={aiValidated}
           >
-            <Text style={styles.plus}>+</Text>
+            {aiValidated ? (
+              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            ) : (
+              <Text style={styles.plus}>+</Text>
+            )}
           </TouchableOpacity>
         </View>
 

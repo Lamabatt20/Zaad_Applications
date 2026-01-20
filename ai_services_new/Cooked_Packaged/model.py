@@ -10,6 +10,7 @@ from tensorflow.keras.applications import MobileNetV2  # type: ignore
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import argparse
 
 DATASET_PATH = r"C:\Users\Loor Ibrahim\Desktop\Zaad\Zaad_Applications\ai-services\cooked_detection\dataset"
 MODEL_SAVE_PATH = "cooked_detection_model.h5"
@@ -193,18 +194,21 @@ class CookedDetectionModel:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train or load Cooked vs Packaged model")
+    parser.add_argument("--force-train", action="store_true", help="Ignore existing best model and retrain")
+    args = parser.parse_args()
+
     detector = CookedDetectionModel()
-    
-    # Check if model already exists
-    if os.path.exists("best_cooked_detection_model.h5"):
+
+    # Check if model already exists, allow forcing retrain
+    if os.path.exists("best_cooked_detection_model.h5") and not args.force_train:
         print("Loading existing best model...")
         detector.load_trained_model("best_cooked_detection_model.h5")
-        print("\nModel already trained with excellent accuracy!")
-        print("Validation Accuracy: 100%")
+        print("\nModel already trained. To retrain with new data, run: python model.py --force-train")
     else:
         detector.load_data()
         detector.build_model()
         detector.train(epochs=EPOCHS)
         detector.evaluate()
         detector.plot_training_history()
-        print("\nTraining complete!")
+        print("\nTraining complete! Best model saved to best_cooked_detection_model.h5")

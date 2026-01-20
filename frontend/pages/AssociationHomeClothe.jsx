@@ -27,9 +27,16 @@ export default function AssociationHomeClothe({ route }) {
         `${SERVER_URL}/assoc/request-donations/${associationId}`
       );
       const data = await response.json();
-      if (data.ok) setRequests(data.data);
+      if (data.ok && Array.isArray(data.requests)) {
+        setRequests(data.requests);
+      } else if (data.ok && Array.isArray(data.data)) {
+        setRequests(data.data);
+      } else {
+        setRequests([]);
+      }
     } catch (error) {
-      console.log(error);
+      console.log('❌ Error loading requests:', error);
+      setRequests([]);
     }
   };
 
@@ -74,9 +81,12 @@ export default function AssociationHomeClothe({ route }) {
 
       if (data.ok && data.data) {
         // تحديث العنصر المؤقت بالبيانات الصحيحة من السيرفر
-        setRequests(prev => prev.map(r => 
-          r.request_id === newRequestTemp.request_id ? data.data : r
-        ));
+        setRequests(prev => {
+          if (!Array.isArray(prev)) return [data.data];
+          return prev.map(r => 
+            r.request_id === newRequestTemp.request_id ? data.data : r
+          );
+        });
 
         Alert.alert("Success ✅", "The request has been posted successfully.");
       } else {

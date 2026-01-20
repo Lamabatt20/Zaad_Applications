@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🍽️ Start Cooked Detection API (8004)",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "cd /d \"${workspaceFolder}\\ai_services_new\\Cooked_Packaged\" && python api.py"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🥫 Start Damage Detection API (8005)",
+      "type": "shell",
+      "command": "cmd",
+      "args": ["/c", "cd /d \"${workspaceFolder}\\ai_services_new\\damaged_clean_model\" && python api.py"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🚀 Start Both APIs",
+      "dependsOn": [
+        "🍽️ Start Cooked Detection API (8004)",
+        "🥫 Start Damage Detection API (8005)"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
