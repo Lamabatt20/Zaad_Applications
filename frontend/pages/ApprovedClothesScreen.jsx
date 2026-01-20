@@ -33,7 +33,7 @@ export default function ApprovedClothesScreen() {
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
-    const fullUrl = raw.startsWith("/") ? `${config.API_URL}${raw}` : raw;
+    const fullUrl = String(raw).startsWith("/") ? `${config.API_URL}${raw}` : raw;
     return encodeURI(fullUrl);
   };
 
@@ -44,6 +44,30 @@ export default function ApprovedClothesScreen() {
     return String(created_at || "").slice(0, 10);
   };
 
+  // ✅ لطباعة الستيتس بشكل مفهوم
+  const formatDeliveryStatus = (method, st) => {
+    if (!st) return "Not started";
+
+    if (method === "association") {
+      const map = {
+        NEEDS_ASSIGNMENT: "Needs driver",
+        ASSIGNED: "Driver assigned",
+        PICKED_UP: "Picked up",
+        IN_TRANSIT: "In transit",
+        DELIVERED: "Delivered",
+      };
+      return map[st] ?? st;
+    }
+
+    const map = {
+      WAITING_FOR_DONOR: "Waiting for donor",
+      DONOR_ON_THE_WAY: "Donor on the way",
+      IN_TRANSIT: "On the way",
+      DELIVERED: "Delivered",
+    };
+    return map[st] ?? st;
+  };
+
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
@@ -51,6 +75,12 @@ export default function ApprovedClothesScreen() {
     note: x.note ?? x.description ?? "",
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "approved",
+
+    // ✅ delivery fields (لازم يرجعو من الباك اند)
+    delivery_method: x.delivery_method ?? "donor",
+    delivery_status: x.delivery_status ?? null,
+    delivery_person_id: x.delivery_person_id ?? null,
+    delivery_person_name: x.delivery_person_name ?? "", // اختياري إذا رجعتيه من الباك اند
   });
 
   const fetchData = async () => {
@@ -67,7 +97,7 @@ export default function ApprovedClothesScreen() {
       const url = associationId
         ? `${config.API_URL}/donations/clothes/approved?association_id=${associationId}`
         : `${config.API_URL}/donations/clothes/approved`;
-      console.log("[FETCH] GET", url);
+
       const res = await axios.get(url);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
@@ -126,9 +156,32 @@ export default function ApprovedClothesScreen() {
           <Text numberOfLines={2} style={styles.subtitle}>
             {item.note || "No description"}
           </Text>
+
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
+
+          {/* ✅ Delivery info */}
+          <Text style={styles.deliveryInfo}>
+            Delivery Method:{" "}
+            <Text style={{ fontWeight: "800" }}>
+              {item.delivery_method === "association" ? "Association Pickup" : "Donor will deliver"}
+            </Text>
+          </Text>
+
+          <Text style={styles.deliveryInfo}>
+            Delivery Status:{" "}
+            <Text style={{ fontWeight: "800" }}>
+              {formatDeliveryStatus(item.delivery_method, item.delivery_status)}
+            </Text>
+          </Text>
+
+          {/* ✅ اسم السائق (اختياري) */}
+          {item.delivery_method === "association" && !!item.delivery_person_name && (
+            <Text style={styles.deliveryInfo}>
+              Driver: <Text style={{ fontWeight: "800" }}>{item.delivery_person_name}</Text>
+            </Text>
+          )}
         </View>
 
         <View style={styles.statusContainer}>
@@ -151,7 +204,6 @@ export default function ApprovedClothesScreen() {
   };
 
   const modalDate = getYMD(selected?.created_at);
-
   const filterLabel = selectedDate === "ALL" ? "All Approved Dates" : selectedDate;
 
   return (
@@ -200,14 +252,14 @@ export default function ApprovedClothesScreen() {
                 );
               }}
             />
-              <View style={{ height: 12 }} />
+            <View style={{ height: 12 }} />
 
-              <TouchableOpacity
-                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+              onPress={() => setFilterVisible(false)}
+            >
+              <Text style={styles.btnText}>Close</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -226,7 +278,7 @@ export default function ApprovedClothesScreen() {
         </TouchableOpacity>
 
         {selectedDate !== "ALL" && (
-          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}> 
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}>
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
@@ -245,9 +297,7 @@ export default function ApprovedClothesScreen() {
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
-              <Text style={{ textAlign: "center", marginTop: 30 }}>
-                No approved donations
-              </Text>
+              <Text style={{ textAlign: "center", marginTop: 30 }}>No approved donations</Text>
             }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           />
@@ -281,7 +331,30 @@ export default function ApprovedClothesScreen() {
             <Text style={styles.modalDesc}>
               {selected?.note?.trim() ? selected.note : "No description"}
             </Text>
+
             <Text style={styles.modalDate}>Date: {modalDate || "-"}</Text>
+
+            <Text style={styles.modalDate}>
+              Delivery Method:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                {selected?.delivery_method === "association"
+                  ? "Association Pickup"
+                  : "Donor will deliver"}
+              </Text>
+            </Text>
+
+            <Text style={styles.modalDate}>
+              Delivery Status:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                {formatDeliveryStatus(selected?.delivery_method, selected?.delivery_status)}
+              </Text>
+            </Text>
+
+            {selected?.delivery_method === "association" && !!selected?.delivery_person_name && (
+              <Text style={styles.modalDate}>
+                Driver: <Text style={{ fontWeight: "800" }}>{selected.delivery_person_name}</Text>
+              </Text>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -330,32 +403,6 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  // ✅ filter (same as pending)
-  filterBox: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
-  },
-
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#8b6f69",
-    marginBottom: 6,
-  },
-
-  pickerWrap: {
-    backgroundColor: "#f3f3f3",
-    borderRadius: 10,
-    width: 340,
-    height: 44,
-    justifyContent: "center",
-  },
-
   content: { flex: 1, backgroundColor: "#EBE1D7" },
 
   card: {
@@ -371,6 +418,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
+  // ✅ added
+  deliveryInfo: { fontSize: 13, color: "#333", marginTop: 2 },
+
   statusContainer: { position: "absolute", right: 10, top: 10 },
   statusApproved: {
     backgroundColor: "#110202ff",
@@ -384,6 +434,7 @@ const styles = StyleSheet.create({
   actionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 15 },
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
   detailsBtn: { backgroundColor: "#8b6f69" },
+  closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
 
   // ✅ Modal styles
@@ -421,6 +472,7 @@ const styles = StyleSheet.create({
   modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
   modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end" },
+
   // filter row (copied from Pending)
   filterRow: {
     flexDirection: "row",
@@ -456,6 +508,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   clearBtnText: { color: "#fff", fontWeight: "800" },
+
   filterModalCard: {
     width: "100%",
     maxWidth: 380,

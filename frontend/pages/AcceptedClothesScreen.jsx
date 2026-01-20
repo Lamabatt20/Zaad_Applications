@@ -280,6 +280,7 @@ export default function AcceptedClothesScreen() {
     </SafeAreaView>
   );
 }
+// Keep only ONE const styles = StyleSheet.create({ ... }) at the end
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
@@ -292,7 +293,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   welcomeLogo: { width: 120, height: 120, marginRight: 10, marginLeft: -20, marginTop: -40 },
-  headerMainTitle: { fontFamily: "Times New Roman", fontSize: 22, marginTop: -55, marginLeft: -40, color: "#8b6f69" },
+  headerMainTitle: {
+    fontFamily: "Times New Roman",
+    fontSize: 22,
+    marginTop: -55,
+    marginLeft: -40,
+    color: "#8b6f69",
+  },
+
+  errorBar: { backgroundColor: "#ffefef", padding: 10 },
+  errorText: { color: "#9b1c1c", textAlign: "center" },
 
   card: { backgroundColor: "#fff", borderRadius: 14, padding: 15, marginBottom: 15, elevation: 3 },
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 8 },
@@ -303,6 +313,7 @@ const styles = StyleSheet.create({
 
   actionButtons: { flexDirection: "row", gap: 10, marginTop: 10 },
   detailsBtn: { backgroundColor: "#8b6f69", padding: 8, borderRadius: 8 },
+  assignBtn: { backgroundColor: "#A27571", padding: 8, borderRadius: 8 },
   approveBtn: { backgroundColor: "#3b82f6", padding: 8, borderRadius: 8 },
   btnText: { color: "#fff", fontWeight: "700" },
 
@@ -322,4 +333,6 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
   modalCard: { backgroundColor: "#fff", padding: 20, borderRadius: 14, width: "80%" },
   modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10, textAlign: "center" },
+  btn: {},
+  closeBtn: {},
 });

@@ -15,7 +15,6 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
-import { Picker } from "@react-native-picker/picker";
 
 export default function ApprovedFoodScreen() {
   const [loading, setLoading] = useState(true);
@@ -27,7 +26,7 @@ export default function ApprovedFoodScreen() {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // Date filter dropdown
+  // Date filter
   const [selectedDate, setSelectedDate] = useState("ALL");
   const [filterVisible, setFilterVisible] = useState(false);
 
@@ -43,6 +42,17 @@ export default function ApprovedFoodScreen() {
     return s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
   };
 
+  // ✅ helper لعرض delivery_status بشكل مرتب
+  const formatDeliveryStatus = (s) => {
+    if (!s) return "—";
+    if (s === "NEEDS_ASSIGNMENT") return "Needs assignment";
+    if (s === "ASSIGNED") return "Assigned";
+    if (s === "WAITING_FOR_DONOR") return "Waiting for donor";
+    if (s === "ON_THE_WAY") return "On the way";
+    if (s === "DELIVERED") return "Delivered";
+    return s; // fallback
+  };
+
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
@@ -51,6 +61,12 @@ export default function ApprovedFoodScreen() {
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "approved",
     quantity: x.quantity ?? null,
+
+    // ✅ delivery tracking (جايين من الباك اند)
+    delivery_method: x.delivery_method ?? "donor",
+    delivery_status: x.delivery_status ?? null,
+    delivery_person_id: x.delivery_person_id ?? null,
+    delivery_person_name: x.delivery_person_name ?? "",
   });
 
   const fetchData = async () => {
@@ -58,20 +74,18 @@ export default function ApprovedFoodScreen() {
       setErrorMsg("");
       setLoading(true);
 
-      // ✅ Get association_id from AsyncStorage
       const userDataStr = await AsyncStorage.getItem("user_data");
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
       const associationId = userData?.association_id;
 
-      // ✅ FOOD approved endpoint
       const url = associationId
         ? `${config.API_URL}/donations/food/approved?association_id=${associationId}`
         : `${config.API_URL}/donations/food/approved`;
-      console.log("[FETCH] GET", url);
-      const res = await axios.get(url);
 
+      const res = await axios.get(url);
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
+
       setItems(normalized);
 
       const datesSet = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
@@ -122,7 +136,9 @@ export default function ApprovedFoodScreen() {
           <Text style={styles.title}>{item.donor_name}</Text>
 
           {!!item.quantity && (
-            <Text style={styles.metaText}>Quantity: <Text style={{ fontWeight: "800" }}>{item.quantity}</Text></Text>
+            <Text style={styles.metaText}>
+              Quantity: <Text style={{ fontWeight: "800" }}>{item.quantity}</Text>
+            </Text>
           )}
 
           <Text numberOfLines={2} style={styles.subtitle}>
@@ -132,6 +148,27 @@ export default function ApprovedFoodScreen() {
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
+
+          {/* ✅ Delivery Method */}
+          <Text style={styles.deliveryInfo}>
+            Delivery Method:{" "}
+            <Text style={{ fontWeight: "800" }}>
+              {item.delivery_method === "association" ? "Association Pickup" : "Donor will deliver"}
+            </Text>
+          </Text>
+
+          {/* ✅ Delivery Status */}
+          <Text style={styles.deliveryInfo}>
+            Delivery Status:{" "}
+            <Text style={{ fontWeight: "800" }}>{formatDeliveryStatus(item.delivery_status)}</Text>
+          </Text>
+
+          {/* ✅ Driver name (optional) */}
+          {item.delivery_method === "association" && !!item.delivery_person_name && (
+            <Text style={styles.deliveryInfo}>
+              Driver: <Text style={{ fontWeight: "800" }}>{item.delivery_person_name}</Text>
+            </Text>
+          )}
         </View>
 
         <View style={styles.statusContainer}>
@@ -173,7 +210,7 @@ export default function ApprovedFoodScreen() {
         </View>
       )}
 
-      {/* Filter (button + modal like Pending) */}
+      {/* Filter */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
           <Text style={styles.filterBtnTitle}>Filter by Date</Text>
@@ -181,12 +218,13 @@ export default function ApprovedFoodScreen() {
         </TouchableOpacity>
 
         {selectedDate !== "ALL" && (
-          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}> 
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}>
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
       </View>
 
+      {/* List */}
       <View style={styles.content}>
         {loading ? (
           <View style={{ paddingTop: 40, alignItems: "center" }}>
@@ -209,50 +247,50 @@ export default function ApprovedFoodScreen() {
         )}
       </View>
 
-        {/* Filter Modal (copied from Pending) */}
-        <Modal
-          visible={filterVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setFilterVisible(false)}
-        >
-          <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
-            <Pressable style={styles.filterModalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Select Date</Text>
+      {/* Filter Modal */}
+      <Modal
+        visible={filterVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
+          <Pressable style={styles.filterModalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Select Date</Text>
 
-              <FlatList
-                data={allDates}
-                keyExtractor={(d) => d}
-                style={{ maxHeight: 340 }}
-                ItemSeparatorComponent={() => <View style={styles.sep} />}
-                renderItem={({ item: d }) => {
-                  const active = selectedDate === d;
-                  return (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setSelectedDate(d);
-                        setFilterVisible(false);
-                      }}
-                      style={[styles.dateRow, active && styles.dateRowActive]}
-                    >
-                      <Text style={[styles.dateText, active && styles.dateTextActive]}>
-                        {d === "ALL" ? "All Dates" : d}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-              <View style={{ height: 12 }} />
+            <FlatList
+              data={allDates}
+              keyExtractor={(d) => d}
+              style={{ maxHeight: 340 }}
+              ItemSeparatorComponent={() => <View style={styles.sep} />}
+              renderItem={({ item: d }) => {
+                const active = selectedDate === d;
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedDate(d);
+                      setFilterVisible(false);
+                    }}
+                    style={[styles.dateRow, active && styles.dateRowActive]}
+                  >
+                    <Text style={[styles.dateText, active && styles.dateTextActive]}>
+                      {d === "ALL" ? "All Dates" : d}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+            <View style={{ height: 12 }} />
 
-              <TouchableOpacity
-                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
-            </Pressable>
+            <TouchableOpacity
+              style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+              onPress={() => setFilterVisible(false)}
+            >
+              <Text style={styles.btnText}>Close</Text>
+            </TouchableOpacity>
           </Pressable>
-        </Modal>
+        </Pressable>
+      </Modal>
 
       {/* Details Modal */}
       <Modal
@@ -280,7 +318,9 @@ export default function ApprovedFoodScreen() {
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
 
             {!!selected?.quantity && (
-              <Text style={styles.modalMeta}>Quantity: <Text style={{ fontWeight: "800" }}>{selected.quantity}</Text></Text>
+              <Text style={styles.modalMeta}>
+                Quantity: <Text style={{ fontWeight: "800" }}>{selected.quantity}</Text>
+              </Text>
             )}
 
             <Text style={styles.modalDesc}>
@@ -288,6 +328,24 @@ export default function ApprovedFoodScreen() {
             </Text>
 
             <Text style={styles.modalDate}>Date: {getYMD(selected?.created_at) || "-"}</Text>
+
+            <Text style={styles.modalDate}>
+              Delivery Method:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                {selected?.delivery_method === "association" ? "Association Pickup" : "Donor will deliver"}
+              </Text>
+            </Text>
+
+            <Text style={styles.modalDate}>
+              Delivery Status:{" "}
+              <Text style={{ fontWeight: "800" }}>{formatDeliveryStatus(selected?.delivery_status)}</Text>
+            </Text>
+
+            {selected?.delivery_method === "association" && !!selected?.delivery_person_name && (
+              <Text style={styles.modalDate}>
+                Driver: <Text style={{ fontWeight: "800" }}>{selected.delivery_person_name}</Text>
+              </Text>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -335,31 +393,6 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  filterBox: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
-  },
-
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#8b6f69",
-    marginBottom: 6,
-  },
-
-  pickerWrap: {
-    backgroundColor: "#f3f3f3",
-    borderRadius: 10,
-    width: 340,
-    height: 44,
-    justifyContent: "center",
-  },
-
   content: { flex: 1, backgroundColor: "#EBE1D7" },
 
   card: {
@@ -375,6 +408,8 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 13, color: "#555", marginTop: 2 },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
+
+  deliveryInfo: { fontSize: 13, color: "#333", marginTop: 2 },
 
   statusContainer: { position: "absolute", right: 10, top: 10 },
   statusApproved: {
@@ -415,7 +450,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "Times New Roman",
   },
-  // filter row (from Pending)
+  modalImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: "#f2f2f2",
+  },
+  modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
+  modalMeta: { fontSize: 13, color: "#555", marginBottom: 8 },
+  modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
+  modalDate: { fontSize: 13, color: "#666", marginBottom: 8 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end" },
+
+  // Filter row
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -438,11 +486,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontFamily: "Times New Roman",
   },
-  filterBtnValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
+  filterBtnValue: { fontSize: 14, fontWeight: "700", color: "#333" },
   clearBtn: {
     backgroundColor: "#8b6f69",
     paddingHorizontal: 12,
@@ -450,6 +494,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   clearBtnText: { color: "#fff", fontWeight: "800" },
+
   filterModalCard: {
     width: "100%",
     maxWidth: 380,
@@ -468,16 +513,4 @@ const styles = StyleSheet.create({
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
-  modalImage: {
-    width: "100%",
-    height: 180,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: "#f2f2f2",
-  },
-  modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
-  modalMeta: { fontSize: 13, color: "#555", marginBottom: 8 },
-  modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
-  modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end" },
 });

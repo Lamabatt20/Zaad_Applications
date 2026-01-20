@@ -16,9 +16,11 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
-import { Picker } from "@react-native-picker/picker";
+import { useNavigation } from "@react-navigation/native";
 
 export default function AcceptedFoodScreen() {
+  const navigation = useNavigation();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -29,7 +31,7 @@ export default function AcceptedFoodScreen() {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
-  // Date filter (dropdown)
+  // Date filter (modal)
   const [selectedDate, setSelectedDate] = useState("ALL");
   const [filterVisible, setFilterVisible] = useState(false);
 
@@ -52,7 +54,14 @@ export default function AcceptedFoodScreen() {
     note: x.note ?? x.description ?? "",
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "accepted",
-    quantity: x.quantity ?? null,
+
+    food_type: x.food_type ?? null,
+    expiration_date: x.expiration_date ?? null,
+
+    // ✅ delivery tracking (from backend)
+    delivery_method: x.delivery_method ?? "donor",
+    delivery_status: x.delivery_status ?? null,
+    delivery_person_id: x.delivery_person_id ?? null,
   });
 
   const assertConfig = () => {
@@ -78,11 +87,10 @@ export default function AcceptedFoodScreen() {
       const userData = userDataStr ? JSON.parse(userDataStr) : null;
       const associationId = userData?.association_id;
 
-      // ✅ FOOD accepted endpoint
       const url = associationId
         ? `${config.API_URL}/donations/food/accepted?association_id=${associationId}`
         : `${config.API_URL}/donations/food/accepted`;
-      console.log("[FETCH] GET", url);
+
       const res = await axios.get(url);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
@@ -90,10 +98,18 @@ export default function AcceptedFoodScreen() {
       setItems(normalized);
 
       // لو التاريخ المختار اختفى بعد refresh رجّعه ALL
-      const datesSet = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
-      if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) setSelectedDate("ALL");
+      const datesSet = new Set(
+        normalized.map((d) => getYMD(d.created_at)).filter(Boolean)
+      );
+      if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) {
+        setSelectedDate("ALL");
+      }
     } catch (e) {
-      setErrorMsg(typeof e?.message === "string" ? e.message : "Failed to load accepted food donations");
+      setErrorMsg(
+        typeof e?.message === "string"
+          ? e.message
+          : "Failed to load accepted food donations"
+      );
       setItems([]);
     } finally {
       setLoading(false);
@@ -132,22 +148,41 @@ export default function AcceptedFoodScreen() {
     }
   };
 
+  const goAssign = (donation_id) => {
+    navigation.navigate("AssignDeliveryPerson", { donation_id });
+  };
+
   const allDates = useMemo(() => {
     const set = new Set();
     items.forEach((d) => {
       const ymd = getYMD(d.created_at);
       if (ymd) set.add(ymd);
     });
-    // الأحدث فوق
     return ["ALL", ...Array.from(set).sort().reverse()];
   }, [items]);
 
   const filteredItems =
-    selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
+    selectedDate === "ALL"
+      ? items
+      : items.filter((d) => getYMD(d.created_at) === selectedDate);
+
+  const renderDeliveryStatus = (st) => {
+    if (!st) return "pending";
+    if (st === "NEEDS_ASSIGNMENT") return "Needs Assignment";
+    if (st === "WAITING_FOR_DONOR") return "Waiting for Donor";
+    if (st === "ASSIGNED") return "Assigned";
+    if (st === "ON_THE_WAY" || st === "on_the_way") return "On the way";
+    if (st === "DELIVERED" || st === "delivered") return "Delivered";
+    return st;
+  };
 
   const renderItem = ({ item }) => {
     const dateStr = getYMD(item.created_at);
     const isSubmitting = !!submitting[item.donation_id];
+
+    const showAssign =
+      item.delivery_method === "association" &&
+      (!item.delivery_status || item.delivery_status === "NEEDS_ASSIGNMENT");
 
     return (
       <View style={styles.card}>
@@ -160,8 +195,17 @@ export default function AcceptedFoodScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.donor_name}</Text>
 
-          {!!item.quantity && (
-            <Text style={styles.metaText}>Quantity: <Text style={{ fontWeight: "800" }}>{item.quantity}</Text></Text>
+          {!!item.food_type && (
+            <Text style={styles.metaText}>
+              Food Type: <Text style={{ fontWeight: "800" }}>{item.food_type}</Text>
+            </Text>
+          )}
+
+          {!!item.expiration_date && (
+            <Text style={styles.metaText}>
+              Expiration:{" "}
+              <Text style={{ fontWeight: "800" }}>{String(item.expiration_date).slice(0, 10)}</Text>
+            </Text>
           )}
 
           <Text numberOfLines={2} style={styles.subtitle}>
@@ -171,6 +215,16 @@ export default function AcceptedFoodScreen() {
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
+
+          {/* ✅ Delivery info */}
+          <Text style={styles.deliveryInfo}>
+            Delivery Method:{" "}
+            {item.delivery_method === "donor" ? "Donor will deliver" : "Association Pickup"}
+          </Text>
+
+          <Text style={styles.deliveryInfo}>
+            Delivery Status: {renderDeliveryStatus(item.delivery_status)}
+          </Text>
         </View>
 
         <View style={styles.statusContainer}>
@@ -178,7 +232,7 @@ export default function AcceptedFoodScreen() {
         </View>
 
         <View style={styles.actionButtons}>
-          {/* Details -> modal */}
+          {/* Details */}
           <TouchableOpacity
             style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
             onPress={() => {
@@ -189,6 +243,17 @@ export default function AcceptedFoodScreen() {
           >
             <Text style={styles.btnText}>Details</Text>
           </TouchableOpacity>
+
+          {/* Assign (only if association pickup & needs assignment) */}
+          {showAssign && (
+            <TouchableOpacity
+              style={[styles.btn, styles.assignBtn, isSubmitting && { opacity: 0.6 }]}
+              onPress={() => goAssign(item.donation_id)}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.btnText}>Assign</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Approve */}
           <TouchableOpacity
@@ -223,7 +288,7 @@ export default function AcceptedFoodScreen() {
         </View>
       )}
 
-      {/* Filter (button + modal like Pending) */}
+      {/* Filter */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
           <Text style={styles.filterBtnTitle}>Filter by Date</Text>
@@ -231,7 +296,7 @@ export default function AcceptedFoodScreen() {
         </TouchableOpacity>
 
         {selectedDate !== "ALL" && (
-          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}> 
+          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}>
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
@@ -260,50 +325,51 @@ export default function AcceptedFoodScreen() {
         )}
       </View>
 
-        {/* Filter Modal (copied from Pending) */}
-        <Modal
-          visible={filterVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setFilterVisible(false)}
-        >
-          <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
-            <Pressable style={styles.filterModalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Select Date</Text>
+      {/* Filter Modal */}
+      <Modal
+        visible={filterVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
+          <Pressable style={styles.filterModalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Select Date</Text>
 
-              <FlatList
-                data={allDates}
-                keyExtractor={(d) => d}
-                style={{ maxHeight: 340 }}
-                ItemSeparatorComponent={() => <View style={styles.sep} />}
-                renderItem={({ item: d }) => {
-                  const active = selectedDate === d;
-                  return (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setSelectedDate(d);
-                        setFilterVisible(false);
-                      }}
-                      style={[styles.dateRow, active && styles.dateRowActive]}
-                    >
-                      <Text style={[styles.dateText, active && styles.dateTextActive]}>
-                        {d === "ALL" ? "All Dates" : d}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-              <View style={{ height: 12 }} />
+            <FlatList
+              data={allDates}
+              keyExtractor={(d) => d}
+              style={{ maxHeight: 340 }}
+              ItemSeparatorComponent={() => <View style={styles.sep} />}
+              renderItem={({ item: d }) => {
+                const active = selectedDate === d;
+                return (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedDate(d);
+                      setFilterVisible(false);
+                    }}
+                    style={[styles.dateRow, active && styles.dateRowActive]}
+                  >
+                    <Text style={[styles.dateText, active && styles.dateTextActive]}>
+                      {d === "ALL" ? "All Dates" : d}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
 
-              <TouchableOpacity
-                style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
-            </Pressable>
+            <View style={{ height: 12 }} />
+
+            <TouchableOpacity
+              style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+              onPress={() => setFilterVisible(false)}
+            >
+              <Text style={styles.btnText}>Close</Text>
+            </TouchableOpacity>
           </Pressable>
-        </Modal>
+        </Pressable>
+      </Modal>
 
       {/* Details Modal */}
       <Modal
@@ -330,8 +396,19 @@ export default function AcceptedFoodScreen() {
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
 
-            {!!selected?.quantity && (
-              <Text style={styles.modalMeta}>Quantity: <Text style={{ fontWeight: "800" }}>{selected.quantity}</Text></Text>
+            {!!selected?.food_type && (
+              <Text style={styles.modalMeta}>
+                Food Type: <Text style={{ fontWeight: "800" }}>{selected.food_type}</Text>
+              </Text>
+            )}
+
+            {!!selected?.expiration_date && (
+              <Text style={styles.modalMeta}>
+                Expiration:{" "}
+                <Text style={{ fontWeight: "800" }}>
+                  {String(selected.expiration_date).slice(0, 10)}
+                </Text>
+              </Text>
             )}
 
             <Text style={styles.modalDesc}>
@@ -340,7 +417,40 @@ export default function AcceptedFoodScreen() {
 
             <Text style={styles.modalDate}>Date: {getYMD(selected?.created_at) || "-"}</Text>
 
+            <Text style={styles.modalMeta}>
+              Delivery Method:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                {selected?.delivery_method === "donor"
+                  ? "Donor will deliver"
+                  : "Association Pickup"}
+              </Text>
+            </Text>
+
+            <Text style={styles.modalMeta}>
+              Delivery Status:{" "}
+              <Text style={{ fontWeight: "800" }}>
+                {renderDeliveryStatus(selected?.delivery_status)}
+              </Text>
+            </Text>
+
             <View style={styles.modalActions}>
+              {/* Assign (only if needs assignment) */}
+              {selected?.delivery_method === "association" &&
+                (!selected?.delivery_status ||
+                  selected?.delivery_status === "NEEDS_ASSIGNMENT") && (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.assignBtn]}
+                    onPress={() => {
+                      const id = selected?.donation_id;
+                      setDetailsVisible(false);
+                      setSelected(null);
+                      if (id) goAssign(id);
+                    }}
+                  >
+                    <Text style={styles.btnText}>Assign</Text>
+                  </TouchableOpacity>
+                )}
+
               <TouchableOpacity
                 style={[styles.btn, styles.approveBtn]}
                 onPress={() => {
@@ -398,31 +508,6 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  filterBox: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignSelf: "flex-start",
-  },
-
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#8b6f69",
-    marginBottom: 6,
-  },
-
-  pickerWrap: {
-    backgroundColor: "#f3f3f3",
-    borderRadius: 10,
-    width: 340,
-    height: 44,
-    justifyContent: "center",
-  },
-
   content: { flex: 1, backgroundColor: "#EBE1D7" },
 
   card: {
@@ -439,6 +524,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
 
+  deliveryInfo: { fontSize: 13, color: "#333", marginTop: 2 },
+
   statusContainer: { position: "absolute", right: 10, top: 10 },
   statusAccepted: {
     backgroundColor: "#22c55e",
@@ -453,8 +540,60 @@ const styles = StyleSheet.create({
   btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
   detailsBtn: { backgroundColor: "#8b6f69" },
   approveBtn: { backgroundColor: "#3b82f6" },
+  assignBtn: { backgroundColor: "#8b6f69" },
   closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
+
+  // filter row
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  filterBtn: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    elevation: 2,
+  },
+  filterBtnTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 4,
+    fontFamily: "Times New Roman",
+  },
+  filterBtnValue: { fontSize: 14, fontWeight: "700", color: "#333" },
+  clearBtn: {
+    backgroundColor: "#8b6f69",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  clearBtnText: { color: "#fff", fontWeight: "800" },
+
+  filterModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+  },
+  sep: { height: 10 },
+  dateRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f3f3f3",
+  },
+  dateRowActive: { backgroundColor: "#8b6f69" },
+  dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
+  dateTextActive: { color: "#fff" },
 
   modalOverlay: {
     flex: 1,
@@ -479,59 +618,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "Times New Roman",
   },
-  // filter row (from Pending)
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  filterBtn: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    elevation: 2,
-  },
-  filterBtnTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#8b6f69",
-    marginBottom: 4,
-    fontFamily: "Times New Roman",
-  },
-  filterBtnValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
-  clearBtn: {
-    backgroundColor: "#8b6f69",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  clearBtnText: { color: "#fff", fontWeight: "800" },
-  filterModalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    elevation: 10,
-  },
-  sep: { height: 10 },
-  dateRow: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#f3f3f3",
-  },
-  dateRowActive: { backgroundColor: "#8b6f69" },
-  dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
-  dateTextActive: { color: "#fff" },
   modalImage: {
     width: "100%",
     height: 180,
@@ -543,5 +629,5 @@ const styles = StyleSheet.create({
   modalMeta: { fontSize: 13, color: "#555", marginBottom: 8 },
   modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
   modalDate: { fontSize: 13, color: "#666", marginBottom: 12 },
-  modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
 });
