@@ -95,7 +95,7 @@ export default function AdminDashboard({ navigation }) {
           >
             <Ionicons name="people-outline" size={40} color="#A27571" />
             <Text style={[styles.cardLabel, { color: cardText }]}>
-              Users Report
+              Add delivery person
             </Text>
           </TouchableOpacity>
 
