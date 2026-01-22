@@ -33,6 +33,15 @@ export default function AdminDashboard({ navigation }) {
   const textColor = darkMode ? "#fff" : "#2f2f2f";
   const cardText = darkMode ? "#fff" : "#333";
 
+  // ===== LOGOUT =====
+  const handleLogout = async () => {
+    await AsyncStorage.clear();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -51,11 +60,16 @@ export default function AdminDashboard({ navigation }) {
             </Text>
           </View>
 
-          <Ionicons
-            name="shield-checkmark-outline"
-            size={36}
-            color={darkMode ? "#fff" : "#A27571"}
-          />
+          {/* 🔴 LOGOUT ICON بدل الدرع */}
+          <TouchableOpacity onPress={handleLogout}>
+            <Image
+              source={require("../assets/images/logout.png")}
+              style={[
+                styles.logoutIcon,
+                { tintColor: darkMode ? "#fff" : "#A27571" },
+              ]}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* TITLE */}
@@ -91,7 +105,7 @@ export default function AdminDashboard({ navigation }) {
           {/* Users Report */}
           <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate("UsersReport")}
+            onPress={() => navigation.navigate("AddDeliveryPerson")}
           >
             <Ionicons name="people-outline" size={40} color="#A27571" />
             <Text style={[styles.cardLabel, { color: cardText }]}>
@@ -112,6 +126,7 @@ export default function AdminDashboard({ navigation }) {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -121,6 +136,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 120,
   },
+
+  /* HEADER */
   welcomeRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -141,12 +158,21 @@ const styles = StyleSheet.create({
     fontSize: 24,
     marginTop: -40,
   },
+  logoutIcon: {
+    width: 34,
+    height: 34,
+    resizeMode: "contain",
+  },
+
+  /* BODY */
   bodyTitle: {
     fontSize: 16,
     fontWeight: "500",
     marginBottom: 10,
     marginTop: -10,
   },
+
+  /* CARDS */
   cardsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -167,6 +193,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+
+  /* FOOTER */
   footerContainer: {
     position: "absolute",
     bottom: 10,

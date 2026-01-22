@@ -117,19 +117,19 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 150,
+    height: 150,
     resizeMode: "contain",
     marginRight: 10,
     marginTop: -40,
     marginLeft: -20,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "600",
-    color: "#A27571", 
+    fontSize: 24,
+    color: "#2f2f2f", 
     marginTop:-50,
     marginLeft: -20,
+    fontFamily: "Times New Roman",
   },
 
  

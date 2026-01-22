@@ -68,6 +68,7 @@ export default function ProfileScreen({ route, navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* ===== HEADER ===== */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Image
@@ -88,7 +89,7 @@ export default function ProfileScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-     
+      {/* ===== PROFILE INFO ===== */}
       <View style={styles.profileSection}>
         <TouchableOpacity style={styles.profileBtn}>
           <Ionicons
@@ -126,7 +127,7 @@ export default function ProfileScreen({ route, navigation }) {
         </View>
       </View>
 
-     
+      {/* ===== REWARD ===== */}
       {!isAssociation && (
         <TouchableOpacity style={styles.row}>
           <Image
@@ -143,9 +144,12 @@ export default function ProfileScreen({ route, navigation }) {
         </TouchableOpacity>
       )}
 
-      
+      {/* ===== DONATION HISTORY (✅ ADDED NAVIGATION) ===== */}
       {!isAssociation && (
-        <TouchableOpacity style={styles.row}>
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => navigation.navigate("DonationHistoryScreen")}
+        >
           <Image
             source={require("../assets/images/history.png")}
             style={[styles.icon, { tintColor: theme.iconColor }]}
@@ -162,7 +166,7 @@ export default function ProfileScreen({ route, navigation }) {
 
       <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
-      
+      {/* ===== EDIT PROFILE ===== */}
       <TouchableOpacity
         style={styles.row}
         onPress={() =>
@@ -192,7 +196,7 @@ export default function ProfileScreen({ route, navigation }) {
 
       <View style={[styles.separator, { backgroundColor: theme.border }]} />
 
-      
+      {/* ===== DARK MODE ===== */}
       <View style={styles.row}>
         <Image
           source={require("../assets/images/moon.png")}
@@ -204,7 +208,7 @@ export default function ProfileScreen({ route, navigation }) {
         <Switch value={darkMode} onValueChange={toggleDarkMode} />
       </View>
 
-    
+      {/* ===== CHATBOT ===== */}
       {!isAssociation && (
         <TouchableOpacity
           style={styles.chatbotBtn}

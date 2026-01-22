@@ -90,6 +90,7 @@ export default function LoginScreen({ navigation }) {
         food,
         clothes,
         association_id: res.data.association_id, // Add association_id
+        delivery_person_id: res.data.delivery_person_id,
       };
 
       await AsyncStorage.setItem("user_data", JSON.stringify(userData));
@@ -127,15 +128,28 @@ export default function LoginScreen({ navigation }) {
           routes: [{ name: 'ChooseDonationType', params: userData }],
         });
 
+      } else if (userData.role === 'delivery') {
+
+          if (!userData.delivery_person_id) {
+            setGeneralError("Delivery account not linked");
+            return;
+          }
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'DeliveryOrdersScreen', params: userData }],
+        });
+
       } else if (userData.role === 'admin') {
         navigation.reset({
           index: 0,
           routes: [{ name: 'AdminDashboard', params: userData }],
         });
       }
-       else {
+      else {
         setGeneralError('Unknown role');
       }
+
 
     } catch (error) {
       setGeneralError('Cannot connect to server');

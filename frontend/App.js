@@ -40,6 +40,17 @@ import VerifyPhone from './pages/VerifyPhone';
 import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
 import ScanScreen from './pages/ScanScreen';
 
+import AssignDeliveryPerson from './pages/AssignDeliveryPerson';  
+import ThankYouSelfDeliveryScreen from './pages/ThankYouSelfDeliveryScreen';
+import UnderReviewDeliveryScreen from './pages/UnderReviewDeliveryScreen';
+import DeliveryMethodScreen from './pages/DeliveryMethodScreen';
+import AddDeliveryPerson from './pages/AddDeliveryPersonScreen';
+import NotificationsScreen from './pages/NotificationsScreen';
+import DeliveryOrdersScreen from './pages/DeliveryOrdersScreen';
+import DeliveryTrackScreen from './pages/DeliveryTrackScreen';
+import DonationHistoryScreen from './pages/DonationHistoryScreen';
+import DonationTrackScreen from './pages/DonationTrackScreen';
+import DonationDeliverScreen from './pages/DonationDeliverScreen';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -86,6 +97,16 @@ export default function App() {
           <Stack.Screen name="VerifyPhone" component={VerifyPhone} />
           <Stack.Screen name="AssignDeliveryPerson" component={AssignDeliveryPerson} />
           <Stack.Screen name="ScanScreen" component={ScanScreen} />
+          <Stack.Screen name="ThankYouSelfDeliveryScreen" component={ThankYouSelfDeliveryScreen} />
+          <Stack.Screen name="UnderReviewDeliveryScreen" component={UnderReviewDeliveryScreen} />
+          <Stack.Screen name="DeliveryMethodScreen" component={DeliveryMethodScreen} />
+          <Stack.Screen name="AddDeliveryPerson" component={AddDeliveryPerson} />
+          <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />
+          <Stack.Screen name="DeliveryOrdersScreen" component={DeliveryOrdersScreen} />
+          <Stack.Screen name="DeliveryTrackScreen" component={DeliveryTrackScreen} />
+          <Stack.Screen name="DonationHistoryScreen" component={DonationHistoryScreen} />
+          <Stack.Screen name="DonationTrackScreen" component={DonationTrackScreen} />
+          <Stack.Screen name="DonationDeliverScreen" component={DonationDeliverScreen} />
           </Stack.Navigator>
       </NavigationContainer>
   );

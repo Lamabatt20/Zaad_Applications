@@ -39,14 +39,45 @@ export default function PendingClothesScreen({ navigation }) {
   };
 
   const normalizeDonation = (x) => ({
-    donation_id: x.donation_id ?? x.id,
-    donor_name: x.donor_name ?? x.full_name ?? "Donor",
-    item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
-    note: x.note ?? x.description ?? "",
-    created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
-    status: x.status ?? "pending",
-    delivery_method: x.delivery_method ?? "donor", // ✅ جديد
-  });
+  donation_id: x.donation_id ?? x.id,
+  donor_name: x.donor_name ?? x.full_name ?? "Donor",
+  item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
+  note: x.note ?? x.description ?? "",
+  created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
+  status: x.status ?? "pending",
+delivery_method: String(x.delivery_method ?? x.deliveryMethod ?? "donor").trim().toLowerCase(),
+});
+
+const acceptDonation = async (id, deliveryMethod) => {
+  try {
+    setSubmitting((s) => ({ ...s, [id]: "accept" }));
+    removeFromUI(id); // optimistic
+
+    // ✅ accept endpoint handles delivery_status internally
+    await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`);
+
+    // ✅ if association pickup -> go assign
+    if (String(deliveryMethod).toLowerCase() === "association") {
+      const userDataStr = await AsyncStorage.getItem("user_data");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const associationId = userData?.association_id;
+
+      navigation.navigate("AssignDeliveryPerson", {
+        donation_id: id,
+        association_id: associationId,
+      });
+    }
+  } catch (e) {
+    Alert.alert("Error", "Could not accept. Restoring item.");
+    fetchPending();
+  } finally {
+    setSubmitting((s) => {
+      const c = { ...s };
+      delete c[id];
+      return c;
+    });
+  }
+};
 
   const getYMD = (created_at) => {
     if (typeof created_at === "string" && created_at.includes("T")) {
@@ -82,12 +113,13 @@ export default function PendingClothesScreen({ navigation }) {
         ? `${config.API_URL}/donations/clothes/pending?association_id=${associationId}`
         : `${config.API_URL}/donations/clothes/pending`;
       const res = await axios.get(url);
+console.log("PENDING RAW FIRST:", res.data?.[0]);
+console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
 
       const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
       const normalized = arr.map(normalizeDonation);
       setPendingDonations(normalized);
 
-      // لو التاريخ المختار اختفى بعد refresh رجّعه ALL
       const datesSet = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
       if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) setSelectedDate("ALL");
     } catch (error) {
@@ -113,27 +145,6 @@ export default function PendingClothesScreen({ navigation }) {
     setPendingDonations((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
   };
 
-  const acceptDonation = async (id, deliveryMethod) => {
-    try {
-      setSubmitting((s) => ({ ...s, [id]: "accept" }));
-      removeFromUI(id); // optimistic
-      await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`);
-
-      // إذا الجمعية مسؤولة عن التوصيل → انتقلي لشاشة تعيين موظف
-      if (deliveryMethod === "association") {
-        navigation.navigate("AssignDeliveryPerson", { donation_id: id });
-      }
-    } catch (e) {
-      Alert.alert("Error", "Could not accept. Restoring item.");
-      fetchPending();
-    } finally {
-      setSubmitting((s) => {
-        const c = { ...s };
-        delete c[id];
-        return c;
-      });
-    }
-  };
 
   const rejectDonation = async (id) => {
     try {
@@ -401,7 +412,7 @@ export default function PendingClothesScreen({ navigation }) {
   );
 }
 
-// ✅ Styles يبقوا نفس ما عندك
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
   headerLarge: {

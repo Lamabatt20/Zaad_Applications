@@ -350,8 +350,19 @@ async function ensureAdminAccount() {
     console.error('❌ Error creating admin account:', error);
   }
 }
+async function ensureDeliveryPersonCarType() {
+  try {
+    await pool.query(`
+      ALTER TABLE delivery_persons
+      ADD COLUMN IF NOT EXISTS car_type VARCHAR(50);
+    `);
+    console.log("✅ delivery_persons.car_type verified/added");
+  } catch (err) {
+    console.error("❌ ensureDeliveryPersonCarType:", err);
+  }
+}
 
-
+ensureDeliveryPersonCarType();
 ensureAdminAccount();
  ensureDonationAssociationColumn();
 dropIsPerishableColumn();
@@ -655,8 +666,11 @@ app.post("/login", async (req, res) => {
   }
 
   try {
+    // ==========================
+    // 1️⃣ Get account
+    // ==========================
     const accRes = await pool.query(
-      "SELECT * FROM accounts WHERE username=$1",
+      "SELECT * FROM accounts WHERE username = $1",
       [username]
     );
 
@@ -666,11 +680,17 @@ app.post("/login", async (req, res) => {
 
     const account = accRes.rows[0];
 
+    // ==========================
+    // 2️⃣ Check password
+    // ==========================
     const match = await bcrypt.compare(password, account.password_hash);
     if (!match) {
       return res.json({ success: false, passwordIncorrect: true });
     }
 
+    // ==========================
+    // 3️⃣ Email verified?
+    // ==========================
     if (!account.email_verified) {
       return res.json({
         success: false,
@@ -679,6 +699,9 @@ app.post("/login", async (req, res) => {
       });
     }
 
+    // ==========================
+    // 4️⃣ Association approval
+    // ==========================
     if (account.role === "association" && !account.is_approved) {
       return res.json({
         success: false,
@@ -688,18 +711,22 @@ app.post("/login", async (req, res) => {
     }
 
     // ==========================
-    // ✅ Association extra data
+    // Extra data containers
     // ==========================
     let food = false;
     let clothes = false;
     let association_id = null;
+    let delivery_person_id = null;
 
+    // ==========================
+    // 5️⃣ Association extra data
+    // ==========================
     if (account.role === "association") {
       const assocRes = await pool.query(
         `
         SELECT a.association_id, a.food, a.clothes
         FROM associations a
-        JOIN users u ON a.user_id = u.user_id
+        JOIN users u ON u.user_id = a.user_id
         WHERE u.account_id = $1
         `,
         [account.account_id]
@@ -713,24 +740,48 @@ app.post("/login", async (req, res) => {
     }
 
     // ==========================
-    // ✅ Final response
+    // 6️⃣ ✅ DELIVERY extra data (🔥 الحل)
+    // ==========================
+    if (account.role === "delivery") {
+      const dpRes = await pool.query(
+        `
+        SELECT dp.delivery_person_id
+        FROM delivery_persons dp
+        JOIN users u ON u.user_id = dp.user_id
+        WHERE u.account_id = $1
+        `,
+        [account.account_id]
+      );
+
+      if (dpRes.rows.length > 0) {
+        delivery_person_id = dpRes.rows[0].delivery_person_id;
+      }
+    }
+
+    // ==========================
+    // 7️⃣ Final response
     // ==========================
     res.json({
       success: true,
       role: account.role,
-      user_id: account.account_id,
+      user_id: account.account_id, // account_id يستخدم بالفرونت
       username: account.username,
       email: account.email,
       full_name: account.full_name,
       phone: account.phone,
       address: account.address,
+
+      // association
       food,
       clothes,
       association_id,
+
+      // delivery
+      delivery_person_id, 
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("LOGIN ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -883,20 +934,54 @@ app.get('/donations', async (req, res) => {
 });
 
 app.post('/donations', upload.single("item_image"), async (req, res) => {
-  const { donor_id, donation_type, note, status, address, association_id } = req.body;
-  const file = req.file;
-  console.log('📦 POST /donations - Received:', { donor_id, donation_type, note, status, address, association_id, file: file?.filename });
+  const {
+    donor_id,
+    donation_type,
+    note,
+    status,
+    address,
+    association_id,
+    delivery_method 
+  } = req.body;
+
   try {
-    const imagePath = file ? `/uploads/${file.filename}` : null;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const method = (delivery_method || 'donor').toLowerCase(); 
     const result = await pool.query(
-      `INSERT INTO donations (donor_id, donation_type, item_image, note, status, address, association_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [donor_id, donation_type, imagePath, note, status || 'pending', address, association_id || null]
+      `INSERT INTO donations
+        (donor_id, donation_type, item_image, note, status, address, association_id, delivery_method)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING *`,
+      [
+        donor_id,
+        donation_type,
+        imagePath,
+        note,
+        status || 'pending',
+        address,
+        association_id || null,
+        method
+      ]
     );
-    console.log('✅ Donation created:', result.rows[0]);
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error('❌ Donation creation error:', err);
+    res.status(500).json({ success:false, message: err.message || "Server error" });
+  }
+});
+
+app.post('/food_donations', async (req, res) => {
+  const { donation_id, food_type, expiration_date } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO food_donations (donation_id,food_type, expiration_date)
+       VALUES ($1,$2,$3) RETURNING *`,
+      [donation_id, food_type, expiration_date]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
     res.status(500).json({
       success: false,
       message: err.message || "Server error"
@@ -935,17 +1020,37 @@ app.post('/food_donations', upload.none(), async (req, res) => {
 
 app.post('/clothes_donations', async (req, res) => {
   const { donation_id, clothes_type } = req.body;
+
+  if (!donation_id || !clothes_type) {
+    return res.status(400).json({
+      success: false,
+      message: "donation_id and clothes_type are required"
+    });
+  }
+
   try {
     const result = await pool.query(
-      `INSERT INTO clothes_donations (donation_id, clothes_type)
-       VALUES ($1,$2) RETURNING *`,
+      `
+      INSERT INTO clothes_donations (donation_id, clothes_type)
+      VALUES ($1, $2)
+      RETURNING *
+      `,
       [donation_id, clothes_type]
     );
-    res.json(result.rows[0]);
+
+    res.json({
+      success: true,
+      item: result.rows[0]
+    });
   } catch (err) {
-    res.status(500).send('Server error');
+    console.error("❌ clothes_donations error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
+
 
 app.get('/donation_history', async (req, res) => {
   try {
@@ -969,6 +1074,74 @@ app.post('/donation_history', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+app.get('/donations/:id/association', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT
+        d.donation_id,
+        a.association_id,
+        a.name,
+        acc.address
+      FROM donations d
+      JOIN associations a ON a.association_id = d.association_id
+      JOIN users u ON u.user_id = a.user_id
+      JOIN accounts acc ON acc.account_id = u.account_id
+      WHERE d.donation_id = $1
+      `,
+      [id]
+    );
+
+    if (q.rows.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        error: "Association not found for this donation"
+      });
+    }
+
+    res.json(q.rows[0]);
+  } catch (e) {
+    console.error("❌ GET donation association error:", e);
+    res.status(500).json({
+      ok: false,
+      error: "Server error"
+    });
+  }
+});
+
+app.get('/donation_history/donor/:account_id', async (req, res) => {
+  const { account_id } = req.params;
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT DISTINCT ON (h.donation_id)
+        h.donation_id,
+        h.description,
+        h.event_time,
+        d.status,
+        d.delivery_method,
+        d.delivery_status
+      FROM donation_history h
+      JOIN donations d ON d.donation_id = h.donation_id
+      JOIN donors dr ON dr.user_id = h.donor_id
+      JOIN users u ON u.user_id = dr.user_id
+      WHERE u.account_id = $1
+      ORDER BY h.donation_id, h.event_time DESC
+      `,
+      [account_id]
+    );
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error("❌ donation_history error:", e);
+    res.status(500).json({ ok:false });
+  }
+});
+
+
 
 app.get('/delivery_persons', async (req, res) => {
   try {
@@ -979,19 +1152,143 @@ app.get('/delivery_persons', async (req, res) => {
   }
 });
 
-app.post('/delivery_persons', async (req, res) => {
-  const { association_id, name, phone_number, status } = req.body;
+app.post('/admin/add-delivery-person', async (req, res) => {
+  const {
+    username,
+    password,
+    full_name,
+    phone,
+    email,
+    car_type
+  } = req.body;
+
+  // ===== Validation =====
+  if (!username || !password || !phone || !car_type) {
+    return res.status(400).json({
+      ok: false,
+      error: "Missing required fields"
+    });
+  }
+
+  const client = await pool.connect();
+
   try {
-    const result = await pool.query(
-      `INSERT INTO delivery_persons (association_id, name, phone_number, status)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [association_id, name, phone_number, status]
+    await client.query("BEGIN");
+
+    // ===== 1️⃣ Check if username or phone exists =====
+    const exists = await client.query(
+      `SELECT 1 FROM accounts WHERE username = $1 OR phone = $2`,
+      [username, phone]
     );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).send('Server error');
+
+    if (exists.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.json({
+        ok: false,
+        error: "Username or phone already exists"
+      });
+    }
+
+    // ===== 2️⃣ Create account (APPROVED مباشرة) =====
+    // ===== 2️⃣ Create account (APPROVED + EMAIL VERIFIED مباشرة) =====
+const hashedPassword = await bcrypt.hash(password, 10);
+
+const accRes = await client.query(
+  `
+  INSERT INTO accounts
+    (
+      username,
+      password_hash,
+      role,
+      email,
+      phone,
+      full_name,
+      is_approved,
+      email_verified
+    )
+  VALUES
+    (
+      $1,
+      $2,
+      'delivery',
+      $3,
+      $4,
+      $5,
+      true,
+      true
+    )
+  RETURNING account_id
+  `,
+  [
+    username,
+    hashedPassword,
+    email || null,
+    phone,
+    full_name || null
+  ]
+);
+
+    const account_id = accRes.rows[0].account_id;
+
+    // ===== 3️⃣ Create user =====
+    const userRes = await client.query(
+      `
+      INSERT INTO users (account_id)
+      VALUES ($1)
+      RETURNING user_id
+      `,
+      [account_id]
+    );
+
+    const user_id = userRes.rows[0].user_id;
+
+    // ===== 4️⃣ Create delivery person (association_id = NULL) =====
+    const dpRes = await client.query(
+      `
+      INSERT INTO delivery_persons
+        (user_id, status, name, phone_number, car_type, association_id)
+      VALUES
+        ($1, 'active', $2, $3, $4, NULL)
+      RETURNING *
+      `,
+      [
+        user_id,
+        full_name || username,
+        phone,
+        car_type
+      ]
+    );
+
+    if (dpRes.rows.length === 0) {
+      throw new Error("Delivery person insert failed");
+    }
+
+    // ===== 5️⃣ Commit =====
+    await client.query("COMMIT");
+
+    console.log("✅ DELIVERY PERSON CREATED:", dpRes.rows[0]);
+
+    res.json({
+      ok: true,
+      message: "Delivery person created successfully",
+      delivery_person: dpRes.rows[0]
+    });
+
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("❌ ADD DELIVERY PERSON ERROR:", error);
+
+    res.status(500).json({
+      ok: false,
+      error: "Failed to create delivery person"
+    });
+  } finally {
+    client.release();
   }
 });
+
+
+
 
 app.get('/delivery', async (req, res) => {
   try {
@@ -1112,29 +1409,36 @@ app.get("/recommend", async (req, res) => {
 });
 app.get('/donations/clothes/pending', async (req, res) => {
   const { association_id } = req.query;
+
   try {
     let query = `
-      SELECT d.donation_id,
-             COALESCE(a.full_name, 'Donor') AS donor_name,
-             d.item_image,
-             d.note,
-             d.status,
-             d.created_at
+      SELECT
+        d.donation_id,
+        COALESCE(a.full_name, 'Donor') AS donor_name,
+        d.item_image,
+        d.note,
+        d.status,
+        d.created_at,
+        d.delivery_method,
+        d.delivery_status,
+        d.delivery_person_id
       FROM donations d
       JOIN donors dr   ON dr.user_id = d.donor_id
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       LEFT JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type = 'clothes' AND d.status = 'pending'`;
-    
+      WHERE d.donation_type = 'clothes'
+        AND d.status = 'pending'
+    `;
+
     const params = [];
     if (association_id) {
       query += ` AND d.association_id = $1`;
       params.push(association_id);
     }
-    
+
     query += ` ORDER BY d.donation_id DESC`;
-    
+
     const q = await pool.query(query, params);
     res.json(q.rows);
   } catch (e) {
@@ -1142,31 +1446,54 @@ app.get('/donations/clothes/pending', async (req, res) => {
     res.status(500).json({ ok:false, error:'Failed to fetch pending clothes donations' });
   }
 });
+
 app.get('/assoc/delivery-persons', async (req, res) => {
   const { association_id } = req.query;
-  if (!association_id) return res.status(400).json({ ok:false, error:'association_id required' });
 
   try {
     const q = await pool.query(`
-      SELECT dp.delivery_person_id,
-             dp.status,
-             COALESCE(acc.full_name, dp.name) AS name,
-             COALESCE(acc.phone, dp.phone_number) AS phone,
-             acc.email
+      SELECT
+        dp.delivery_person_id,
+        dp.status,
+        dp.car_type,
+        COALESCE(acc.full_name, dp.name) AS name,
+        COALESCE(acc.phone, dp.phone_number) AS phone,
+        acc.email,
+        dp.association_id
+
       FROM delivery_persons dp
       JOIN users u ON u.user_id = dp.user_id
       JOIN accounts acc ON acc.account_id = u.account_id
-      WHERE dp.association_id = $1
-        AND acc.is_approved = true
+
+      WHERE acc.is_approved = true
+
+        -- 🔒 لا يظهر إذا مربوط بجمعية ثانية
+        AND (
+          dp.association_id IS NULL
+          OR dp.association_id = $1
+        )
+
+        -- 🚫 لا يكون ماسك طلب فعال
+        AND dp.delivery_person_id NOT IN (
+          SELECT delivery_person_id
+          FROM donations
+          WHERE delivery_person_id IS NOT NULL
+            AND delivery_status IN ('ASSIGNED', 'PICKED_UP')
+        )
+
       ORDER BY dp.delivery_person_id DESC
-    `, [association_id]);
+    `, [association_id || null]);
 
     res.json(q.rows);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ ok:false, error:'Failed to fetch delivery persons' });
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to fetch delivery persons'
+    });
   }
 });
+
 
 app.post('/assoc/donations/:id/accept', async (req, res) => {
   const id = req.params.id;
@@ -1210,37 +1537,45 @@ app.post('/assoc/donations/:id/assign-delivery', async (req, res) => {
   const donationId = req.params.id;
   const { delivery_person_id } = req.body;
 
-  if (!delivery_person_id) return res.status(400).json({ ok:false, error:'delivery_person_id required' });
+  if (!delivery_person_id)
+    return res.status(400).json({ ok:false, error:'delivery_person_id required' });
 
   try {
+    // 1️⃣ get donation
     const d = await pool.query(
       `SELECT donation_id, status, delivery_method, association_id
        FROM donations
        WHERE donation_id=$1`,
       [donationId]
     );
-    if (d.rows.length === 0) return res.status(404).json({ ok:false, error:'Donation not found' });
+
+    if (d.rows.length === 0)
+      return res.status(404).json({ ok:false, error:'Donation not found' });
 
     const row = d.rows[0];
-    if (row.status !== 'accepted') return res.status(400).json({ ok:false, error:'Donation not accepted' });
-    if ((row.delivery_method || 'donor') !== 'association') {
-      return res.status(400).json({ ok:false, error:'Delivery method is not association' });
-    }
 
+    if (row.status !== 'accepted')
+      return res.status(400).json({ ok:false, error:'Donation not accepted' });
+
+    if ((row.delivery_method || 'donor') !== 'association')
+      return res.status(400).json({ ok:false, error:'Delivery method is not association' });
+
+    // 2️⃣ check delivery person (ONLY approved)
     const dp = await pool.query(`
       SELECT dp.delivery_person_id
       FROM delivery_persons dp
       JOIN users u ON u.user_id = dp.user_id
       JOIN accounts acc ON acc.account_id = u.account_id
       WHERE dp.delivery_person_id=$1
-        AND dp.association_id=$2
         AND acc.is_approved=true
-    `, [delivery_person_id, row.association_id]);
+    `, [delivery_person_id]);
 
-    if (dp.rows.length === 0) {
-      return res.status(400).json({ ok:false, error:'Delivery person not approved or not in this association' });
-    }
 
+
+    if (dp.rows.length === 0)
+      return res.status(400).json({ ok:false, error:'Delivery person not approved' });
+
+    // 3️⃣ ASSIGN donation
     await pool.query(
       `UPDATE donations
        SET delivery_person_id=$2,
@@ -1248,8 +1583,40 @@ app.post('/assoc/donations/:id/assign-delivery', async (req, res) => {
        WHERE donation_id=$1`,
       [donationId, delivery_person_id]
     );
+    // ===== 📧 Send email to delivery person =====
+const emailRes = await pool.query(`
+  SELECT acc.email, acc.full_name
+  FROM delivery_persons dp
+  JOIN users u ON u.user_id = dp.user_id
+  JOIN accounts acc ON acc.account_id = u.account_id
+  WHERE dp.delivery_person_id = $1
+`, [delivery_person_id]);
 
-    // optional: keep your donation_deliveries table in sync
+if (emailRes.rows.length > 0) {
+  const { email, full_name } = emailRes.rows[0];
+
+  await sendEmail(
+    email,
+    "🚚 New Delivery Assigned – Zaad Platform",
+    `
+    <div style="font-family: Arial; direction: rtl">
+      <h2>مرحباً ${full_name} 👋</h2>
+      <p>تم تعيين طلب توصيل جديد لك على منصة <b>زاد</b>.</p>
+      <p>يرجى تسجيل الدخول إلى التطبيق للاطلاع على التفاصيل.</p>
+      <br/>
+      <p>بالتوفيق 🤍<br/>فريق زاد</p>
+    </div>
+    `
+  );
+} 
+    await pool.query(
+      `UPDATE delivery_persons
+       SET association_id=$2
+       WHERE delivery_person_id=$1`,
+      [delivery_person_id, row.association_id]
+    );
+
+    // 5️⃣ optional sync table
     await pool.query(
       `INSERT INTO donation_deliveries (delivery_person_id, donation_id, delivery_status)
        VALUES ($1,$2,'ASSIGNED')
@@ -1258,12 +1625,76 @@ app.post('/assoc/donations/:id/assign-delivery', async (req, res) => {
     );
 
     res.json({ ok:true });
+
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok:false, error:'Failed to assign delivery person' });
   }
 });
+app.get('/delivery/my-donations/:delivery_person_id', async (req, res) => {
+  const { delivery_person_id } = req.params;
 
+  try {
+    const q = await pool.query(`
+      SELECT
+        d.donation_id,
+        d.delivery_status,
+        d.address AS donation_address,
+        d.delivery_method,
+        d.created_at,
+
+        acc.full_name AS donor_name,
+        acc.phone AS donor_phone,
+
+        a.name AS association_name,
+        acc2.address AS association_address
+
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u1 ON u1.user_id = dr.user_id
+      JOIN accounts acc ON acc.account_id = u1.account_id
+
+      LEFT JOIN associations a ON a.association_id = d.association_id
+      LEFT JOIN users u2 ON u2.user_id = a.user_id
+      LEFT JOIN accounts acc2 ON acc2.account_id = u2.account_id
+
+      WHERE d.delivery_person_id = $1
+        AND d.delivery_status IS NOT NULL
+
+      ORDER BY d.created_at DESC
+    `, [delivery_person_id]);
+
+    res.json({ ok: true, donations: q.rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false });
+  }
+});
+app.post('/delivery/update-status', async (req, res) => {
+  const { donation_id, next_status } = req.body;
+
+  if (!donation_id || !next_status)
+    return res.status(400).json({ ok:false });
+
+  try {
+    await pool.query(`
+      UPDATE donations
+      SET delivery_status = $2,
+          delivered_at = CASE WHEN $2 = 'DELIVERED' THEN NOW() ELSE delivered_at END
+      WHERE donation_id = $1
+    `, [donation_id, next_status]);
+
+    await pool.query(`
+      INSERT INTO donation_history (donation_id, description)
+      VALUES ($1, $2)
+    `, [donation_id, next_status]);
+
+    res.json({ ok:true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false });
+  }
+});
 
 app.post('/assoc/donations/:id/reject', async (req, res) => {
   const id = req.params.id;
@@ -1298,6 +1729,7 @@ app.post('/assoc/donations/:id/reject', async (req, res) => {
 
 app.get('/donations/clothes/accepted', async (req, res) => {
   const { association_id } = req.query;
+
   try {
     let query = `
       SELECT d.donation_id,
@@ -1307,15 +1739,22 @@ app.get('/donations/clothes/accepted', async (req, res) => {
              d.status,
              d.created_at,
              cd.clothes_type,
+
              COALESCE(d.delivery_method,'donor') AS delivery_method,
              d.delivery_status,
-             d.delivery_person_id
+             d.delivery_person_id,
+             COALESCE(dp.name,'') AS delivery_person_name
+
       FROM donations d
       JOIN donors dr   ON dr.user_id = d.donor_id
       JOIN users u     ON u.user_id  = dr.user_id
       JOIN accounts a  ON a.account_id = u.account_id
       JOIN clothes_donations cd ON cd.donation_id = d.donation_id
-      WHERE d.donation_type = 'clothes' AND d.status = 'accepted'`;
+      LEFT JOIN delivery_persons dp ON dp.delivery_person_id = d.delivery_person_id
+
+      WHERE d.donation_type = 'clothes'
+        AND d.status = 'accepted'
+    `;
 
     const params = [];
     if (association_id) {
@@ -1390,46 +1829,153 @@ app.get('/associations/clothes', async (req, res) => {
 });
 // POST /assoc/donations/:id/approve  -> accepted ➜ approved
 app.post('/assoc/donations/:id/approve', async (req, res) => {
+  const donationId = req.params.id;
+
   try {
     const d = await pool.query(
-      `SELECT donation_id, delivery_method, delivery_status
-       FROM donations
-       WHERE donation_id=$1`,
-      [req.params.id]
+      `
+      SELECT donation_id, donor_id, delivery_method, delivery_status
+      FROM donations
+      WHERE donation_id = $1
+      `,
+      [donationId]
     );
 
-    if (d.rows.length === 0) return res.status(404).json({ ok: false });
+    if (d.rows.length === 0)
+      return res.status(404).json({ ok: false, error: "Donation not found" });
 
-    const method = d.rows[0].delivery_method || 'donor';
-    const current = d.rows[0].delivery_status || null;
+    const donation = d.rows[0];
+    const method = donation.delivery_method || 'donor';
 
-    let nextDeliveryStatus = current;
+    let nextDeliveryStatus =
+      method === 'association'
+        ? 'NEEDS_ASSIGNMENT'
+        : 'WAITING_FOR_DONOR';
 
-    if (method === 'association') {
-      // إذا ما تعيّن سواق بعد
-      if (!current || current === 'NEEDS_ASSIGNMENT') {
-        nextDeliveryStatus = 'NEEDS_ASSIGNMENT';
-      }
-      // إذا كانت ASSIGNED أو PICKED_UP أو DELIVERED... خليها زي ما هي
-    } else {
-      // donor delivers
-      nextDeliveryStatus = 'WAITING_FOR_DONOR';
-    }
+    // 1️⃣ Update donation
+    await pool.query(
+      `
+      UPDATE donations
+      SET status = 'approved',
+          delivery_status = $2
+      WHERE donation_id = $1
+      `,
+      [donationId, nextDeliveryStatus]
+    );
+
+    // 2️⃣ Donation history
+    await pool.query(
+      `
+      INSERT INTO donation_history (donation_id, donor_id, description)
+      VALUES ($1, $2, 'APPROVED')
+      `,
+      [donationId, donation.donor_id]
+    );
+
+    // 3️⃣ Notification to donor
+      const message = JSON.stringify({
+      text:
+        method === 'association'
+          ? 'تم قبول تبرعك وسيتم استلامه بأقرب وقت، يمكنك تتبع الطلب'
+          : 'تم قبول طلبك، يمكنك إيصال التبرع إلى عنوان الجمعية',
+      donation_id: donationId
+    });
 
     await pool.query(
-      `UPDATE donations
-       SET status='approved',
-           delivery_status=$2
-       WHERE donation_id=$1`,
-      [req.params.id, nextDeliveryStatus]
+      `
+      INSERT INTO notifications (user_id, type, message)
+      SELECT u.user_id, 'donation_approved', $2
+      FROM donors d
+      JOIN users u ON u.user_id = d.user_id
+      WHERE d.user_id = $1
+      `,
+      [donation.donor_id, message]
     );
 
-    res.json({ ok: true, delivery_status: nextDeliveryStatus });
+    res.json({
+      ok: true,
+      delivery_status: nextDeliveryStatus
+    });
+
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok: false });
   }
 });
+app.post('/donor/deliver', async (req, res) => {
+  const { donation_id } = req.body;
+
+  if (!donation_id)
+    return res.status(400).json({ ok:false });
+
+  try {
+    await pool.query(
+      `
+      UPDATE donations
+      SET delivery_status = 'DELIVERED',
+          delivered_at = NOW()
+      WHERE donation_id = $1
+      `,
+      [donation_id]
+    );
+
+    await pool.query(
+      `
+      INSERT INTO donation_history (donation_id, description)
+      VALUES ($1, 'DELIVERED_BY_DONOR')
+      `,
+      [donation_id]
+    );
+
+    res.json({ ok:true });
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false });
+  }
+});
+app.get('/notifications/:account_id', async (req, res) => {
+  const { account_id } = req.params;
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT n.*
+      FROM notifications n
+      JOIN users u ON u.user_id = n.user_id
+      WHERE u.account_id = $1
+      ORDER BY n.created_at DESC
+      `,
+      [account_id]
+    );
+
+    res.json(q.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// MARK notification as read
+app.post('/notifications/read/:notification_id', async (req, res) => {
+  const { notification_id } = req.params;
+
+  try {
+    await pool.query(
+      `UPDATE notifications
+       SET is_read = true
+       WHERE notification_id = $1`,
+      [notification_id]
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok:false });
+  }
+});
+
+
 // GET /donations/clothes/approved  -> list approved clothes (with delivery tracking)
 app.get('/donations/clothes/approved', async (req, res) => {
   const { association_id } = req.query;
@@ -1980,12 +2526,13 @@ async function ensureAccountsApprovalColumns() {
 ensureAccountsApprovalColumns();
 async function ensureDeliveryPersonsUserLink() {
   try {
+    
     await pool.query(`
       ALTER TABLE delivery_persons
-      ADD COLUMN IF NOT EXISTS user_id INTEGER UNIQUE;
+      ADD COLUMN IF NOT EXISTS user_id INTEGER;
     `);
 
-    // add FK safely (if not exists)
+    // أضف FK فقط (بدون UNIQUE)
     await pool.query(`
       DO $$
       BEGIN
@@ -1994,16 +2541,19 @@ async function ensureDeliveryPersonsUserLink() {
         ) THEN
           ALTER TABLE delivery_persons
           ADD CONSTRAINT fk_delivery_persons_user
-          FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+          FOREIGN KEY (user_id)
+          REFERENCES users(user_id)
+          ON DELETE CASCADE;
         END IF;
       END $$;
     `);
 
-    console.log("✅ delivery_persons.user_id verified/added");
+    console.log("✅ delivery_persons.user_id added correctly (NO UNIQUE)");
   } catch (err) {
     console.error("❌ ensureDeliveryPersonsUserLink:", err);
   }
 }
+
 ensureDeliveryPersonsUserLink();
 async function ensureDonationDeliveryTracking() {
   try {
@@ -2019,56 +2569,7 @@ async function ensureDonationDeliveryTracking() {
   }
 }
 ensureDonationDeliveryTracking();
-app.post('/assoc/delivery-persons', async (req, res) => {
-  const { association_id, username, password, full_name, phone, email } = req.body;
 
-  if (!association_id || !username || !password || !phone) {
-    return res.status(400).json({ ok:false, error:'Missing required fields' });
-  }
-
-  try {
-    const exists = await pool.query(
-      `SELECT 1 FROM accounts WHERE username=$1 OR phone=$2`,
-      [username, phone]
-    );
-    if (exists.rows.length > 0) {
-      return res.json({ ok:false, error:'Username or phone already exists' });
-    }
-
-    const hashed = await bcrypt.hash(password, 10);
-
-    const acc = await pool.query(`
-      INSERT INTO accounts (username, password_hash, role, email, phone, full_name, is_approved)
-      VALUES ($1,$2,'delivery',$3,$4,$5,false)
-      RETURNING account_id
-    `, [username, hashed, email || null, phone, full_name || null]);
-
-    const account_id = acc.rows[0].account_id;
-
-    const u = await pool.query(
-      `INSERT INTO users (account_id) VALUES ($1) RETURNING user_id`,
-      [account_id]
-    );
-    const user_id = u.rows[0].user_id;
-
-    const dp = await pool.query(`
-      INSERT INTO delivery_persons (association_id, user_id, status, name, phone_number)
-      VALUES ($1,$2,'pending',$3,$4)
-      RETURNING delivery_person_id
-    `, [association_id, user_id, full_name || username, phone]);
-
-    res.json({
-      ok:true,
-      message:"Delivery person created (pending admin approval)",
-      delivery_person_id: dp.rows[0].delivery_person_id,
-      account_id,
-      user_id
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok:false, error:'Failed to create delivery person' });
-  }
-});
 app.post('/admin/approve-delivery/:account_id', async (req, res) => {
   const { account_id } = req.params;
 

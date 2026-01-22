@@ -51,7 +51,7 @@ export default function SideMenu({ visible, onClose, navigation, user = {}, sour
           style={styles.sideBtn}
           onPress={() => {
             onClose();
-            navigation.navigate('Notifications');
+            navigation.navigate('NotificationsScreen');
           }}
         >
           <Text style={[styles.sideBtnText, { color: textColor }]}>Notifications</Text>
