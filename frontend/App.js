@@ -37,7 +37,8 @@ import AdminDashboard from './pages/Admin Dashboard';
 import PendingAssociations from './pages/PendingAssociations';
 import WaitingApproval from './pages/WaitingForApprovalScreen';
 import VerifyPhone from './pages/VerifyPhone';
-import AssignDeliveryPerson from './pages/AssignDeliveryPerson';  
+import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
+import ScanScreen from './pages/ScanScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -84,6 +85,7 @@ export default function App() {
           <Stack.Screen name="WaitingApproval" component={WaitingApproval} />
           <Stack.Screen name="VerifyPhone" component={VerifyPhone} />
           <Stack.Screen name="AssignDeliveryPerson" component={AssignDeliveryPerson} />
+          <Stack.Screen name="ScanScreen" component={ScanScreen} />
           </Stack.Navigator>
       </NavigationContainer>
   );

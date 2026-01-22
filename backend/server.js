@@ -883,7 +883,7 @@ app.get('/donations', async (req, res) => {
 });
 
 app.post('/donations', upload.single("item_image"), async (req, res) => {
- const { donor_id, donation_type, note, status, address, association_id } = req.body;
+  const { donor_id, donation_type, note, status, address, association_id } = req.body;
   const file = req.file;
   console.log('📦 POST /donations - Received:', { donor_id, donation_type, note, status, address, association_id, file: file?.filename });
   try {
@@ -891,33 +891,45 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
     const result = await pool.query(
       `INSERT INTO donations (donor_id, donation_type, item_image, note, status, address, association_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [donor_id, donation_type, imagePath, note, status || 'pending', address,association_id || null]
+      [donor_id, donation_type, imagePath, note, status || 'pending', address, association_id || null]
     );
     console.log('✅ Donation created:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
-   console.error('❌ Donation creation error:', err);
-   res.status(500).json({
-      success: false,
-      message: err.message || "Server error"
-});
-  }
-});
-
-app.post('/food_donations', async (req, res) => {
-  const { donation_id, food_type, expiration_date } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO food_donations (donation_id,food_type, expiration_date)
-       VALUES ($1,$2,$3) RETURNING *`,
-      [donation_id, food_type, expiration_date]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
+    console.error('❌ Donation creation error:', err);
     res.status(500).json({
       success: false,
       message: err.message || "Server error"
+    });
+  }
 });
+
+app.post('/food_donations', upload.none(), async (req, res) => {
+  const { donation_id, category, expiry_date } = req.body;
+  console.log("🍽️ [POST /food_donations] Request body:", { donation_id, category, expiry_date });
+  
+  try {
+    if (!donation_id) {
+      console.error("❌ donation_id is missing from request body");
+      return res.status(400).json({
+        success: false,
+        message: "donation_id is required"
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO food_donations (donation_id, food_type, expiration_date)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [donation_id, category || "غير محدد", expiry_date || null]
+    );
+    console.log("✅ [POST /food_donations] Created:", result.rows[0]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("❌ [POST /food_donations] Error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
 
@@ -1598,71 +1610,69 @@ app.post(
 
         console.log(`✅ [PASS] Image passed damage check - Status: ${canDamageResult.status}`);
 
+        fs.unlinkSync(file.path);
+      }
+
+      /* =========================
+         EARLY RETURN: Image passed cooked & damage checks
+         User will manually scan barcode next, then check expiry
+      ========================= */
+      console.log(`\n========== PASSED INITIAL CHECKS ==========`);
+      console.log(`[STATUS] ✅ Image is packaged and undamaged`);
+      console.log(`[NEXT] User will scan barcode manually`);
+      console.log(`==============================================\n`);
+
+      res.json({
+        success: true,
+        passed_checks: true,
+        result: "✅ المنتج آمن – يرجى مسح الباركود",
+        model: "new"
+      });
+
+    } catch (error) {
+      console.error("AI Expiry Error (NEW):", error);
+      res.status(500).json({
+        success: false,
+        message: "AI processing failed"
+      });
+    }
+  }
+);
+
+// =======================
+// EXPIRY CHECK ENDPOINT - After barcode scan
+// =======================
+app.post(
+  "/ai/check-expiry",
+  upload.array("images", 5),
+  async (req, res) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Images are required"
+        });
+      }
+
+      let expiryDates = [];
+      let detectedTexts = [];
+
+      for (const file of req.files) {
+        console.log(`\n[IMAGE-EXPIRY] Processing: ${file.originalname}`);
+
         /* =========================
-           2️⃣ OCR – extract text
+           OCR – extract text for expiry
         ========================= */
-        console.log(`[OCR] Extracting text from image...`);
+        console.log(`[OCR] Extracting text for expiry date...`);
         const [ocrResult] = await visionClient.textDetection(file.path);
         const detectedText =
           ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
-        console.log(`[OCR] Text extracted: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
+        console.log(`[OCR] Text: "${detectedText.substring(0, 60)}${detectedText.length > 60 ? '...' : ''}"`);
 
         detectedTexts.push(detectedText);
 
         /* =========================
-           2️⃣ CATEGORY FROM TEXT
-        ========================= */
-        let foodCategory = null;
-
-        if (
-          detectedText.includes("bread") ||
-          detectedText.includes("toast") ||
-          detectedText.includes("خبز") ||
-          detectedText.includes("توست")
-        ) foodCategory = "خبز ومخبوزات";
-        else if (
-          detectedText.includes("flour") ||
-          detectedText.includes("wheat")
-        ) foodCategory = "طحين وحبوب";
-        else if (detectedText.includes("rice")) foodCategory = "رز";
-        else if (detectedText.includes("pasta")) foodCategory = "معكرونة";
-        else if (detectedText.includes("sugar")) foodCategory = "سكر";
-        else if (
-          detectedText.includes("bean") ||
-          detectedText.includes("lentil") ||
-          detectedText.includes("chickpea")
-        ) foodCategory = "بقوليات";
-        else if (detectedText.includes("oil")) foodCategory = "زيوت";
-        else if (detectedText.includes("tuna")) foodCategory = "معلبات سمك";
-
-        /* =========================
-           3️⃣ CATEGORY FROM IMAGE (Fallback)
-        ========================= */
-        if (!foodCategory || !hasUsefulText(detectedText)) {
-          const [labelResult] = await visionClient.labelDetection(file.path);
-          const labels =
-            labelResult.labelAnnotations?.map(l =>
-              l.description.toLowerCase()
-            ) || [];
-
-          for (const label of labels) {
-            const mapped = mapVisionLabelToCategory(label);
-            if (mapped) {
-              foodCategory = mapped;
-              break;
-            }
-          }
-        }
-
-        if (!foodCategory) foodCategory = "مواد غذائية";
-
-        console.log(`[CATEGORY] Food Category: ${foodCategory}`);
-
-        categoryVotes[foodCategory] =
-          (categoryVotes[foodCategory] || 0) + 1;
-
-        /* =========================
-           4️⃣ EXPIRY DATE DETECTION
+           EXPIRY DATE DETECTION
         ========================= */
         console.log(`[EXPIRY] Extracting expiry date from text...`);
 
@@ -1717,24 +1727,17 @@ app.post(
       }
 
       /* =========================
-         5️⃣ FINAL DECISION
+         FINAL EXPIRY DECISION
       ========================= */
-      console.log(`\n========== FINAL RESULT (NEW MODEL) ==========`);
+      console.log(`\n========== EXPIRY CHECK RESULT ==========`);
       
-      // Get most voted category
-      const foodCategory = Object.keys(categoryVotes).length > 0 
-        ? Object.keys(categoryVotes).reduce((a, b) => 
-            categoryVotes[a] > categoryVotes[b] ? a : b
-          )
-        : "مواد غذائية";
-      
-      console.log(`[CATEGORY] Food: ${foodCategory}`);
       const expiryDate =
         expiryDates.length > 0
           ? expiryDates.reduce((latest, current) =>
               current.isAfter(latest) ? current : latest
             )
           : null;
+      
       console.log(`[EXPIRY] Date: ${expiryDate ? expiryDate.format("YYYY-MM-DD") : "NOT FOUND"}`);
 
       const expired =
@@ -1747,7 +1750,6 @@ app.post(
 
       res.json({
         success: true,
-        food_category: foodCategory,
         expiry_date: expiryDate
           ? expiryDate.format("YYYY-MM-DD")
           : null,
@@ -1765,10 +1767,10 @@ app.post(
       });
 
     } catch (error) {
-      console.error("AI Expiry Error (NEW):", error);
+      console.error("AI Expiry Check Error:", error);
       res.status(500).json({
         success: false,
-        message: "AI processing failed"
+        message: "Expiry check failed"
       });
     }
   }
@@ -2220,6 +2222,204 @@ app.post('/accounts/resend-email-code', async (req, res) => {
 });
 
 
+// ===== PRODUCTS TABLE CREATION =====
+async function createProductsTable() {
+  try {
+    const query = `
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        barcode VARCHAR(32) UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT
+      );
+    `;
+    await pool.query(query);
+    console.log("✅ Table products created/verified successfully");
+  } catch (err) {
+    console.error("❌ Error creating products table:", err);
+  }
+}
+createProductsTable();
+
+// ===== PRODUCTS ENDPOINTS =====
+
+// GET all products
+app.get('/products', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM products ORDER BY id DESC');
+    res.json({ success: true, products: result.rows });
+  } catch (err) {
+    console.error('Error fetching products:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// GET product by barcode
+app.get('/products/:barcode', async (req, res) => {
+  const { barcode } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM products WHERE barcode = $1',
+      [barcode]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({ success: true, product: result.rows[0] });
+  } catch (err) {
+    console.error('Error fetching product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// POST endpoint to check barcode and get category via OCR fallback
+app.post('/products/lookup-with-ocr', upload.single('image'), async (req, res) => {
+  const { barcode } = req.body;
+  const file = req.file;
+
+  try {
+    // 1️⃣ Check if barcode exists in products table
+    if (barcode) {
+      const productRes = await pool.query(
+        'SELECT * FROM products WHERE barcode = $1',
+        [barcode]
+      );
+      
+      if (productRes.rows.length > 0) {
+        console.log(`[BARCODE-FOUND] Product found: ${productRes.rows[0].name}`);
+        if (file) fs.unlinkSync(file.path);
+        return res.json({
+          success: true,
+          found: true,
+          product: productRes.rows[0],
+          source: 'barcode'
+        });
+      }
+    }
+
+    // 2️⃣ If barcode not found, try OCR for category detection
+    console.log(`[BARCODE] Not found, falling back to OCR...`);
+    
+    if (!file) {
+      return res.json({
+        success: false,
+        found: false,
+        message: 'Barcode not found. Please provide image for OCR fallback.'
+      });
+    }
+
+    const [ocrResult] = await visionClient.textDetection(file.path);
+    const detectedText = ocrResult.fullTextAnnotation?.text.toLowerCase() || "";
+
+    let categoryFromOCR = null;
+
+    // Text-based category detection
+    if (detectedText.includes("bread") || detectedText.includes("toast") || 
+        detectedText.includes("خبز") || detectedText.includes("توست"))
+      categoryFromOCR = "خبز ومخبوزات";
+    else if (detectedText.includes("flour") || detectedText.includes("wheat"))
+      categoryFromOCR = "طحين وحبوب";
+    else if (detectedText.includes("rice")) categoryFromOCR = "رز";
+    else if (detectedText.includes("pasta")) categoryFromOCR = "معكرونة";
+    else if (detectedText.includes("sugar")) categoryFromOCR = "سكر";
+    else if (detectedText.includes("bean") || detectedText.includes("lentil") || 
+             detectedText.includes("chickpea"))
+      categoryFromOCR = "بقوليات";
+    else if (detectedText.includes("oil")) categoryFromOCR = "زيوت";
+    else if (detectedText.includes("tuna")) categoryFromOCR = "معلبات سمك";
+
+    // Fallback to image labels if no text match
+    if (!categoryFromOCR || !hasUsefulText(detectedText)) {
+      const [labelResult] = await visionClient.labelDetection(file.path);
+      const labels = labelResult.labelAnnotations?.map(l =>
+        l.description.toLowerCase()
+      ) || [];
+
+      for (const label of labels) {
+        const mapped = mapVisionLabelToCategory(label);
+        if (mapped) {
+          categoryFromOCR = mapped;
+          break;
+        }
+      }
+    }
+
+    if (!categoryFromOCR) categoryFromOCR = "مواد غذائية";
+
+    console.log(`[OCR] Category detected: ${categoryFromOCR}`);
+    fs.unlinkSync(file.path);
+
+    res.json({
+      success: true,
+      found: false,
+      category: categoryFromOCR,
+      source: 'ocr'
+    });
+
+  } catch (err) {
+    console.error('Error in barcode lookup:', err);
+    if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// POST/UPSERT product (insert or update if barcode exists)
+app.post('/products', async (req, res) => {
+  const { barcode, name, category } = req.body;
+
+  if (!barcode || !name) {
+    return res.status(400).json({
+      success: false,
+      message: "Barcode and name are required"
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO products (barcode, name, category)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (barcode)
+      DO UPDATE SET
+        name = EXCLUDED.name,
+        category = EXCLUDED.category
+      RETURNING *
+      `,
+      [barcode, name, category]
+    );
+
+    res.json({
+      success: true,
+      message: "Product saved successfully",
+      product: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Error saving product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// DELETE product by id
+app.delete('/products/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM products WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    res.json({ success: true, message: 'Product deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// ...existing code...
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`API available at http://localhost:${port}`);

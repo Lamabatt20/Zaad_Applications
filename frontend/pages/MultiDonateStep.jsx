@@ -15,6 +15,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function MultiDonateStep({ route, navigation }) {
   const {
@@ -29,10 +31,16 @@ export default function MultiDonateStep({ route, navigation }) {
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [address, setAddress] = useState("");
+  const [coords, setCoords] = useState(null);
   const [images, setImages] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [aiValidated, setAiValidated] = useState(false);
+  const [aiData, setAiData] = useState(null);
+  const [checkingAI, setCheckingAI] = useState(false);
+  const [barcodeScanned, setBarcodeScanned] = useState(false);
+  const [aiPassedInitial, setAiPassedInitial] = useState(false);
+  const [checkingExpiry, setCheckingExpiry] = useState(false);
 
   useEffect(() => {
     const loadDark = async () => {
@@ -42,7 +50,21 @@ export default function MultiDonateStep({ route, navigation }) {
     loadDark();
 
     if (firstAddress) setAddress(firstAddress);
+    if (firstCoords) setCoords(firstCoords);
   }, []);
+
+  // Listen for barcode scan result
+  useFocusEffect(
+    React.useCallback(() => {
+      if (route?.params?.scannedProduct) {
+        const product = route?.params?.scannedProduct;
+        setDescription(product.name || "");
+        setCategory(product.category || "");
+        setBarcodeScanned(true);
+        navigation.setParams({ scannedProduct: null }); // Clear param
+      }
+    }, [route?.params?.scannedProduct])
+  );
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const text = darkMode ? "#fff" : "#333";
@@ -51,6 +73,25 @@ export default function MultiDonateStep({ route, navigation }) {
   const btnColor = "#A27571";
 
   /* ================= HELPERS ================= */
+
+  /* ================= LOCATION ================= */
+  const requestAndFetchLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission denied", "Location permission is required");
+      return;
+    }
+
+    const pos = await Location.getCurrentPositionAsync({});
+    const { latitude, longitude } = pos.coords;
+    setCoords({ latitude, longitude });
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+    );
+    const data = await res.json();
+    setAddress(data.display_name || `${latitude}, ${longitude}`);
+  };
 
   const resetForm = () => {
     setCategory("");
@@ -72,6 +113,7 @@ export default function MultiDonateStep({ route, navigation }) {
         index: index + 1,
         firstAddress: firstAddress || address,
         firstCoords,
+        user: route?.params?.user,
       });
     } 
     
@@ -102,7 +144,9 @@ export default function MultiDonateStep({ route, navigation }) {
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
 
     if (!result.canceled) {
-      setImages((prev) => [...prev, result.assets[0].uri]);
+      const newImages = [...images, result.assets[0].uri];
+      setImages(newImages);
+      await runAICheck(newImages);
     }
   };
 
@@ -113,23 +157,23 @@ export default function MultiDonateStep({ route, navigation }) {
     }
 
     setImages((prev) => prev.filter((i) => i !== uri));
+    setAiValidated(false);
+    setAiData(null);
   };
 
-  /* ================= MAIN FLOW ================= */
-
-  const submitStep = async () => {
-    if (!address || images.length === 0) {
-      Alert.alert("Validation", "Please add address and images");
+  /* ================= AI CHECK ================= */
+  const runAICheck = async (imageUris) => {
+    if (!imageUris || imageUris.length === 0) {
+      setAiValidated(false);
+      setAiData(null);
       return;
     }
 
-    setLoading(true);
+    setCheckingAI(true);
 
     try {
-      /* ---------- 1️⃣ AI CHECK ---------- */
-      setAiValidated(false);
       const aiForm = new FormData();
-      images.forEach((uri, i) => {
+      imageUris.forEach((uri, i) => {
         aiForm.append("images", {
           uri,
           name: `img_${i}.jpg`,
@@ -145,77 +189,121 @@ export default function MultiDonateStep({ route, navigation }) {
 
       if (!aiRes.ok) {
         const errorText = await aiRes.text();
-        setLoading(false);
+        setCheckingAI(false);
         Alert.alert(
           "AI Check Failed",
           `Unable to verify the item: ${errorText || 'Server error'}`
         );
+        setImages([]);
+        setAiValidated(false);
+        setAiData(null);
         return;
       }
 
-      const aiData = await aiRes.json();
+      const data = await aiRes.json();
 
-      /* ❌ COOKED */
-      if (aiData.rejected && aiData.reason?.includes("مطبوخ")) {
-        setLoading(false);
+      if (data.rejected && data.reason?.includes("مطبوخ")) {
+        setCheckingAI(false);
         Alert.alert(
           "❌ Rejected",
-          "This food appears to be cooked.\nOnly packaged food can be donated.",
+          `${data.reason}\nPlease try again with a clear photo.`,
           [{ text: "OK", onPress: goNextItem }]
         );
+        setImages([]);
         return;
       }
 
-      /* ❌ MOLD */
-      if (aiData.rejected && aiData.reason?.includes("متعفّن")) {
-        setLoading(false);
+      if (data.rejected && data.reason?.includes("متعفّن")) {
+        setCheckingAI(false);
         Alert.alert(
           "❌ Rejected",
-          "The product shows signs of mold.\nPlease do not donate moldy items.",
+          `${data.reason}\nPlease try again with a clear photo.`,
           [{ text: "OK", onPress: goNextItem }]
         );
+        setImages([]);
         return;
       }
 
-      /* ❌ DAMAGED */
-      if (aiData.rejected && aiData.reason?.includes("تالف")) {
-        setLoading(false);
+      if (data.rejected && data.reason?.includes("تالف")) {
+        setCheckingAI(false);
         Alert.alert(
           "❌ Rejected",
-          "The product is damaged or unsafe.\nPlease check the packaging.",
+          `${data.reason}\nPlease try again with a clear photo.`,
           [{ text: "OK", onPress: goNextItem }]
         );
+        setImages([]);
+        return;
+      }
+      if (data.rejected && !data.reason) {
+        setCheckingAI(false);
+        Alert.alert(
+          "❌ Rejected",
+          "Item not accepted.\nPlease try again with a clear photo.",
+          [{ text: "OK", onPress: goNextItem }]
+        );
+        setImages([]);
         return;
       }
 
-      /* ❌ EXPIRED */
-      if (aiData.expired) {
-        setLoading(false);
+      if (data.expired) {
+        setCheckingAI(false);
         Alert.alert(
           "❌ Expired Item",
           "This product is expired and cannot be donated.",
           [{ text: "OK", onPress: goNextItem }]
         );
+        setImages([]);
         return;
       }
 
-      /* ⚠️ IMAGE NOT CLEAR */
-      if (aiData.need_clear_image) {
-        setLoading(false);
+      if (data.need_clear_image) {
+        setCheckingAI(false);
         Alert.alert(
           "⚠️ Image Not Clear",
           "Please retake the image and make sure the expiration date is clearly visible."
         );
+        setImages([]);
         return;
       }
 
-      /* ✅ ACCEPTED - Continue with donation */
-      // Item passed all AI checks
-
+      // Passed AI
       setAiValidated(true);
+      setAiData(data);
+      setCategory(data.food_category);
+      setCheckingAI(false);
+    } catch (err) {
+      console.error("AI check error:", err);
+      setCheckingAI(false);
+      Alert.alert(
+        "AI Check Failed",
+        err?.message || "Unexpected error while validating the item."
+      );
+      setImages([]);
+      setAiValidated(false);
+      setAiData(null);
+    }
+  };
 
-      /* ---------- 2️⃣ SET CATEGORY ---------- */
-      setCategory(aiData.food_category);
+  /* ================= MAIN FLOW ================= */
+
+  const submitStep = async () => {
+    if (!address || images.length === 0) {
+      Alert.alert("Validation", "Please add address and images");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Ensure AI validated; if not, run it now
+      if (!aiValidated) {
+        await runAICheck(images);
+      }
+
+      if (!aiValidated || !aiData) {
+        setLoading(false);
+        return;
+      }
 
       /* ---------- 3️⃣ GET USER ---------- */
       let user = route?.params?.user;
@@ -372,6 +460,20 @@ export default function MultiDonateStep({ route, navigation }) {
           value={description}
           onChangeText={setDescription}
         />
+
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <TouchableOpacity
+            style={[styles.input, { flex: 1, backgroundColor: inputBg, borderColor: border }]}
+            onPress={requestAndFetchLocation}
+          >
+            <Text style={{ color: text }}>
+              {address || "Use current location"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={requestAndFetchLocation}>
+            <Ionicons name="location" size={28} color={btnColor} />
+          </TouchableOpacity>
+        </View>
 
         <Text style={[styles.label, { color: text }]}>
           Take pictures of the Donated Item
