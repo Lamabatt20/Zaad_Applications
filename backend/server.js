@@ -2107,7 +2107,11 @@ async function createRequestDonationsTable() {
         donation_type VARCHAR(30),
         description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        status VARCHAR(20) DEFAULT 'ACTIVE'
+        status VARCHAR(20) DEFAULT 'ACTIVE',
+        CONSTRAINT fk_request_donations_association
+        FOREIGN KEY (association_id)
+        REFERENCES associations(association_id)
+        ON DELETE CASCADE
       );
     `;
     await pool.query(query);
