@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
 
-export default function AcceptedClothesScreen() {
+export default function AcceptedClothesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -39,6 +39,18 @@ export default function AcceptedClothesScreen() {
     return s.includes("T") ? s.split("T")[0] : s.slice(0, 10);
   };
 
+  const prettyDeliveryStatus = (s) => {
+    const v = String(s || "").toUpperCase();
+    if (!v) return "-";
+    if (v === "NEEDS_ASSIGNMENT") return "Needs assignment";
+    if (v === "ASSIGNED") return "Assigned";
+    if (v === "WAITING_FOR_DONOR") return "Waiting for donor";
+    if (v === "PICKED_UP") return "Picked up";
+    if (v === "ON_THE_WAY") return "On the way";
+    if (v === "DELIVERED") return "Delivered";
+    return s; // fallback
+  };
+
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id,
     donor_name: x.donor_name ?? "Donor",
@@ -47,11 +59,12 @@ export default function AcceptedClothesScreen() {
     created_at: x.created_at,
     status: x.status ?? "accepted",
     delivery_method: x.delivery_method ?? "donor",
-    delivery_status: x.delivery_status ?? "pending",
+    delivery_status: x.delivery_status ?? null,
   });
 
   const fetchData = async () => {
     try {
+      setErrorMsg("");
       setLoading(true);
 
       const userDataStr = await AsyncStorage.getItem("user_data");
@@ -61,10 +74,15 @@ export default function AcceptedClothesScreen() {
       const url = associationId
         ? `${config.API_URL}/donations/clothes/accepted?association_id=${associationId}`
         : `${config.API_URL}/donations/clothes/accepted`;
+
       const res = await axios.get(url);
       const arr = Array.isArray(res.data) ? res.data : [];
       setItems(arr.map(normalizeDonation));
-    } catch {
+
+      
+      const datesSet = new Set(arr.map((d) => getYMD(d.created_at)).filter(Boolean));
+      if (selectedDate !== "ALL" && !datesSet.has(selectedDate)) setSelectedDate("ALL");
+    } catch (e) {
       setErrorMsg("Failed to load accepted donations");
     } finally {
       setLoading(false);
@@ -74,6 +92,7 @@ export default function AcceptedClothesScreen() {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onRefresh = () => {
@@ -107,62 +126,80 @@ export default function AcceptedClothesScreen() {
       ? items
       : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Image
-        source={
-          item.item_image
-            ? { uri: item.item_image }
-            : require("../assets/icon.png")
-        }
-        style={styles.itemImage}
-      />
+  const renderItem = ({ item }) => {
+    const isSubmitting = !!submitting[item.donation_id];
 
-      <Text style={styles.title}>{item.donor_name}</Text>
-      <Text style={styles.subtitle} numberOfLines={2}>
-        {item.note || "No description"}
-      </Text>
-      <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
+    const isAssocPickup = String(item.delivery_method).toLowerCase() === "association";
+    const isNeedsAssign = String(item.delivery_status || "").toUpperCase() === "NEEDS_ASSIGNMENT";
 
-      {/* ✅ Delivery Method & Status */}
-      <Text style={styles.deliveryInfo}>
-        Delivery Method:{" "}
-        {item.delivery_method === "donor"
-          ? "Donor will deliver"
-          : "Association Pickup"}
-      </Text>
-      <Text style={styles.deliveryInfo}>
-        Delivery Status:{" "}
-        {item.delivery_status === "pending"
-          ? "Pending"
-          : item.delivery_status === "on_the_way"
-          ? "On the way"
-          : "Delivered"}
-      </Text>
+    const showAssignBtn = isAssocPickup && isNeedsAssign;
 
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={styles.detailsBtn}
-          onPress={() => {
-            setSelected(item);
-            setDetailsVisible(true);
-          }}
-        >
-          <Text style={styles.btnText}>Details</Text>
-        </TouchableOpacity>
+    return (
+      <View style={styles.card}>
+        <Image
+          source={
+            item.item_image
+              ? { uri: item.item_image }
+              : require("../assets/icon.png")
+          }
+          style={styles.itemImage}
+        />
 
-        <TouchableOpacity
-          style={styles.approveBtn}
-          onPress={() => approveDonation(item.donation_id)}
-          disabled={submitting[item.donation_id]}
-        >
-          <Text style={styles.btnText}>Approve</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>{item.donor_name}</Text>
+        <Text style={styles.subtitle} numberOfLines={2}>
+          {item.note || "No description"}
+        </Text>
+        <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
+
+        {/* Delivery Method & Status */}
+        <Text style={styles.deliveryInfo}>
+          Delivery Method:{" "}
+          {isAssocPickup ? "Association Pickup" : "Donor will deliver"}
+        </Text>
+        <Text style={styles.deliveryInfo}>
+          Delivery Status: {prettyDeliveryStatus(item.delivery_status)}
+        </Text>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
+            onPress={() => {
+              setSelected(item);
+              setDetailsVisible(true);
+            }}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.btnText}>Details</Text>
+          </TouchableOpacity>
+
+          {showAssignBtn && (
+            <TouchableOpacity
+              style={[styles.assignBtn, isSubmitting && { opacity: 0.6 }]}
+              onPress={() => {
+                navigation.navigate("AssignDeliveryPerson", {
+                  donation_id: item.donation_id,
+                });
+              }}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.btnText}>Assign</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
+            onPress={() => approveDonation(item.donation_id)}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.btnText}>Approve</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
-  const filterLabel = selectedDate === "ALL" ? "All Accepted Dates" : selectedDate;
+  const filterLabel =
+    selectedDate === "ALL" ? "All Accepted Dates" : selectedDate;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -175,14 +212,26 @@ export default function AcceptedClothesScreen() {
         <Text style={styles.headerMainTitle}>Accepted Clothes Donations</Text>
       </View>
 
+      {!!errorMsg && (
+        <View style={styles.errorBar}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+        </View>
+      )}
+
       <View style={styles.filterRow}>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
+        <TouchableOpacity
+          style={styles.filterBtn}
+          onPress={() => setFilterVisible(true)}
+        >
           <Text style={styles.filterBtnTitle}>Filter by Date</Text>
           <Text style={styles.filterBtnValue}>{filterLabel}</Text>
         </TouchableOpacity>
 
         {selectedDate !== "ALL" && (
-          <TouchableOpacity style={styles.clearBtn} onPress={() => setSelectedDate("ALL")}> 
+          <TouchableOpacity
+            style={styles.clearBtn}
+            onPress={() => setSelectedDate("ALL")}
+          >
             <Text style={styles.clearBtnText}>Clear</Text>
           </TouchableOpacity>
         )}
@@ -214,9 +263,13 @@ export default function AcceptedClothesScreen() {
         animationType="fade"
         onRequestClose={() => setFilterVisible(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setFilterVisible(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setFilterVisible(false)}
+        >
           <Pressable style={styles.filterModalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Select Date</Text>
+
             <FlatList
               data={allDates}
               keyExtractor={(d) => d}
@@ -232,16 +285,20 @@ export default function AcceptedClothesScreen() {
                     }}
                     style={[styles.dateRow, active && styles.dateRowActive]}
                   >
-                    <Text style={[styles.dateText, active && styles.dateTextActive]}>
+                    <Text
+                      style={[styles.dateText, active && styles.dateTextActive]}
+                    >
                       {d === "ALL" ? "All Dates" : d}
                     </Text>
                   </TouchableOpacity>
                 );
               }}
             />
+
             <View style={{ height: 12 }} />
+
             <TouchableOpacity
-              style={[styles.btn, styles.closeBtn, { alignSelf: "flex-end" }]}
+              style={[styles.detailsBtn, { alignSelf: "flex-end" }]}
               onPress={() => setFilterVisible(false)}
             >
               <Text style={styles.btnText}>Close</Text>
@@ -258,21 +315,17 @@ export default function AcceptedClothesScreen() {
         >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Donation Details</Text>
-            <Text>{selected?.donor_name}</Text>
-            <Text>{selected?.note}</Text>
-            <Text>
+            <Text style={{ fontWeight: "700" }}>{selected?.donor_name}</Text>
+            <Text style={{ marginTop: 6 }}>{selected?.note}</Text>
+
+            <Text style={{ marginTop: 10 }}>
               Delivery Method:{" "}
-              {selected?.delivery_method === "donor"
-                ? "Donor will deliver"
-                : "Association Pickup"}
+              {String(selected?.delivery_method).toLowerCase() === "association"
+                ? "Association Pickup"
+                : "Donor will deliver"}
             </Text>
             <Text>
-              Delivery Status:{" "}
-              {selected?.delivery_status === "pending"
-                ? "Pending"
-                : selected?.delivery_status === "on_the_way"
-                ? "On the way"
-                : "Delivered"}
+              Delivery Status: {prettyDeliveryStatus(selected?.delivery_status)}
             </Text>
           </View>
         </Pressable>
@@ -280,7 +333,6 @@ export default function AcceptedClothesScreen() {
     </SafeAreaView>
   );
 }
-// Keep only ONE const styles = StyleSheet.create({ ... }) at the end
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EBE1D7" },
@@ -292,7 +344,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  welcomeLogo: { width: 120, height: 120, marginRight: 10, marginLeft: -20, marginTop: -40 },
+  welcomeLogo: {
+    width: 120,
+    height: 120,
+    marginRight: 10,
+    marginLeft: -20,
+    marginTop: -40,
+  },
   headerMainTitle: {
     fontFamily: "Times New Roman",
     fontSize: 22,
@@ -304,35 +362,95 @@ const styles = StyleSheet.create({
   errorBar: { backgroundColor: "#ffefef", padding: 10 },
   errorText: { color: "#9b1c1c", textAlign: "center" },
 
-  card: { backgroundColor: "#fff", borderRadius: 14, padding: 15, marginBottom: 15, elevation: 3 },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 15,
+    marginBottom: 15,
+    elevation: 3,
+  },
   itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 8 },
   title: { fontSize: 16, fontWeight: "700" },
   subtitle: { color: "#555", marginVertical: 4 },
   deadline: { fontSize: 13, color: "#333" },
   deliveryInfo: { fontSize: 13, color: "#333", marginTop: 2 },
 
-  actionButtons: { flexDirection: "row", gap: 10, marginTop: 10 },
+  actionButtons: { flexDirection: "row", gap: 10, marginTop: 10, flexWrap: "wrap" },
   detailsBtn: { backgroundColor: "#8b6f69", padding: 8, borderRadius: 8 },
   assignBtn: { backgroundColor: "#A27571", padding: 8, borderRadius: 8 },
   approveBtn: { backgroundColor: "#3b82f6", padding: 8, borderRadius: 8 },
   btnText: { color: "#fff", fontWeight: "700" },
 
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, marginBottom: 10 },
-  filterBtn: { flex: 1, backgroundColor: "#fff", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, elevation: 2 },
-  filterBtnTitle: { fontSize: 13, fontWeight: "800", color: "#8b6f69", marginBottom: 4, fontFamily: "Times New Roman" },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 20,
+    marginBottom: 10,
+  },
+  filterBtn: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    elevation: 2,
+  },
+  filterBtnTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 4,
+    fontFamily: "Times New Roman",
+  },
   filterBtnValue: { fontSize: 14, fontWeight: "700", color: "#333" },
-  clearBtn: { backgroundColor: "#8b6f69", paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
+  clearBtn: {
+    backgroundColor: "#8b6f69",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
   clearBtnText: { color: "#fff", fontWeight: "800" },
-  filterModalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  filterModalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    elevation: 10,
+  },
   sep: { height: 10 },
-  dateRow: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#f3f3f3" },
+  dateRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#f3f3f3",
+  },
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
 
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalCard: { backgroundColor: "#fff", padding: 20, borderRadius: 14, width: "80%" },
-  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10, textAlign: "center" },
-  btn: {},
-  closeBtn: {},
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 14,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#8b6f69",
+    marginBottom: 10,
+    textAlign: "center",
+    fontFamily: "Times New Roman",
+  },
 });

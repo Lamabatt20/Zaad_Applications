@@ -31,35 +31,26 @@ export default function AssignDeliveryPerson({ navigation, route }) {
   const [selected, setSelected] = useState(null);
 
   const fetchDrivers = async () => {
-    try {
-      setErrorMsg("");
-      setLoading(true);
+  try {
+    setErrorMsg("");
+    setLoading(true);
 
-      const userDataStr = await AsyncStorage.getItem("user_data");
-      const userData = userDataStr ? JSON.parse(userDataStr) : null;
-      const associationId = userData?.association_id;
+    const res = await axios.get(
+      `${config.API_URL}/assoc/delivery-persons`
+    );
 
-      if (!associationId) {
-        setErrorMsg("association_id missing. Please login again.");
-        setDrivers([]);
-        return;
-      }
+    const arr = Array.isArray(res.data) ? res.data : [];
+    setDrivers(arr);
 
-      const res = await axios.get(
-        `${config.API_URL}/assoc/delivery-persons?association_id=${associationId}`
-      );
-
-      const arr = Array.isArray(res.data) ? res.data : res.data?.data ?? [];
-      setDrivers(arr);
-    } catch (e) {
-      console.error(e);
-      setErrorMsg("Failed to load delivery persons");
-      setDrivers([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  } catch (e) {
+    console.error(e);
+    setErrorMsg("Failed to load delivery persons");
+    setDrivers([]);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   useEffect(() => {
     if (!donation_id) {

@@ -105,111 +105,35 @@ export default function DonateClothesScreen({ navigation, route }) {
     setImages((prev) => prev.filter((i) => i !== uri));
   };
 
-
-
-
-  const submitDonation = async () => {
-    if (!category || !description || !address) {
-      Alert.alert("Validation", "Please fill all required fields");
-      return;
-    }
-    
-    console.log("Submit donation - user state:", user);
-    
-    setSubmitting(true);
-    try {
-      const accountId = user?.account_id || user?.user_id || user?.id;
-      console.log("Account ID extracted:", accountId);
-      
-      if (!accountId) {
-        console.error("No account ID found. User object:", user);
-        throw new Error("Missing user session. Please log in again.");
-      }
-
-      const usersRes = await fetch(`${config.API_URL}/users`);
-      const usersList = await usersRes.json();
-      const realUser = usersList.find((u) => u.account_id === accountId);
-      if (!realUser) throw new Error("User not found. Please log in again.");
-
-      const donorsRes = await fetch(`${config.API_URL}/donors`);
-      const donorsList = await donorsRes.json();
-      const donor = donorsList.find((d) => d.user_id === realUser.user_id);
-      if (!donor) throw new Error("You need to register as a donor first.");
-
-      const donorId = donor.user_id;
-      const associationId = association?.association_id || association?.id || null;
-
-      const form = new FormData();
-      form.append("donor_id", donorId);
-      form.append("donation_type", "clothes");
-      form.append("note", description);
-      form.append("status", "pending");
-      form.append("address", address);
-      if (associationId) form.append("association_id", associationId);
-      if (images.length > 0) {
-        form.append("item_image", {
-          uri: images[0],
-          name: "clothes.jpg",
-          type: "image/jpeg",
-        });
-      }
-
-      console.log("Sending donation request with donor_id:", donorId);
-      
-      const donationRes = await fetch(`${config.API_URL}/donations`, {
-        method: "POST",
-        body: form,
-      });
-      const donationText = await donationRes.text();
-      console.log("Donation response status:", donationRes.status);
-      console.log("Donation response text:", donationText);
-      
-      if (!donationRes.ok) {
-        throw new Error(donationText || `Donation failed (${donationRes.status})`);
-      }
-
-      let donation;
-      try {
-        donation = JSON.parse(donationText);
-        console.log("Parsed donation:", donation);
-      } catch (parseErr) {
-        console.error("Failed to parse donation response:", parseErr);
-        throw new Error("Invalid server response. Please try again.");
-      }
-      
-      if (!donation?.donation_id) {
-        console.error("No donation_id in response:", donation);
-        throw new Error("Failed to create donation - no donation_id returned");
-      }
-
-      console.log("Creating clothes donation with donation_id:", donation.donation_id);
-      
-      const clothesRes = await fetch(`${config.API_URL}/clothes_donations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          donation_id: donation.donation_id,
-          clothes_type: category,
-        }),
-      });
-      
-      const clothesText = await clothesRes.text();
-      console.log("Clothes donation response:", clothesText);
-      
-      if (!clothesRes.ok) throw new Error("Failed to save clothes donation");
-
-      Alert.alert("Success", "Clothes donation submitted");
-      navigation.goBack();
-    } catch (err) {
-      Alert.alert("Error", err.message || "Failed to submit donation");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleNext = () => {
-    submitDonation();
-  };
+  if (!category || !description || !address) {
+    Alert.alert("Validation", "Please fill all required fields");
+    return;
+  }
+
+  Alert.alert(
+    "Request Under Review",
+    "Your donation request is currently under review.\n\nPlease choose your delivery method.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "OK",
+        onPress: () =>
+          navigation.navigate("DeliveryMethodScreen", {
+            association,
+            donationType: "clothes",
+            category,
+            description,
+            address,
+            images,
+            condition,
+          }),
+      },
+    ]
+  );
+};
+
+
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
@@ -408,7 +332,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
   },
-  textArea: { height: 90, textAlignVertical: "top" },
+  textArea: { height: 90, textAlignVertical: "top"},
   dropdown: {
     borderRadius: 10,
     paddingHorizontal: 16,
