@@ -19,6 +19,9 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   // ✅ البيانات كما تصلك من Login / Dashboard
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
+  
+  // ✅ Get location filter from route params (from ChatBot)
+  const filterLocation = route?.params?.location;
 
   // ✅ إعادة بناء user بشكل صحيح (هذا هو المفتاح)
   const user =
@@ -38,7 +41,7 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   useEffect(() => {
     loadDarkMode();
     fetchAssociations();
-  }, []);
+  }, [filterLocation]);
 
   const loadDarkMode = async () => {
     try {
@@ -53,12 +56,25 @@ export default function FoodAssociationsScreen({ navigation, route }) {
   const fetchAssociations = async () => {
     try {
       const res = await axios.get(`${API.API_URL}/associations`);
-      const all = Array.isArray(res.data) ? res.data : [];
+      let all = Array.isArray(res.data) ? res.data : [];
+      
+      // Filter by food type
       const filtered = all.filter((a) => {
         if (!a) return false;
         return a.food === true || a.food === "true" || a.food === 1 || a.food === "1";
       });
-      setAssociations(filtered);
+      
+      // Filter by location if provided (from ChatBot link)
+      let finalFiltered = filtered;
+      if (filterLocation) {
+        finalFiltered = filtered.filter(a =>
+          a.name?.toLowerCase().includes(filterLocation.toLowerCase()) ||
+          a.description?.toLowerCase().includes(filterLocation.toLowerCase()) ||
+          a.address?.toLowerCase().includes(filterLocation.toLowerCase())
+        );
+      }
+      
+      setAssociations(finalFiltered);
     } catch (err) {
       console.log("Error fetching associations:", err);
     }

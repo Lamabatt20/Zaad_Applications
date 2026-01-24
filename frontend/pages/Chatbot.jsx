@@ -16,7 +16,7 @@ import API from "../config";
 import SideMenu from "../components/SideMenu";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 const OPENAI_API_KEY = "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";
-const ASSISTANT_ID = "asst_vmzyZiX3S8mxG7Zvka3nNAEW";
+const ASSISTANT_ID = "asst_Gpbsl9UcudAeSKvW3zNhe8nf";
 
 const openaiHeaders = {
   "Content-Type": "application/json",
@@ -156,16 +156,41 @@ export default function ChatBotScreen({ navigation, route }) {
             const args = JSON.parse(call.function.arguments);
 
             const donation_type = args.donation_type;
-            const donor_id = args.donor_id || user?.user_id;
+            // Get the correct donor_id based on available user data
+            const account_id = args.account_id || user?.account_id || user?.user_id;
             const location = args.location || user?.address;
 
-            const resApi = await axios.get(`${API.API_URL}/recommend`, {
-              params: { donation_type, donor_id, location },
+            console.log("🤖 [CHATBOT] Calling getRecommendations with:", {
+              donation_type,
+              account_id,
+              location,
+              user_object: user,
             });
+
+            const resApi = await axios.get(`${API.API_URL}/recommend`, {
+              params: { donation_type, account_id, location },
+            });
+
+            console.log("📊 [CHATBOT] Recommendation response:", {
+              active_requests: resApi.data.data?.prioritized_requests?.length,
+              associations: resApi.data.data?.associations?.length,
+              donor_history: resApi.data.data?.donor_history?.length,
+            });
+
+            // Format the response for OpenAI to understand clearly
+            const formattedOutput = {
+              ...resApi.data.data,
+              summary: {
+                urgent_requests: resApi.data.data?.prioritized_requests?.length || 0,
+                available_associations: resApi.data.data?.associations?.length || 0,
+                donor_donation_count: resApi.data.data?.donor_history?.length || 0,
+                donor_preferred_types: resApi.data.data?.donor_preferred_types || [],
+              }
+            };
 
             tool_outputs.push({
               tool_call_id: call.id,
-              output: JSON.stringify(resApi.data),
+              output: JSON.stringify(formattedOutput),
             });
           }
         }
@@ -232,6 +257,50 @@ export default function ChatBotScreen({ navigation, route }) {
   const renderMessage = ({ item }) => {
     const isUser = item.sender === "user";
 
+    // Parse message to detect links
+    const renderMessageWithLinks = () => {
+      const text = item.text;
+      // Detect BrowseAssociations links
+      const linkRegex = /BrowseAssociations\?type=([^&]+)&location=([^\s\]\)]+)/g;
+      const parts = [];
+      let lastIndex = 0;
+      let match;
+
+      while ((match = linkRegex.exec(text)) !== null) {
+        // Add text before link
+        if (match.index > lastIndex) {
+          parts.push({
+            type: "text",
+            content: text.substring(lastIndex, match.index),
+          });
+        }
+
+        // Add link
+        parts.push({
+          type: "link",
+          content: match[0],
+          donationType: match[1],
+          location: decodeURIComponent(match[2]),
+        });
+
+        lastIndex = linkRegex.lastIndex;
+      }
+
+      // Add remaining text
+      if (lastIndex < text.length) {
+        parts.push({
+          type: "text",
+          content: text.substring(lastIndex),
+        });
+      }
+
+      return parts.length > 0
+        ? parts
+        : [{ type: "text", content: text }];
+    };
+
+    const messageParts = renderMessageWithLinks();
+
     return (
       <View
         style={[
@@ -262,9 +331,43 @@ export default function ChatBotScreen({ navigation, route }) {
                 : [styles.botBubble, { backgroundColor: botBubbleBg }],
             ]}
           >
-            <Text style={{ color: isUser ? "#fff" : botTextColor }}>
-              {item.text}
-            </Text>
+            <View>
+              {messageParts.map((part, idx) =>
+                part.type === "text" ? (
+                  <Text
+                    key={idx}
+                    style={{ color: isUser ? "#fff" : botTextColor }}
+                  >
+                    {part.content}
+                  </Text>
+                ) : (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={() => {
+                      // Navigate to FoodAssociationsScreen or ClothesAssociationsScreen
+                      const screenName = part.donationType === "food" 
+                        ? "FoodAssociationsScreen" 
+                        : "ClothesAssociationsScreen";
+                      navigation.navigate(screenName, {
+                        location: part.location,
+                        user_id: user?.user_id || user?.account_id,
+                        username: user?.username,
+                        email: user?.email,
+                        full_name: user?.full_name,
+                        phone: user?.phone,
+                        role: user?.role,
+                        address: user?.address,
+                      });
+                    }}
+                    style={styles.chatLink}
+                  >
+                    <Text style={[styles.chatLinkText, { color: isUser ? "#fff" : "#4CAF50" }]}>
+                      🔗 تصفح الجمعيات
+                    </Text>
+                  </TouchableOpacity>
+                )
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -395,6 +498,20 @@ const styles = StyleSheet.create({
   messageBubble: {
     padding: 12,
     borderRadius: 16,
+  },
+
+  chatLink: {
+    marginVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+
+  chatLinkText: {
+    fontWeight: "600",
+    textDecorationLine: "underline",
+    fontSize: 14,
   },
 
   userBubble: {

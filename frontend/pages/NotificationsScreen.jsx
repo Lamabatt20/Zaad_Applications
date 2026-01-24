@@ -107,8 +107,8 @@ export default function NotificationsScreen({ navigation }) {
   navigation.navigate("AssociationInfo", {
     association_id: item.association_id,   
     request: {
-      donationType: item.donation_type,
-      description: item.description,
+      donationType: item.donation_type || "",
+      description: item.description || "",
     },
     fromNotification: true,
   });

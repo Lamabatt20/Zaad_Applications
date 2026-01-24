@@ -23,6 +23,8 @@ const TEXT_LIGHT = "#7A6A66";
 export default function DonationHistoryScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [donor_id, setDonor_id] = useState(null);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     load();
@@ -30,13 +32,15 @@ export default function DonationHistoryScreen({ navigation }) {
 
   const load = async () => {
     try {
-      const user = JSON.parse(await AsyncStorage.getItem("user_data"));
+      const userData = JSON.parse(await AsyncStorage.getItem("user_data"));
+      setUser(userData);
+      setDonor_id(userData.user_id);
       const res = await axios.get(
-        `${config.API_URL}/donation_history/donor/${user.user_id}`
+        `${config.API_URL}/donation_history/donor/${userData.user_id}`
       );
       setItems(res.data || []);
     } catch (e) {
-      console.log(e);
+      console.log("Error loading donation history:", e);
     } finally {
       setLoading(false);
     }
@@ -123,6 +127,24 @@ export default function DonationHistoryScreen({ navigation }) {
                   }
                 >
                   <Text style={styles.btnText}>Mark as Delivered</Text>
+                </TouchableOpacity>
+              )}
+
+              {isCompleted && (
+                <TouchableOpacity
+                  style={styles.rateBtn}
+                  onPress={() => {
+                    if (item.donation_id && user?.user_id) {
+                      navigation.navigate("DonationRating", {
+                        donationId: item.donation_id,
+                        donorId: user.user_id,
+                      });
+                    } else {
+                      alert("Error: Missing donation or donor information");
+                    }
+                  }}
+                >
+                  <Text style={styles.btnText}>⭐ Rate Donation</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -229,6 +251,14 @@ const styles = StyleSheet.create({
   deliverBtn: {
     marginTop: 14,
     backgroundColor: "#C9B3AE",
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+
+  rateBtn: {
+    marginTop: 14,
+    backgroundColor: "#D4A574",
     paddingVertical: 10,
     borderRadius: 999,
     alignItems: "center",

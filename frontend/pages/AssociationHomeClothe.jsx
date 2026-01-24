@@ -51,14 +51,14 @@ export default function AssociationHomeClothe({ route }) {
       return;
     }
 
-    // أولًا: إخفاء الفورم ومسح النص مباشرة
+    
     const newRequestTemp = {
-      request_id: Math.random().toString(), // مفتاح مؤقت
+      request_id: Math.random().toString(), 
       description: description,
       status: 'ACTIVE',
       created_at: new Date().toISOString(),
     };
-    setRequests(prev => [newRequestTemp, ...prev]); // إضافة مباشرة للقائمة
+    setRequests(prev => [newRequestTemp, ...prev]); 
     setDescription('');
     setIsFormVisible(false);
 
@@ -80,7 +80,7 @@ export default function AssociationHomeClothe({ route }) {
       console.log('POST response:', data);
 
       if (data.ok && data.data) {
-        // تحديث العنصر المؤقت بالبيانات الصحيحة من السيرفر
+       
         setRequests(prev => {
           if (!Array.isArray(prev)) return [data.data];
           return prev.map(r => 
@@ -150,7 +150,7 @@ export default function AssociationHomeClothe({ route }) {
                   </TouchableOpacity>
                 </View>
 
-                {/* زر فتح الفورم */}
+                
                 <TouchableOpacity 
                   activeOpacity={0.8}
                   style={styles.mainButton}
@@ -162,7 +162,7 @@ export default function AssociationHomeClothe({ route }) {
                   <Text style={styles.buttonText}>Request important new donation</Text>
                 </TouchableOpacity>
 
-                {/* عرض الريكوستات */}
+                
                 {requests.map((item) => (
                   <View key={item.request_id} style={styles.requestCard}>
                     <Text style={styles.reqTitle}>Clothes Request</Text>
@@ -182,7 +182,7 @@ export default function AssociationHomeClothe({ route }) {
                 ))}
               </>
             ) : (
-              // ===== الفورم =====
+             
               <View style={styles.formCard}>
                 <View style={styles.formHeader}>
                   <Text style={styles.formTitle}>New Clothes Request</Text>

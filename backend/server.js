@@ -894,6 +894,45 @@ app.get('/associations', async (req, res) => {
   }
 });
 
+// Generic endpoint to get associations by donation type (must come before :id)
+app.get('/associations/:param', async (req, res) => {
+  try {
+    const { param } = req.params;
+    console.log('📋 [GET /associations/:param] Param:', param);
+    
+    // Check if it's a number (ID) or text (donation type)
+    if (!isNaN(param)) {
+      // It's an ID - fetch specific association
+      const result = await pool.query(
+        'SELECT * FROM associations WHERE association_id = $1',
+        [parseInt(param)]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Association not found' });
+      }
+      console.log('✅ [GET /associations/:param] Found by ID:', result.rows[0].name);
+      return res.json(result.rows[0]);
+    } else {
+      // It's a donation type
+      let query = '';
+      if (param === 'clothes') {
+        query = "SELECT association_id, name, description, association_logo FROM associations WHERE clothes = true";
+      } else if (param === 'food') {
+        query = "SELECT association_id, name, description, association_logo FROM associations WHERE food = true";
+      } else {
+        return res.status(400).json({ error: "Invalid donation type" });
+      }
+      
+      const result = await pool.query(query);
+      console.log('✅ [GET /associations/:param] Found:', result.rows.length, 'associations for', param);
+      return res.json(result.rows);
+    }
+  } catch (err) {
+    console.error('❌ [GET /associations/:param] Error:', err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post('/associations', upload.fields([
   { name: 'association_logo', maxCount: 1 },
   { name: 'association_authentication', maxCount: 1 }
@@ -1359,52 +1398,157 @@ app.post('/notifications', async (req, res) => {
   }
 });
 app.get("/recommend", async (req, res) => {
-  const { donation_type, donor_id, location } = req.query;
+  let { donation_type, donor_id, account_id, location } = req.query;
 
   try {
-    let query = `
+    // If account_id is provided instead of donor_id, convert it to donor_id
+    if (account_id && !donor_id) {
+      const userRes = await pool.query(
+        `SELECT u.user_id FROM users u WHERE u.account_id = $1`,
+        [account_id]
+      );
+      if (userRes.rows.length > 0) {
+        donor_id = userRes.rows[0].user_id;
+        console.log("🔄 [RECOMMEND] Converted account_id to donor_id:", donor_id);
+      }
+    }
+
+    console.log("📊 [RECOMMEND] Called with:", { donation_type, donor_id, account_id, location });
+
+    // 1️⃣ Get Active Request Donations (PRIORITY)
+    let requestDonations = [];
+    if (donation_type) {
+      const requestQuery = `
+      SELECT DISTINCT
+        rd.request_id,
+        rd.association_id,
+        rd.donation_type,
+        rd.description,
+        rd.created_at,
+        rd.status,
+        a.name as association_name,
+        a.description as association_description,
+        acc.address
+      FROM request_donations rd
+      JOIN associations a ON rd.association_id = a.association_id
+      LEFT JOIN users u ON a.user_id = u.user_id
+      LEFT JOIN accounts acc ON acc.account_id = u.account_id
+      WHERE 
+        LOWER(rd.donation_type) = LOWER($1)
+        AND UPPER(rd.status) IN ('ACTIVE', 'PENDING')
+      ORDER BY rd.created_at DESC
+      LIMIT 10
+    `;
+      const requestResult = await pool.query(requestQuery, [donation_type]);
+      requestDonations = requestResult.rows.map(r => ({
+        ...r,
+        type: 'request',
+        priority: 'urgent'
+      }));
+      console.log("📬 [RECOMMEND] Found", requestDonations.length, "active requests");
+    }
+
+    // 2️⃣ Get Donor's Donation History (to suggest same types they donated before)
+    let preferredTypes = [donation_type];
+    if (donor_id) {
+      const historyQuery = `
+        SELECT DISTINCT donation_type, COUNT(*) as count
+        FROM donations
+        WHERE donor_id = $1
+        GROUP BY donation_type
+        ORDER BY count DESC
+      `;
+      const historyResult = await pool.query(historyQuery, [donor_id]);
+      const donationTypes = historyResult.rows.map(r => r.donation_type);
+      preferredTypes = [...new Set([donation_type, ...donationTypes])];
+      console.log("📜 [RECOMMEND] Donor's preferred types:", preferredTypes);
+    }
+
+    // 3️⃣ Get Matching Associations
+    let associationsQuery = `
       SELECT 
         a.association_id,
         a.name,
         a.description,
-        acc.address
+        acc.address,
+        COUNT(DISTINCT d.donation_id) as total_donations_received
       FROM associations a
       LEFT JOIN users u ON a.user_id = u.user_id
       LEFT JOIN accounts acc ON acc.account_id = u.account_id
+      LEFT JOIN donations d ON d.association_id = a.association_id AND (d.delivery_status = 'DELIVERED' OR d.delivery_status IS NULL)
       WHERE 1 = 1
     `;
 
-    if (donation_type === "food") query += " AND a.food = true";
-    if (donation_type === "clothes") query += " AND a.clothes = true";
+    const params = [];
 
-    const result = await pool.query(query);
-    let associations = result.rows;
-
-    if (location) {
-      const loc = location.toLowerCase();
-      associations = associations.filter(a =>
-        a.address?.toLowerCase().includes(loc)
-      );
+    // Only filter by donation type if columns exist and have values
+    if (donation_type === "food") {
+      associationsQuery += " AND (a.food = true OR a.food IS NOT FALSE)";
+    } else if (donation_type === "clothes") {
+      associationsQuery += " AND (a.clothes = true OR a.clothes IS NOT FALSE)";
     }
 
+    if (location) {
+      associationsQuery += ` AND (acc.address ILIKE $${params.length + 1} OR a.name ILIKE $${params.length + 1})`;
+      params.push(`%${location}%`);
+    }
+
+    associationsQuery += `
+      GROUP BY a.association_id, a.name, a.description, acc.address
+      ORDER BY total_donations_received DESC
+      LIMIT 15
+    `;
+
+    console.log("🔍 [RECOMMEND] Query:", associationsQuery);
+    console.log("📊 [RECOMMEND] Params:", params);
+    
+    const associationsResult = await pool.query(associationsQuery, params);
+    const associations = associationsResult.rows.map(a => ({
+      ...a,
+      type: 'association',
+      priority: 'standard'
+    }));
+    console.log("🏢 [RECOMMEND] Found", associations.length, "matching associations");
+
+    // 4️⃣ Get Donor History
     let donationHistory = [];
     if (donor_id) {
       const historyResult = await pool.query(
-        "SELECT * FROM donation_history WHERE donor_id = $1",
+        `SELECT d.donation_id, d.donor_id, d.donation_type, d.status, d.created_at,
+                fd.food_type, fd.expiration_date,
+                cd.clothes_type
+         FROM donations d
+         LEFT JOIN food_donations fd ON d.donation_id = fd.donation_id
+         LEFT JOIN clothes_donations cd ON d.donation_id = cd.donation_id
+         WHERE d.donor_id = $1
+         ORDER BY d.created_at DESC
+         LIMIT 10`,
         [donor_id]
       );
       donationHistory = historyResult.rows;
+      console.log("📝 [RECOMMEND] Donor's donation history:", donationHistory.length, "donations");
     }
+
+    // 5️⃣ Combine Results (Requests first as priority, then associations)
+    const combined = [
+      ...requestDonations,
+      ...associations
+    ];
 
     res.json({
       success: true,
-      associations,
-      donation_history: donationHistory,
+      data: {
+        prioritized_requests: requestDonations,
+        associations: associations,
+        all_recommendations: combined,
+        donor_history: donationHistory,
+        donor_preferred_types: preferredTypes
+      }
     });
 
   } catch (error) {
-    console.error("Recommendation API Error:", error);
-    res.status(500).json({ success: false, error: "Server error" });
+    console.error("❌ [RECOMMEND] API Error:", error);
+    res.status(500).json({ success: false, error: "Server error", details: error.message });
   }
 });
 app.get('/donations/clothes/pending', async (req, res) => {
@@ -1900,18 +2044,6 @@ app.get('/donations/clothes/rejected', async (req, res) => {
   }
 });
 
-
-app.get('/associations/clothes', async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT association_id, name,description,association_logo FROM associations WHERE clothes = true"
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
 // POST /assoc/donations/:id/approve  -> accepted ➜ approved
 app.post('/assoc/donations/:id/approve', async (req, res) => {
   const donationId = req.params.id;
@@ -2695,15 +2827,9 @@ async function createRequestDonationsTable() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(20) DEFAULT 'ACTIVE',
         CONSTRAINT fk_request_donations_association
-<<<<<<< Updated upstream
         FOREIGN KEY (association_id)
         REFERENCES associations(association_id)
         ON DELETE CASCADE
-=======
-          FOREIGN KEY (association_id)
-          REFERENCES associations(association_id)
-          ON DELETE CASCADE
->>>>>>> Stashed changes
       );
     `;
     await pool.query(query);
@@ -2725,7 +2851,6 @@ app.post('/assoc/request-donation', async (req, res) => {
       description
     });
 
-    // 1️⃣ تأكد أن الجمعية موجودة
     const assocCheck = await pool.query(
       `SELECT association_id FROM associations WHERE association_id = $1`,
       [association_id]
@@ -3125,6 +3250,8 @@ app.post("/donations/:id/rate", async (req, res) => {
   const donationId = Number(req.params.id);
   const { donor_id, rating, comment } = req.body;
 
+  console.log("🌟 [RATING] Request received:", { donationId, donor_id, rating });
+
   if (!donationId || !donor_id || !rating) {
     return res.status(400).json({
       ok: false,
@@ -3151,23 +3278,32 @@ app.post("/donations/:id/rate", async (req, res) => {
       [donationId]
     );
 
+    console.log("📊 [RATING] DB donation:", d.rows[0]);
+
     if (d.rows.length === 0) {
       return res.status(404).json({ ok: false, message: "Donation not found" });
     }
 
     const donation = d.rows[0];
+    console.log("🔍 [RATING] Comparing donor_id:", {
+      received: donor_id,
+      inDB: donation.donor_id,
+      type_received: typeof donor_id,
+      type_db: typeof donation.donor_id
+    });
 
     if (Number(donation.donor_id) !== Number(donor_id)) {
+      console.log("❌ [RATING] Donor mismatch!");
       return res.status(403).json({
         ok: false,
-        message: "You can only rate your own donation"
+        message: `You can only rate your own donation (DB: ${donation.donor_id}, Sent: ${donor_id})`
       });
     }
 
     if ((donation.delivery_status || "") !== "DELIVERED") {
       return res.status(400).json({
         ok: false,
-        message: "You can rate only after donation is DELIVERED"
+        message: `You can rate only after donation is DELIVERED (Current: ${donation.delivery_status})`
       });
     }
 
@@ -3201,6 +3337,7 @@ app.post("/donations/:id/rate", async (req, res) => {
       [donationId, donor_id]
     );
 
+    console.log("✅ [RATING] Success!");
     res.status(201).json({
       ok: true,
       message: "Rating submitted successfully",
@@ -3208,7 +3345,7 @@ app.post("/donations/:id/rate", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ RATE DONATION ERROR:", err);
-    res.status(500).json({ ok: false, message: "Server error" });
+    res.status(500).json({ ok: false, message: "Server error", error: err.message });
   }
 });
 // GET /donations/:id/rating-status -> check if donation already rated
@@ -3218,7 +3355,7 @@ app.get("/donations/:id/rating-status", async (req, res) => {
   try {
     const q = await pool.query(
       `
-      SELECT d.donation_id, d.is_rated, d.delivery_status,
+      SELECT d.donation_id, d.donor_id, d.is_rated, d.delivery_status,
              r.rating, r.comment, r.created_at
       FROM donations d
       LEFT JOIN ratings r ON r.donation_id = d.donation_id

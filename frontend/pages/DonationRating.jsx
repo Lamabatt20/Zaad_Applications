@@ -21,19 +21,38 @@ export default function DonationRating({ navigation, route }) {
   const [rating, setRating] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [actualDonorId, setActualDonorId] = useState(null);
 
   // animation
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.98)).current;
 
   useEffect(() => {
-    if (!donationId || !donorId) {
-      Alert.alert(
-        "Missing data",
-        "donationId / donorId is missing. Open this screen from donation details."
+    fetchDonationDetails();
+  }, [donationId]);
+
+  const fetchDonationDetails = async () => {
+    try {
+      if (!donationId) {
+        Alert.alert("Error", "Donation ID is missing");
+        navigation.goBack();
+        return;
+      }
+
+      const res = await axios.get(
+        `${config.API_URL}/donations/${donationId}/rating-status`
       );
+      
+      if (res.data.ok && res.data.data) {
+        setActualDonorId(res.data.data.donor_id);
+        console.log("✅ [DONATION] Fetched actual donor_id:", res.data.data.donor_id);
+      }
+    } catch (err) {
+      console.log("❌ Error fetching donation details:", err);
+      Alert.alert("Error", "Could not verify donation. Please try again.");
+      navigation.goBack();
     }
-  }, [donationId, donorId]);
+  };
 
   const animateMessage = () => {
     fadeAnim.setValue(0);
@@ -77,7 +96,10 @@ export default function DonationRating({ navigation, route }) {
 
   const submitRating = async () => {
     try {
-      if (!donationId || !donorId) return;
+      if (!donationId || !actualDonorId) {
+        Alert.alert("Error", "Could not verify donation ownership");
+        return;
+      }
 
       if (!rating) {
         Alert.alert("Select rating", "Please choose at least 1 star.");
@@ -86,26 +108,33 @@ export default function DonationRating({ navigation, route }) {
 
       setSubmitting(true);
 
-      const url = `${config.BASE_URL}/donations/${donationId}/rate`;
+      console.log("📤 [SUBMIT] Sending rating with:", {
+        donationId,
+        donor_id: actualDonorId,
+        rating,
+      });
+
+      const url = `${config.API_URL}/donations/${donationId}/rate`;
 
       const res = await axios.post(url, {
-        donor_id: donorId,
+        donor_id: actualDonorId,
         rating: rating,
-        comment: null, // إذا بدك تعليق لاحقاً بنضيفه
+        comment: null,
       });
 
       if (res?.data?.ok) {
         setSubmitted(true);
         Alert.alert("Thank you!", "Your rating has been submitted.");
-        // رجّعيه بعد شوي (اختياري)
         setTimeout(() => navigation.goBack(), 600);
       } else {
         Alert.alert("Error", res?.data?.message || "Failed to submit rating.");
       }
     } catch (err) {
+      console.log("Rating error:", err);
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
+        err?.message ||
         "Server error while submitting rating.";
       Alert.alert("Error", msg);
     } finally {

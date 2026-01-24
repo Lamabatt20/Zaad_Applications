@@ -23,8 +23,6 @@ export default function LoginScreen({ navigation }) {
   const [passwordError, setPasswordError] = useState('');
   const [generalError, setGeneralError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [lang, setLang] = useState('EN');
-  const [langModalVisible, setLangModalVisible] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -34,11 +32,6 @@ export default function LoginScreen({ navigation }) {
     };
     loadDark();
   }, []);
-
-  const selectLanguage = (value) => {
-    setLang(value);
-    setLangModalVisible(false);
-  };
 
   const validateFields = () => {
     let valid = true;
@@ -166,21 +159,6 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      <TouchableOpacity
-        style={[
-          styles.langButton,
-          lang === 'EN' ? { right: 20 } : { left: 20 },
-        ]}
-        onPress={() => setLangModalVisible(true)}
-      >
-        <MaterialCommunityIcons
-          name="chat"
-          size={42}
-          color="#A27571"
-          style={{ transform: [{ scaleX: lang === 'AR' ? -1 : 1 }] }}
-        />
-        <Text style={[styles.langText, { color: text, position: 'absolute' }]}>{lang}</Text>
-      </TouchableOpacity>
 
       <Image source={require('../assets/images/logo3.png')} style={styles.logoTop} />
 
@@ -256,31 +234,6 @@ export default function LoginScreen({ navigation }) {
         <Image source={require('../assets/images/Z A A D.png')} style={styles.logoBottom} />
       </View>
 
-      <Modal
-        visible={langModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setLangModalVisible(false)}
-      >
-        <View style={[styles.fullScreenModal, { backgroundColor: bg }]}>
-          <TouchableOpacity style={styles.closeIcon} onPress={() => setLangModalVisible(false)}>
-            <Text style={[styles.closeText, { color: text }]}>X</Text>
-          </TouchableOpacity>
-
-          <View style={styles.modalTitleContainer}>
-            <Text style={[styles.modalTitleAr, { color: text }]}>اختر اللغة</Text>
-            <Text style={[styles.modalTitleEn, { color: text }]}>Choose the Language</Text>
-          </View>
-
-          <TouchableOpacity style={[styles.optionButton, { borderColor: text }]} onPress={() => selectLanguage('EN')}>
-            <Text style={[styles.optionText, { color: text }]}>English (EN)</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.optionButton, { borderColor: text }]} onPress={() => selectLanguage('AR')}>
-            <Text style={[styles.optionText, { color: text }]}>العربية (AR)</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
     </View>
   );
 }

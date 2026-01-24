@@ -13,10 +13,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
-  const { association , user,request} = route.params || {};
-  const [associationData, setAssociationData] = useState(association || null);
+  const { association, user, request, association_id } = route.params || {};
+  const [associationData, setAssociationData] = useState(
+    association ? { ...association } : null
+  );
   const fromNotification = route.params?.fromNotification;
-  const { association_id} = route.params || {};
+  
   let donationType = route.params?.donationType ||
     association?.donationType ||
     association?.type ||
@@ -26,25 +28,34 @@ export default function AssociationInfo({ route, navigation }) {
 
   const [darkMode, setDarkMode] = useState(false);
 
- useEffect(() => {
-  const fetchAssociation = async () => {
-    try {
-      if (!association_id) return;
+  useEffect(() => {
+    const fetchAssociation = async () => {
+      try {
+        if (!association_id) return;
 
-      const res = await fetch(
-        `${API.API_URL}/associations/${association_id}`
-      );
-      const data = await res.json();
-      setAssociationData(data);
-    } catch (e) {
-      console.log("Failed to load association", e);
+        const res = await fetch(
+          `${API.API_URL}/associations/${association_id}`
+        );
+        const data = await res.json();
+        console.log("📍 Fetched association:", data);
+        // دمج البيانات المجلوبة مع البيانات الموجودة بالفعل
+        setAssociationData(prev => ({
+          ...prev,
+          ...data,
+          name: data?.name || prev?.name,
+          association_logo: data?.association_logo || prev?.association_logo,
+          description: data?.description || prev?.description,
+        }));
+      } catch (e) {
+        console.log("❌ Failed to load association", e);
+      }
+    };
+
+    // Always fetch if we have association_id to get latest data
+    if (association_id) {
+      fetchAssociation();
     }
-  };
-
-  if (!association && association_id) {
-    fetchAssociation();
-  }
-}, [association_id]);
+  }, [association_id]);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -85,12 +96,18 @@ export default function AssociationInfo({ route, navigation }) {
       >
         {/* Hero: logo left + name next to it */}
         <View style={styles.heroRow}>
-          <Image
-            source={{ uri: `${API.API_URL}${associationData.association_logo}` }}
-            style={styles.heroLogoLeft}
-          />
+          {associationData?.association_logo ? (
+            <Image
+              source={{ uri: `${API.API_URL}${associationData.association_logo}` }}
+              style={styles.heroLogoLeft}
+            />
+          ) : (
+            <View style={[styles.heroLogoLeft, { backgroundColor: "#ddd", justifyContent: "center", alignItems: "center" }]}>
+              <Ionicons name="image" size={40} color="#999" />
+            </View>
+          )}
           <View style={styles.heroTextContainer}>
-            <Text style={styles.heroTitleTop}>{association.name}</Text>
+            <Text style={styles.heroTitleTop}>{associationData?.name || "Association"}</Text>
             <Text style={[styles.heroSubtitle, { color: textColor }]}>
               {donationType?.charAt(0).toUpperCase() +
                 donationType?.slice(1) || "Donation"}
@@ -112,7 +129,7 @@ export default function AssociationInfo({ route, navigation }) {
             About
           </Text>
           <Text style={[styles.descriptionText, { color: cardTitleColor }]}>
-            {associationData.description || "No description available."}
+            {associationData?.description || "No description available."}
           </Text>
         </View>
 
@@ -180,7 +197,7 @@ export default function AssociationInfo({ route, navigation }) {
           </Text>
 
           <Text style={[styles.requestText, { color: cardTitleColor }]}>
-            {request.description || "No additional details provided."}
+            {request?.description || "No additional details provided."}
           </Text>
         </View>
       )}

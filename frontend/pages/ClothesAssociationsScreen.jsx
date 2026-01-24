@@ -11,6 +11,9 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
     route?.params || {};
   const donationType =
     route?.params?.donationType || route?.params?.type || "clothes";
+  
+  // ✅ Get location filter from route params (from ChatBot)
+  const filterLocation = route?.params?.location;
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -24,12 +27,22 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
 
   useEffect(() => {
     fetchAssociations();
-  }, [donationType]);
+  }, [donationType, filterLocation]);
 
   const fetchAssociations = async () => {
     try {
       const res = await axios.get(`${API.API_URL}/associations/${donationType}`);
-      const data = Array.isArray(res.data) ? res.data : res.data.items || [];
+      let data = Array.isArray(res.data) ? res.data : res.data.items || [];
+      
+      // Filter by location if provided (from ChatBot link)
+      if (filterLocation) {
+        data = data.filter(a =>
+          a.name?.toLowerCase().includes(filterLocation.toLowerCase()) ||
+          a.description?.toLowerCase().includes(filterLocation.toLowerCase()) ||
+          a.address?.toLowerCase().includes(filterLocation.toLowerCase())
+        );
+      }
+      
       setAssociations(data);
     } catch (err) {
     }
