@@ -2923,6 +2923,180 @@ app.delete('/products/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
+// ===== RATINGS TABLE CREATION =====
+async function createRatingsTable() {
+  try {
+    const query = `
+      CREATE TABLE IF NOT EXISTS ratings (
+        rating_id SERIAL PRIMARY KEY,
+        donation_id INT UNIQUE NOT NULL,
+        donor_id INT NOT NULL,
+        rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await pool.query(query);
+
+    // 🔒 FK constraints (optional but recommended)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'fk_ratings_donation'
+        ) THEN
+          ALTER TABLE ratings
+          ADD CONSTRAINT fk_ratings_donation
+          FOREIGN KEY (donation_id)
+          REFERENCES donations(donation_id)
+          ON DELETE CASCADE;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'fk_ratings_donor'
+        ) THEN
+          ALTER TABLE ratings
+          ADD CONSTRAINT fk_ratings_donor
+          FOREIGN KEY (donor_id)
+          REFERENCES donors(user_id)
+          ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `);
+
+    // ✅ add helper column on donations (so frontend can quickly know)
+    await pool.query(`
+      ALTER TABLE donations
+      ADD COLUMN IF NOT EXISTS is_rated BOOLEAN DEFAULT FALSE;
+    `);
+
+    console.log("✅ Table ratings created/verified successfully");
+  } catch (err) {
+    console.error("❌ Error creating ratings table:", err);
+  }
+}
+createRatingsTable();
+
+// ===== RATINGS ENDPOINTS =====
+
+// POST /donations/:id/rate  -> donor rates donation experience
+app.post("/donations/:id/rate", async (req, res) => {
+  const donationId = Number(req.params.id);
+  const { donor_id, rating, comment } = req.body;
+
+  if (!donationId || !donor_id || !rating) {
+    return res.status(400).json({
+      ok: false,
+      message: "donationId, donor_id, rating are required"
+    });
+  }
+
+  const intRating = Number(rating);
+  if (!Number.isInteger(intRating) || intRating < 1 || intRating > 5) {
+    return res.status(400).json({
+      ok: false,
+      message: "rating must be an integer between 1 and 5"
+    });
+  }
+
+  try {
+    // 1️⃣ Verify donation exists + belongs to donor + delivered
+    const d = await pool.query(
+      `
+      SELECT donation_id, donor_id, delivery_status, is_rated
+      FROM donations
+      WHERE donation_id = $1
+      `,
+      [donationId]
+    );
+
+    if (d.rows.length === 0) {
+      return res.status(404).json({ ok: false, message: "Donation not found" });
+    }
+
+    const donation = d.rows[0];
+
+    if (Number(donation.donor_id) !== Number(donor_id)) {
+      return res.status(403).json({
+        ok: false,
+        message: "You can only rate your own donation"
+      });
+    }
+
+    if ((donation.delivery_status || "") !== "DELIVERED") {
+      return res.status(400).json({
+        ok: false,
+        message: "You can rate only after donation is DELIVERED"
+      });
+    }
+
+    if (donation.is_rated) {
+      return res.status(409).json({
+        ok: false,
+        message: "This donation has already been rated"
+      });
+    }
+
+    // 2️⃣ Insert rating
+    const ins = await pool.query(
+      `
+      INSERT INTO ratings (donation_id, donor_id, rating, comment)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
+      [donationId, donor_id, intRating, (comment || "").trim() || null]
+    );
+
+    // 3️⃣ Mark donation rated
+    await pool.query(
+      `UPDATE donations SET is_rated = TRUE WHERE donation_id = $1`,
+      [donationId]
+    );
+    await pool.query(
+      `
+      INSERT INTO donation_history (donation_id, donor_id, description)
+      VALUES ($1, $2, 'RATED')
+      `,
+      [donationId, donor_id]
+    );
+
+    res.status(201).json({
+      ok: true,
+      message: "Rating submitted successfully",
+      rating: ins.rows[0]
+    });
+  } catch (err) {
+    console.error("❌ RATE DONATION ERROR:", err);
+    res.status(500).json({ ok: false, message: "Server error" });
+  }
+});
+// GET /donations/:id/rating-status -> check if donation already rated
+app.get("/donations/:id/rating-status", async (req, res) => {
+  const donationId = Number(req.params.id);
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT d.donation_id, d.is_rated, d.delivery_status,
+             r.rating, r.comment, r.created_at
+      FROM donations d
+      LEFT JOIN ratings r ON r.donation_id = d.donation_id
+      WHERE d.donation_id = $1
+      `,
+      [donationId]
+    );
+
+    if (q.rows.length === 0) {
+      return res.status(404).json({ ok: false, message: "Donation not found" });
+    }
+
+    res.json({ ok: true, data: q.rows[0] });
+  } catch (e) {
+    console.error("❌ rating-status error:", e);
+    res.status(500).json({ ok: false });
+  }
+});
+
 
 // ...existing code...
 app.listen(port, () => {

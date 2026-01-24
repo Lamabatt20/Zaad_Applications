@@ -51,6 +51,7 @@ import DeliveryTrackScreen from './pages/DeliveryTrackScreen';
 import DonationHistoryScreen from './pages/DonationHistoryScreen';
 import DonationTrackScreen from './pages/DonationTrackScreen';
 import DonationDeliverScreen from './pages/DonationDeliverScreen';
+import DonationRating from './pages/DonationRating';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -90,7 +91,6 @@ export default function App() {
           <Stack.Screen name="AssociationHomeClothe" component={AssociationHomeClothe} />
           <Stack.Screen name="AssociationHomeFood" component={AssociationHomeFood} />
           <Stack.Screen name="AssociationHomeAll" component={AssociationHomeAll} />
-          
           <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
           <Stack.Screen name="PendingAssociations" component={PendingAssociations} />
           <Stack.Screen name="WaitingApproval" component={WaitingApproval} />
@@ -107,6 +107,7 @@ export default function App() {
           <Stack.Screen name="DonationHistoryScreen" component={DonationHistoryScreen} />
           <Stack.Screen name="DonationTrackScreen" component={DonationTrackScreen} />
           <Stack.Screen name="DonationDeliverScreen" component={DonationDeliverScreen} />
+          <Stack.Screen name="DonationRating" component={DonationRating} />
           </Stack.Navigator>
       </NavigationContainer>
   );
