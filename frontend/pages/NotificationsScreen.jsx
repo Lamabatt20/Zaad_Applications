@@ -22,76 +22,59 @@ export default function NotificationsScreen({ navigation }) {
 
   const API = axios.create({ baseURL: config.API_URL, timeout: 15000 });
 
-  // ✅ parse message (if stored as JSON {text, donation_id, ...})
-  const parseNotificationMessage = (raw) => {
-    if (!raw) return { text: "", donation_id: null, raw: "" };
-
-    // raw might already be object (rare)
-    if (typeof raw === "object") {
-      return {
-        text: raw.text || raw.message || "",
-        donation_id: raw.donation_id ?? null,
-        raw,
-      };
-    }
-
-    // try JSON parsing
-    if (typeof raw === "string") {
-      try {
-        const obj = JSON.parse(raw);
-        if (obj && typeof obj === "object") {
-          return {
-            text: obj.text || obj.message || raw,
-            donation_id: obj.donation_id ?? null,
-            raw,
-          };
-        }
-      } catch (e) {
-        // normal string
-      }
-      return { text: raw, donation_id: null, raw };
-    }
-
-    return { text: String(raw), donation_id: null, raw: String(raw) };
-  };
-
-  const fetchNotifications = async () => {
+ const parseNotificationMessage = (raw) => {
   try {
-    const userData = await AsyncStorage.getItem("user_data");
-    if (!userData) {
-      setItems([]);
-      return;
-    }
+    const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
 
-    const user = JSON.parse(userData);
-
-    // ✅ user_id هو فعليًا account_id
-    const userId = user.user_id;
-    if (!userId) {
-      setItems([]);
-      return;
-    }
-
-    const res = await API.get(`/notifications/${userId}`);
-
-    const mapped = (res.data || []).map((n) => {
-      const parsed = parseNotificationMessage(n.message);
-      return {
-        ...n,
-        _text: parsed.text,
-        _donation_id: parsed.donation_id,
-      };
-    });
-
-    setItems(mapped);
-  } catch (e) {
-    console.log(e);
-    Alert.alert("خطأ", "فشل تحميل الإشعارات");
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
+    return {
+      _text: obj.text || "",
+      _kind: obj.kind || "default",
+      _donation_id: obj.donation_id || null,
+      association_id: obj.association_id || null,
+      request_id: obj.request_id || null,
+      donation_type: obj.donation_type || null,
+      description: obj.description || null,
+    };
+  } catch {
+    return {
+      _text: String(raw),
+      _kind: "default",
+      _donation_id: null,
+    };
   }
 };
+
+  const fetchNotifications = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user_data");
+      if (!userData) {
+        setItems([]);
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      const userId = user.user_id;
+      if (!userId) {
+        setItems([]);
+        return;
+      }
+
+      const res = await API.get(`/notifications/${userId}`);
+
+      const mapped = res.data.map((n) => {
+        const parsed = parseNotificationMessage(n.message);
+        return { ...n, ...parsed };
+      });
+
+      setItems(mapped);
+    } catch (e) {
+      console.log(e);
+      Alert.alert("Error", "Failed to load notifications");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     fetchNotifications();
@@ -106,28 +89,40 @@ export default function NotificationsScreen({ navigation }) {
     if (!value) return "";
     const d = new Date(value);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleString("ar-EG"); 
+    return d.toLocaleString("en-US");
   };
 
- const openNotification = async (item) => {
+  const openNotification = async (item) => {
   if (item.notification_id) {
     await API.post(`/notifications/read/${item.notification_id}`);
   }
 
-  if (!item._donation_id) {
-    Alert.alert(
-      "🔔 Notification",
-      item._text || "—",
-      [{ text: "OK" }]
-    );
+ 
+  if (item._kind === "feedback") {
+    Alert.alert("💬 Feedback", item._text || "—", [{ text: "OK" }]);
     return;
   }
 
-  navigation.navigate("DonationHistoryScreen", {
-    focusDonationId: item._donation_id,
+  if (item._kind === "association_request") {
+  navigation.navigate("AssociationInfo", {
+    association_id: item.association_id,   
+    request: {
+      donationType: item.donation_type,
+      description: item.description,
+    },
+    fromNotification: true,
   });
-};
+  return;
+}
+  if (item._donation_id) {
+    navigation.navigate("DonationHistoryScreen", {
+      focusDonationId: item._donation_id,
+    });
+    return;
+  }
 
+  Alert.alert("🔔 Notification", item._text || "—");
+};
 
   const renderItem = ({ item }) => {
     const unread = item.is_read === false || item.is_read === 0;
@@ -136,10 +131,7 @@ export default function NotificationsScreen({ navigation }) {
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={() => openNotification(item)}
-        style={[
-          styles.card,
-          unread ? styles.cardUnread : null,
-        ]}
+        style={[styles.card, unread ? styles.cardUnread : null]}
       >
         <View style={styles.rowTop}>
           <View style={styles.iconWrap}>
@@ -156,15 +148,17 @@ export default function NotificationsScreen({ navigation }) {
             </Text>
 
             {!!item.created_at && (
-              <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
+              <Text style={styles.dateText}>
+                {formatDate(item.created_at)}
+              </Text>
             )}
           </View>
 
-          {item._donation_id ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Track</Text>
-            </View>
-          ) : null}
+          {item._donation_id && item._kind !== "feedback" ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Track</Text>
+          </View>
+        ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -175,7 +169,7 @@ export default function NotificationsScreen({ navigation }) {
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#A27571" />
-          <Text style={styles.loadingText}>جاري تحميل الإشعارات...</Text>
+          <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
       </SafeAreaView>
     );
@@ -185,7 +179,7 @@ export default function NotificationsScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>الإشعارات</Text>
+        <Text style={styles.title}>Notifications</Text>
 
         <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
           <Ionicons name="refresh" size={20} color="#000" />
@@ -194,7 +188,9 @@ export default function NotificationsScreen({ navigation }) {
 
       <FlatList
         data={items}
-        keyExtractor={(item) => String(item.notification_id || item.id || Math.random())}
+        keyExtractor={(item) =>
+          String(item.notification_id || item.id || Math.random())
+        }
         renderItem={renderItem}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -206,9 +202,10 @@ export default function NotificationsScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Ionicons name="notifications-off" size={44} color="#A27571" />
-            <Text style={styles.emptyTitle}>لا يوجد إشعارات</Text>
+            <Text style={styles.emptyTitle}>No Notifications</Text>
             <Text style={styles.emptySub}>
-              عندما يصلك إشعار من الجمعية أو حالة توصيل، سيظهر هنا.
+              When you receive a notification from an association or a delivery
+              update, it will appear here.
             </Text>
           </View>
         }
@@ -218,7 +215,6 @@ export default function NotificationsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  // Zaad theme (beige + black + brown)
   container: {
     flex: 1,
     backgroundColor: "#EBE1D7",
@@ -274,7 +270,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardUnread: {
-    // unread feel
     borderWidth: 2,
   },
 

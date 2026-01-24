@@ -13,7 +13,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../config";
 
 export default function AssociationInfo({ route, navigation }) {
-  const { association , user} = route.params || {};
+  const { association , user,request} = route.params || {};
+  const [associationData, setAssociationData] = useState(association || null);
+  const fromNotification = route.params?.fromNotification;
+  const { association_id} = route.params || {};
   let donationType = route.params?.donationType ||
     association?.donationType ||
     association?.type ||
@@ -22,6 +25,26 @@ export default function AssociationInfo({ route, navigation }) {
     "clothes";
 
   const [darkMode, setDarkMode] = useState(false);
+
+ useEffect(() => {
+  const fetchAssociation = async () => {
+    try {
+      if (!association_id) return;
+
+      const res = await fetch(
+        `${API.API_URL}/associations/${association_id}`
+      );
+      const data = await res.json();
+      setAssociationData(data);
+    } catch (e) {
+      console.log("Failed to load association", e);
+    }
+  };
+
+  if (!association && association_id) {
+    fetchAssociation();
+  }
+}, [association_id]);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -45,6 +68,7 @@ export default function AssociationInfo({ route, navigation }) {
   const btnTextColor = "#fff";
   const borderColor = darkMode ? "#444" : "#eee";
 
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bg }]}>
       {/* Header */}
@@ -62,7 +86,7 @@ export default function AssociationInfo({ route, navigation }) {
         {/* Hero: logo left + name next to it */}
         <View style={styles.heroRow}>
           <Image
-            source={{ uri: `${API.API_URL}${association.association_logo}` }}
+            source={{ uri: `${API.API_URL}${associationData.association_logo}` }}
             style={styles.heroLogoLeft}
           />
           <View style={styles.heroTextContainer}>
@@ -88,7 +112,7 @@ export default function AssociationInfo({ route, navigation }) {
             About
           </Text>
           <Text style={[styles.descriptionText, { color: cardTitleColor }]}>
-            {association.description || "No description available."}
+            {associationData.description || "No description available."}
           </Text>
         </View>
 
@@ -140,6 +164,26 @@ export default function AssociationInfo({ route, navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+       {fromNotification && request && (
+        <View
+          style={[
+            styles.requestSection,
+            { backgroundColor: cardBg, borderColor },
+          ]}
+        >
+          <Text style={[styles.sectionLabel, { color: cardDescriptionColor }]}>
+            Requested Donation
+          </Text>
+
+          <Text style={[styles.requestType, { color: cardTitleColor }]}>
+            Type: {request.donationType?.toUpperCase()}
+          </Text>
+
+          <Text style={[styles.requestText, { color: cardTitleColor }]}>
+            {request.description || "No additional details provided."}
+          </Text>
+        </View>
+      )}
       </ScrollView>
 
       {/* Fixed Footer */}
@@ -300,4 +344,23 @@ heroLogoLeft: {
     width: 80,
     height: 80,
   },
+  requestSection: {
+  borderRadius: 12,
+  padding: 16,
+  marginTop: 10,
+  marginBottom: 20,
+  borderWidth: 1,
+},
+
+requestType: {
+  fontSize: 14,
+  fontWeight: "700",
+  marginBottom: 8,
+},
+
+requestText: {
+  fontSize: 15,
+  lineHeight: 22,
+  fontWeight: "500",
+},
 });

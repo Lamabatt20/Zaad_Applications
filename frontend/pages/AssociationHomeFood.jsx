@@ -13,7 +13,7 @@ const { width } = Dimensions.get('window');
 export default function AssociationHomeFood({ route }) {
   const navigation = useNavigation();
   const username = route?.params?.username || "Association";
-  const associationId = route?.params?.user_id;
+  const associationId = route?.params?.association_id;
 
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [description, setDescription] = useState('');

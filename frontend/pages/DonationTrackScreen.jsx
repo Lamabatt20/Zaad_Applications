@@ -10,6 +10,9 @@ import {
 const BROWN = "#A27571";
 const BG = "#EBE1D7";
 
+/**
+ * خطوات التتبع في الواجهة
+ */
 const steps = [
   { key: "ASSIGNED", label: "Order Assigned" },
   { key: "ON_THE_WAY_TO_DONOR", label: "On the way to donor" },
@@ -18,13 +21,34 @@ const steps = [
   { key: "DELIVERED", label: "Donation delivered" },
 ];
 
-export default function DonationTrackScreen({ route }) {
-  const { delivery_status } = route.params;
+/**
+ * Mapping بين حالات الباك وحالات الواجهة
+ */
+const STATUS_MAP = {
+  NEEDS_ASSIGNMENT: "ASSIGNED",
+  WAITING_FOR_DONOR: "ON_THE_WAY_TO_DONOR",
+  ASSIGNED: "ASSIGNED",
+  PICKED_UP: "PICKED_UP",
+  ON_THE_WAY_TO_ASSOCIATION: "ON_THE_WAY_TO_ASSOCIATION",
+  DELIVERED: "DELIVERED",
+};
 
-  const currentIndex = Math.max(
-    steps.findIndex((s) => s.key === delivery_status),
-    -1
+export default function DonationTrackScreen({ route }) {
+  const { delivery_status } = route.params || {};
+
+  // توحيد الحالة القادمة من الباك
+  const normalizedStatus =
+    STATUS_MAP[delivery_status] || delivery_status || null;
+
+  // تحديد أي خطوة مفعّلة
+  const currentIndex = steps.findIndex(
+    (s) => s.key === normalizedStatus
   );
+
+  // DEBUG (اختياري)
+  // console.log("RAW STATUS:", delivery_status);
+  // console.log("NORMALIZED:", normalizedStatus);
+  // console.log("INDEX:", currentIndex);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -42,11 +66,12 @@ export default function DonationTrackScreen({ route }) {
       {/* ===== TRACKING STEPS ===== */}
       <View style={styles.content}>
         {steps.map((step, index) => {
-          const completed = index <= currentIndex;
+          const completed =
+            currentIndex !== -1 && index <= currentIndex;
 
           return (
             <View key={step.key} style={styles.row}>
-              {/* CHECKBOX (DISPLAY ONLY) */}
+              {/* CHECKBOX */}
               <View
                 style={[
                   styles.checkbox,
@@ -87,6 +112,8 @@ export default function DonationTrackScreen({ route }) {
     </SafeAreaView>
   );
 }
+
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   container: {

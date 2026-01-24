@@ -1670,6 +1670,91 @@ app.get('/delivery/my-donations/:delivery_person_id', async (req, res) => {
     res.status(500).json({ ok:false });
   }
 });
+app.post("/delivery/feedback", async (req, res) => {
+  const { donation_id, message } = req.body;
+
+  if (!donation_id || !message) {
+    return res.status(400).json({ ok: false });
+  }
+
+  try {
+    // 1️⃣ get donor
+    const q = await pool.query(
+      `
+      SELECT d.donor_id, u.user_id
+      FROM donations d
+      JOIN donors dr ON dr.user_id = d.donor_id
+      JOIN users u ON u.user_id = dr.user_id
+      WHERE d.donation_id = $1
+      `,
+      [donation_id]
+    );
+
+    if (q.rows.length === 0) {
+      return res.status(404).json({ ok: false });
+    }
+
+    const donorId = q.rows[0].donor_id;
+    const donorUserId = q.rows[0].user_id;
+
+    // 2️⃣ save feedback
+    await pool.query(
+      `
+      INSERT INTO feedbacks (donor_id, message, status)
+      VALUES ($1, $2, 'DELIVERY_FEEDBACK')
+      `,
+      [donorId, message]
+    );
+
+    // 3️⃣ notification (✨ المهم)
+    const notif = JSON.stringify({
+      text: message,          // 👈 نص الفيدباك نفسه
+      donation_id,
+      kind: "feedback",       // 👈 لتمييزه عن tracking
+    });
+
+    await pool.query(
+      `
+      INSERT INTO notifications (user_id, type, message)
+      VALUES ($1, 'delivery_feedback', $2)
+      `,
+      [donorUserId, notif]
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false });
+  }
+});
+app.get('/notifications/unread-count/:user_id', async (req, res) => {
+  const { user_id } = req.params;
+
+  try {
+    const q = await pool.query(
+      `
+      SELECT COUNT(*) AS count
+      FROM notifications
+      WHERE user_id = $1
+        AND is_read = false
+      `,
+      [user_id]
+    );
+
+    res.json({
+      ok: true,
+      count: Number(q.rows[0].count),
+    });
+  } catch (e) {
+    console.error("❌ unread-count error:", e);
+    res.status(500).json({
+      ok: false,
+      count: 0,
+    });
+  }
+});
+
+
 app.post('/delivery/update-status', async (req, res) => {
   const { donation_id, next_status } = req.body;
 
@@ -2600,7 +2685,7 @@ async function createRequestDonationsTable() {
     // Drop old table if exists
     await pool.query(`DROP TABLE IF EXISTS request_donations CASCADE;`);
     
-    // Create new table without FK constraint
+    // Create new table WITH FK constraint
     const query = `
       CREATE TABLE IF NOT EXISTS request_donations (
         request_id SERIAL PRIMARY KEY,
@@ -2610,13 +2695,19 @@ async function createRequestDonationsTable() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status VARCHAR(20) DEFAULT 'ACTIVE',
         CONSTRAINT fk_request_donations_association
+<<<<<<< Updated upstream
         FOREIGN KEY (association_id)
         REFERENCES associations(association_id)
         ON DELETE CASCADE
+=======
+          FOREIGN KEY (association_id)
+          REFERENCES associations(association_id)
+          ON DELETE CASCADE
+>>>>>>> Stashed changes
       );
     `;
     await pool.query(query);
-    console.log("✅ Table request_donations recreated successfully (no FK constraint)");
+    console.log("✅ Table request_donations recreated successfully WITH FK constraint");
   } catch (err) {
     console.error("❌ Error creating request_donations table:", err);
   }
@@ -2627,29 +2718,79 @@ createRequestDonationsTable();
 app.post('/assoc/request-donation', async (req, res) => {
   try {
     const { association_id, donation_type, description } = req.body;
-    
-    console.log('📝 POST /assoc/request-donation - Received:', { association_id, donation_type, description });
 
+    console.log('📝 POST /assoc/request-donation - Received:', {
+      association_id,
+      donation_type,
+      description
+    });
+
+    // 1️⃣ تأكد أن الجمعية موجودة
+    const assocCheck = await pool.query(
+      `SELECT association_id FROM associations WHERE association_id = $1`,
+      [association_id]
+    );
+
+    if (assocCheck.rows.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "Association not found"
+      });
+    }
+
+    // 2️⃣ إنشاء الطلب
     const result = await pool.query(
-      `INSERT INTO request_donations 
-       (association_id, donation_type, description) 
-       VALUES ($1, $2, $3) 
-       RETURNING *`,
+      `
+      INSERT INTO request_donations 
+        (association_id, donation_type, description)
+      VALUES ($1, $2, $3)
+      RETURNING *
+      `,
       [association_id, donation_type, description]
     );
 
-    console.log('✅ Request created:', result.rows[0]);
+    const request = result.rows[0];
+    console.log('✅ Request created:', request);
+
+    // 3️⃣ جلب كل donors
+    const donors = await pool.query(`
+      SELECT u.user_id
+      FROM donors d
+      JOIN users u ON u.user_id = d.user_id
+    `);
+
+    // 4️⃣ إرسال notification لكل donor
+    for (const donor of donors.rows) {
+      const notif = JSON.stringify({
+        text: "📢 جمعية بحاجة لتبرعات عاجلة",
+        kind: "association_request",
+        association_id,
+        request_id: request.request_id,
+        donation_type,
+        description
+      });
+
+      await pool.query(
+        `
+        INSERT INTO notifications (user_id, type, message)
+        VALUES ($1, 'association_request', $2)
+        `,
+        [donor.user_id, notif]
+      );
+    }
 
     res.status(201).json({
       ok: true,
-      success: true,
-      message: "Request added successfully",
-      data: result.rows[0]
+      message: "Request added and notifications sent",
+      data: request
     });
 
   } catch (error) {
     console.error('❌ Request creation error:', error);
-    res.status(500).json({ ok: false, success: false, error: "Server Error" });
+    res.status(500).json({
+      ok: false,
+      error: "Server error"
+    });
   }
 });
 app.get('/assoc/request-donations/:association_id', async (req, res) => {

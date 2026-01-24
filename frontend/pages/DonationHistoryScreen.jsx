@@ -84,31 +84,32 @@ export default function DonationHistoryScreen({ navigation }) {
               )}
 
               <Text style={styles.title}>
-                تبرع رقم #{item.donation_id}
+                Donation #{item.donation_id}
               </Text>
 
               <Text style={styles.status}>
-                الحالة:{" "}
+                Status:{" "}
                 <Text style={styles.statusValue}>
                   {item.description}
                 </Text>
               </Text>
 
               <Text style={styles.date}>
-                {new Date(item.event_time).toLocaleString("ar-EG")}
+                {new Date(item.event_time).toLocaleString("en-US")}
               </Text>
 
-              {/* ===== ACTIONS (ONLY IF APPROVED) ===== */}
+              {/* ===== ACTIONS ===== */}
               {isApproved && !isCompleted && isAssociation && (
                 <TouchableOpacity
                   style={styles.trackBtn}
                   onPress={() =>
                     navigation.navigate("DonationTrackScreen", {
                       donation_id: item.donation_id,
+                      delivery_status: item.delivery_status,
                     })
                   }
                 >
-                  <Text style={styles.btnText}>تتبع التبرع</Text>
+                  <Text style={styles.btnText}>Track Donation</Text>
                 </TouchableOpacity>
               )}
 
@@ -121,14 +122,16 @@ export default function DonationHistoryScreen({ navigation }) {
                     })
                   }
                 >
-                  <Text style={styles.btnText}>تم التوصيل</Text>
+                  <Text style={styles.btnText}>Mark as Delivered</Text>
                 </TouchableOpacity>
               )}
             </View>
           );
         }}
         ListEmptyComponent={
-          <Text style={styles.empty}>لا يوجد سجل للتبرعات</Text>
+          <Text style={styles.empty}>
+            No donation history available
+          </Text>
         }
       />
 

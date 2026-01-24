@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import config from "../config";
+import { useFocusEffect } from "@react-navigation/native";
 
 const BROWN = "#A27571";
 const BG = "#EBE1D7";
@@ -20,12 +21,10 @@ export default function DeliveryOrdersScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
   const fetchOrders = async () => {
     try {
+      setLoading(true);
+
       const userData = await AsyncStorage.getItem("user_data");
       const user = JSON.parse(userData);
 
@@ -46,7 +45,13 @@ export default function DeliveryOrdersScreen({ navigation }) {
     }
   };
 
-  // ===== LOGOUT =====
+  // 🔄 refresh when screen focused
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [])
+  );
+
   const handleLogout = async () => {
     await AsyncStorage.clear();
     navigation.reset({
@@ -67,7 +72,6 @@ export default function DeliveryOrdersScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       {/* ===== HEADER ===== */}
       <View style={styles.headerRow}>
-        {/* Logout Icon (Top Right) */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Image
             source={require("../assets/images/logout.png")}
@@ -75,7 +79,6 @@ export default function DeliveryOrdersScreen({ navigation }) {
           />
         </TouchableOpacity>
 
-        {/* Admin-style Logo + Title */}
         <View style={styles.welcomeRow}>
           <Image
             source={require("../assets/images/image.png")}
@@ -94,9 +97,33 @@ export default function DeliveryOrdersScreen({ navigation }) {
         contentContainerStyle={{ paddingBottom: 120 }}
         renderItem={({ item }) => (
           <View style={styles.card}>
+            {/* ===== DONOR INFO ===== */}
+            <Text style={styles.sectionTitle}>Pickup</Text>
+
             <Text style={styles.label}>Donor</Text>
             <Text style={styles.value}>{item.donor_name}</Text>
 
+            <Text style={styles.label}>Address</Text>
+            <Text style={styles.address}>
+              {item.donation_address  || "—"}
+            </Text>
+
+            {/* ===== ASSOCIATION INFO ===== */}
+            <View style={styles.divider} />
+
+            <Text style={styles.sectionTitle}>Drop-off</Text>
+
+            <Text style={styles.label}>Association</Text>
+            <Text style={styles.value}>
+              {item.association_name || "—"}
+            </Text>
+
+            <Text style={styles.label}>Address</Text>
+            <Text style={styles.address}>
+              {item.association_address || "—"}
+            </Text>
+
+            {/* ===== STATUS ===== */}
             <View style={styles.row}>
               <Text style={styles.label}>Status</Text>
               <View style={styles.statusBadge}>
@@ -106,6 +133,7 @@ export default function DeliveryOrdersScreen({ navigation }) {
               </View>
             </View>
 
+            {/* ===== ACTION ===== */}
             <TouchableOpacity
               style={styles.trackBtn}
               onPress={() =>
@@ -119,13 +147,11 @@ export default function DeliveryOrdersScreen({ navigation }) {
           </View>
         )}
         ListEmptyComponent={
-          <Text style={styles.empty}>
-            No delivery orders available
-          </Text>
+          <Text style={styles.empty}>No delivery orders available</Text>
         }
       />
 
-      {/* ===== FOOTER LOGO ===== */}
+      {/* ===== FOOTER ===== */}
       <View style={styles.footer}>
         <Image
           source={require("../assets/images/Z A A D.png")}
@@ -149,11 +175,9 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
 
-  /* ===== HEADER ===== */
   headerRow: {
     position: "relative",
   },
-
   logoutBtn: {
     position: "absolute",
     right: 10,
@@ -191,35 +215,55 @@ const styles = StyleSheet.create({
     color: BROWN,
   },
 
-  /* ===== CARD ===== */
   card: {
     backgroundColor: "#fff",
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 18,
-    marginBottom: 14,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#e0e0e0",
   },
+
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: BROWN,
+    marginBottom: 6,
+  },
+
   label: {
     color: "#777",
-    fontSize: 13,
-    marginBottom: 4,
+    fontSize: 12,
+    marginBottom: 2,
   },
   value: {
     fontSize: 15,
     fontWeight: "700",
     color: "#000",
-    marginBottom: 10,
+    marginBottom: 8,
   },
+  address: {
+    fontSize: 13,
+    color: "#000",
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#eee",
+    marginVertical: 10,
+  },
+
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 8,
     marginBottom: 12,
   },
 
-  /* ===== STATUS ===== */
   statusBadge: {
     backgroundColor: BG,
     paddingHorizontal: 12,
@@ -234,7 +278,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  /* ===== BUTTON ===== */
   trackBtn: {
     marginTop: 10,
     backgroundColor: BROWN,
@@ -256,7 +299,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  /* ===== FOOTER ===== */
   footer: {
     position: "absolute",
     bottom: 10,

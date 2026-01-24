@@ -37,7 +37,6 @@ import AdminDashboard from './pages/Admin Dashboard';
 import PendingAssociations from './pages/PendingAssociations';
 import WaitingApproval from './pages/WaitingForApprovalScreen';
 import VerifyPhone from './pages/VerifyPhone';
-import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
 import ScanScreen from './pages/ScanScreen';
 
 import AssignDeliveryPerson from './pages/AssignDeliveryPerson';  

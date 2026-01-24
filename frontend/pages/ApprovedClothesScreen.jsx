@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Modal,
   Pressable,
+  TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -22,6 +23,10 @@ export default function ApprovedClothesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
+  // 🔴 FEEDBACK
+const [feedbackText, setFeedbackText] = useState({});
+const [sendingFeedback, setSendingFeedback] = useState(false);
+const [feedbackSent, setFeedbackSent] = useState({}); 
 
   // ✅ Details modal
   const [detailsVisible, setDetailsVisible] = useState(false);
@@ -44,7 +49,7 @@ export default function ApprovedClothesScreen() {
     return String(created_at || "").slice(0, 10);
   };
 
-  // ✅ لطباعة الستيتس بشكل مفهوم
+  
   const formatDeliveryStatus = (method, st) => {
     if (!st) return "Not started";
 
@@ -76,11 +81,11 @@ export default function ApprovedClothesScreen() {
     created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
     status: x.status ?? "approved",
 
-    // ✅ delivery fields (لازم يرجعو من الباك اند)
+   
     delivery_method: x.delivery_method ?? "donor",
     delivery_status: x.delivery_status ?? null,
     delivery_person_id: x.delivery_person_id ?? null,
-    delivery_person_name: x.delivery_person_name ?? "", // اختياري إذا رجعتيه من الباك اند
+    delivery_person_name: x.delivery_person_name ?? "", 
   });
 
   const fetchData = async () => {
@@ -104,7 +109,7 @@ export default function ApprovedClothesScreen() {
       const normalized = arr.map(normalizeDonation);
       setItems(normalized);
 
-      // ✅ لو التاريخ المختار ما عاد موجود، رجعي ALL
+     
       const dates = new Set(normalized.map((d) => getYMD(d.created_at)).filter(Boolean));
       if (selectedDate !== "ALL" && !dates.has(selectedDate)) setSelectedDate("ALL");
     } catch (e) {
@@ -175,14 +180,62 @@ export default function ApprovedClothesScreen() {
               {formatDeliveryStatus(item.delivery_method, item.delivery_status)}
             </Text>
           </Text>
-
-          {/* ✅ اسم السائق (اختياري) */}
           {item.delivery_method === "association" && !!item.delivery_person_name && (
             <Text style={styles.deliveryInfo}>
               Driver: <Text style={{ fontWeight: "800" }}>{item.delivery_person_name}</Text>
             </Text>
           )}
         </View>
+        {/* 🔴 FEEDBACK (only when delivered) */}
+          {item.delivery_status === "DELIVERED" && !feedbackSent[item.donation_id] && (
+            <View style={styles.feedbackBox}>
+              <Text style={styles.feedbackTitle}>Feedback</Text>
+
+              <TextInput
+                placeholder="Write feedback..."
+                multiline
+                value={feedbackText[item.donation_id] || ""}
+                onChangeText={(text) =>
+                  setFeedbackText((prev) => ({
+                    ...prev,
+                    [item.donation_id]: text,
+                  }))
+                }
+                style={styles.feedbackInput}
+              />
+
+              <TouchableOpacity
+                disabled={sendingFeedback}
+                onPress={async () => {
+                  const msg = feedbackText[item.donation_id]?.trim();
+                  if (!msg) return;
+
+                  try {
+                    setSendingFeedback(true);
+                    await axios.post(`${config.API_URL}/delivery/feedback`, {
+                        donation_id: item.donation_id,
+                        message: msg,
+                      });
+
+                      
+                      setFeedbackText((prev) => ({
+                        ...prev,
+                        [item.donation_id]: "",
+                      }));
+                      setFeedbackSent((prev) => ({
+                        ...prev,
+                        [item.donation_id]: true,
+                      }));
+                  } finally {
+                    setSendingFeedback(false);
+                  }
+                }}
+              >
+                <Text style={styles.feedbackSend}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+         
 
         <View style={styles.statusContainer}>
           <Text style={styles.statusApproved}>Approved</Text>
@@ -527,4 +580,29 @@ const styles = StyleSheet.create({
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
+  // 🔴 FEEDBACK styles
+feedbackBox: {
+  marginTop: 10,
+  backgroundColor: "#f5f5f5",
+  padding: 10,
+  borderRadius: 12,
+},
+feedbackTitle: {
+  fontSize: 13,
+  fontWeight: "700",
+  marginBottom: 6,
+},
+feedbackInput: {
+  minHeight: 50,
+  backgroundColor: "#fff",
+  borderRadius: 10,
+  padding: 8,
+  fontSize: 14,
+},
+feedbackSend: {
+  marginTop: 6,
+  alignSelf: "flex-end",
+  fontWeight: "800",
+  color: "#8b6f69",
+},
 });

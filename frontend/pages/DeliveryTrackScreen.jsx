@@ -44,6 +44,9 @@ export default function DeliveryTrackScreen({ route, navigation }) {
 
       if (nextStatus === "DELIVERED") {
         Alert.alert("Done", "Donation delivered successfully");
+        if (route.params?.onGoBack) {
+          route.params.onGoBack();
+        }
         navigation.goBack();
       }
     } catch (e) {
