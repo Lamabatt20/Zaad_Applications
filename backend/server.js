@@ -1641,8 +1641,12 @@ app.get('/assoc/delivery-persons', async (req, res) => {
 
 app.post('/assoc/donations/:id/accept', async (req, res) => {
   const id = req.params.id;
+  const message = req.body?.message || null;
+
+  console.log('🔵 Accept donation request:', { id, message });
 
   try {
+    // 1️⃣ Get donation
     const d = await pool.query(
       `SELECT donation_id, donor_id, delivery_method
        FROM donations
@@ -1650,14 +1654,20 @@ app.post('/assoc/donations/:id/accept', async (req, res) => {
       [id]
     );
 
+    console.log('✅ Donation query result:', d.rows);
+
     if (d.rows.length === 0) {
       return res.status(404).json({ ok:false, error:'Donation not found' });
     }
 
-    const method = d.rows[0].delivery_method || 'donor';
+    const donation = d.rows[0];
+    const method = donation.delivery_method || 'donor';
     const deliveryStatus = (method === 'association') ? 'NEEDS_ASSIGNMENT' : 'WAITING_FOR_DONOR';
 
-    await pool.query(
+    console.log('📦 Donation:', donation, 'Method:', method, 'Status:', deliveryStatus);
+
+    // 2️⃣ Update donation status
+    const updateRes = await pool.query(
       `UPDATE donations
        SET status='accepted',
            delivery_status=$2
@@ -1665,16 +1675,50 @@ app.post('/assoc/donations/:id/accept', async (req, res) => {
       [id, deliveryStatus]
     );
 
-    await pool.query(
+    console.log('✅ Update donation result:', updateRes.rowCount, 'rows updated');
+
+    // 3️⃣ Add to donation history
+    const historyRes = await pool.query(
       `INSERT INTO donation_history (donation_id, donor_id, description)
        VALUES ($1, $2, 'ACCEPTED')`,
-      [id, d.rows[0].donor_id]
+      [id, donation.donor_id]
     );
 
+    console.log('✅ History insert result:', historyRes.rowCount, 'rows inserted');
+
+    // 4️⃣ Send notification to donor (optional)
+    if (donation.donor_id) {
+      try {
+        const notificationMessage = JSON.stringify({
+          text: message || (method === 'association'
+            ? 'تم قبول تبرعك وسيتم استلامه بأقرب وقت، يمكنك تتبع الطلب'
+            : 'تم قبول طلبك، يمكنك إيصال التبرع إلى عنوان الجمعية'),
+          donation_id: id,
+          delivery_method: method
+        });
+
+        const notifRes = await pool.query(
+          `INSERT INTO notifications (user_id, type, message)
+           SELECT u.user_id, 'donation_accepted', $1
+           FROM donors d
+           JOIN users u ON u.user_id = d.user_id
+           WHERE d.user_id = $2`,
+          [notificationMessage, donation.donor_id]
+        );
+
+        console.log('✅ Notification insert result:', notifRes.rowCount, 'rows inserted');
+      } catch (notifError) {
+        console.warn('⚠️ Notification error (non-critical):', notifError.message);
+      }
+    }
+
+    console.log('✅ Accept successful!');
     res.json({ ok:true, donation_id:Number(id), delivery_method:method, delivery_status:deliveryStatus });
+    
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok:false, error:'Failed to accept donation' });
+    console.error('❌ Accept donation error:', e.message);
+    console.error('Stack:', e.stack);
+    res.status(500).json({ ok:false, error:'Failed to accept donation', details: e.message });
   }
 });
 app.post('/assoc/donations/:id/assign-delivery', async (req, res) => {
@@ -2044,7 +2088,7 @@ app.get('/donations/clothes/rejected', async (req, res) => {
   }
 });
 
-// POST /assoc/donations/:id/approve  -> accepted ➜ approved
+// POST /assoc/donations/:id/approve  -> accepted ➜ approved (without notification, notification already sent in accept)
 app.post('/assoc/donations/:id/approve', async (req, res) => {
   const donationId = req.params.id;
 
@@ -2089,26 +2133,6 @@ app.post('/assoc/donations/:id/approve', async (req, res) => {
       [donationId, donation.donor_id]
     );
 
-    // 3️⃣ Notification to donor
-      const message = JSON.stringify({
-      text:
-        method === 'association'
-          ? 'تم قبول تبرعك وسيتم استلامه بأقرب وقت، يمكنك تتبع الطلب'
-          : 'تم قبول طلبك، يمكنك إيصال التبرع إلى عنوان الجمعية',
-      donation_id: donationId
-    });
-
-    await pool.query(
-      `
-      INSERT INTO notifications (user_id, type, message)
-      SELECT u.user_id, 'donation_approved', $2
-      FROM donors d
-      JOIN users u ON u.user_id = d.user_id
-      WHERE d.user_id = $1
-      `,
-      [donation.donor_id, message]
-    );
-
     res.json({
       ok: true,
       delivery_status: nextDeliveryStatus
@@ -2119,6 +2143,50 @@ app.post('/assoc/donations/:id/approve', async (req, res) => {
     res.status(500).json({ ok: false });
   }
 });
+
+// POST /assoc/notify-donor - Send custom message to donor
+app.post('/assoc/notify-donor', async (req, res) => {
+  const { donation_id, message } = req.body;
+
+  if (!donation_id || !message) {
+    return res.status(400).json({ ok: false, error: 'donation_id and message are required' });
+  }
+
+  try {
+    // Get donor_id from donation
+    const d = await pool.query(
+      `SELECT donor_id FROM donations WHERE donation_id = $1`,
+      [donation_id]
+    );
+
+    if (d.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Donation not found' });
+    }
+
+    const donor_id = d.rows[0].donor_id;
+
+    // Send notification to donor
+    const notificationMessage = JSON.stringify({
+      text: message,
+      donation_id: donation_id
+    });
+
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, message)
+       SELECT u.user_id, 'donation_message', $2
+       FROM donors d
+       JOIN users u ON u.user_id = d.user_id
+       WHERE d.user_id = $1`,
+      [donor_id, notificationMessage]
+    );
+
+    res.json({ ok: true, message: 'Notification sent to donor' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: 'Failed to send notification' });
+  }
+});
+
 app.post('/donor/deliver', async (req, res) => {
   const { donation_id } = req.body;
 

@@ -30,6 +30,7 @@ export default function NotificationsScreen({ navigation }) {
       _text: obj.text || "",
       _kind: obj.kind || "default",
       _donation_id: obj.donation_id || null,
+      _delivery_method: obj.delivery_method || null,
       association_id: obj.association_id || null,
       request_id: obj.request_id || null,
       donation_type: obj.donation_type || null,
@@ -40,6 +41,7 @@ export default function NotificationsScreen({ navigation }) {
       _text: String(raw),
       _kind: "default",
       _donation_id: null,
+      _delivery_method: null,
     };
   }
 };
@@ -127,6 +129,25 @@ export default function NotificationsScreen({ navigation }) {
   const renderItem = ({ item }) => {
     const unread = item.is_read === false || item.is_read === 0;
 
+    console.log('📋 Full item:', JSON.stringify(item, null, 2));
+
+    // Determine badge text based on notification type and delivery method
+    let badgeText = "View";
+    if (item.type === "donation_accepted" || item.type === "donation_approved") {
+      console.log('🔍 Item type:', item.type);
+      console.log('🔍 _delivery_method:', item._delivery_method);
+      console.log('🔍 All item keys:', Object.keys(item));
+      
+      const deliveryMethod = String(item._delivery_method || "").toLowerCase().trim();
+      console.log('🔍 Normalized delivery method:', deliveryMethod);
+      badgeText = deliveryMethod === "donor" ? "Deliver" : "Track";
+      console.log('🔍 Final badge text:', badgeText);
+    } else if (item.type === "donation_message") {
+      badgeText = "View";
+    } else if (item.type === "delivery_update") {
+      badgeText = "Track";
+    }
+
     return (
       <TouchableOpacity
         activeOpacity={0.85}
@@ -156,7 +177,7 @@ export default function NotificationsScreen({ navigation }) {
 
           {item._donation_id && item._kind !== "feedback" ? (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>Track</Text>
+            <Text style={styles.badgeText}>{badgeText}</Text>
           </View>
         ) : null}
         </View>

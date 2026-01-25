@@ -53,8 +53,12 @@ const acceptDonation = async (id, deliveryMethod) => {
     setSubmitting((s) => ({ ...s, [id]: "accept" }));
     removeFromUI(id); // optimistic
 
+    console.log('🔵 Accepting donation:', id);
+
     // ✅ accept endpoint handles delivery_status internally
-    await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`);
+    const response = await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`, {});
+    
+    console.log('✅ Accept response:', response.data);
 
     // ✅ if association pickup -> go assign
     if (String(deliveryMethod).toLowerCase() === "association") {
@@ -68,7 +72,8 @@ const acceptDonation = async (id, deliveryMethod) => {
       });
     }
   } catch (e) {
-    Alert.alert("Error", "Could not accept. Restoring item.");
+    console.error('❌ Accept error:', e.response?.data || e.message);
+    Alert.alert("Error", e.response?.data?.details || e.response?.data?.error || "Could not accept. Restoring item.");
     fetchPending();
   } finally {
     setSubmitting((s) => {

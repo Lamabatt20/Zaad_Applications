@@ -72,7 +72,7 @@ export default function DonationHistoryScreen({ navigation }) {
         contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
         renderItem={({ item }) => {
           const isCompleted = item.delivery_status === "DELIVERED";
-          const isApproved = item.description === "APPROVED";
+          const isAccepted = item.description === "ACCEPTED";
           const isAssociation = item.delivery_method === "association";
           const isDonor = item.delivery_method === "donor";
 
@@ -103,7 +103,7 @@ export default function DonationHistoryScreen({ navigation }) {
               </Text>
 
               {/* ===== ACTIONS ===== */}
-              {isApproved && !isCompleted && isAssociation && (
+              {isAccepted && !isCompleted && isAssociation && (
                 <TouchableOpacity
                   style={styles.trackBtn}
                   onPress={() =>
@@ -117,7 +117,7 @@ export default function DonationHistoryScreen({ navigation }) {
                 </TouchableOpacity>
               )}
 
-              {isApproved && !isCompleted && isDonor && (
+              {isAccepted && !isCompleted && isDonor && (
                 <TouchableOpacity
                   style={styles.deliverBtn}
                   onPress={() =>
