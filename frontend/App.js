@@ -38,8 +38,6 @@ import PendingAssociations from './pages/PendingAssociations';
 import WaitingApproval from './pages/WaitingForApprovalScreen';
 import VerifyPhone from './pages/VerifyPhone';
 import ScanScreen from './pages/ScanScreen';
-
-import AssignDeliveryPerson from './pages/AssignDeliveryPerson';  
 import ThankYouSelfDeliveryScreen from './pages/ThankYouSelfDeliveryScreen';
 import UnderReviewDeliveryScreen from './pages/UnderReviewDeliveryScreen';
 import DeliveryMethodScreen from './pages/DeliveryMethodScreen';

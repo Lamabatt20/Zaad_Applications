@@ -1011,23 +1011,6 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
   }
 });
 
-app.post('/food_donations', async (req, res) => {
-  const { donation_id, food_type, expiration_date } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO food_donations (donation_id,food_type, expiration_date)
-       VALUES ($1,$2,$3) RETURNING *`,
-      [donation_id, food_type, expiration_date]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error"
-    });
-  }
-});
-
 app.post('/food_donations', upload.none(), async (req, res) => {
   const { donation_id, category, expiry_date } = req.body;
   console.log("🍽️ [POST /food_donations] Request body:", { donation_id, category, expiry_date });

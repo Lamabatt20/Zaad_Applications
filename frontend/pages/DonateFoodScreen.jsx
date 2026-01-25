@@ -66,6 +66,19 @@ export default function DonateFoodScreen({ navigation, route }) {
             // Remove immediately to prevent re-applying on next focus
             await AsyncStorage.removeItem("scanned_product");
             console.log("🧹 [useFocusEffect] Removed scanned_product from AsyncStorage");
+            const normalizedCategory = (product?.category || "").trim().toLowerCase();
+            const isDairy = ["dairy", "milk", "حليب", "البان", "ألبان"].some((term) =>
+              normalizedCategory.includes(term)
+            );
+            if (isDairy) {
+              Alert.alert("Not allowed", "Dairy items are not accepted for donation.", [
+                {
+                  text: "OK",
+                  onPress: () => navigation.navigate("ChooseDonationType"),
+                },
+              ]);
+              return;
+            }
             if (product?.name) {
               console.log("📝 [useFocusEffect] Setting description:", product.name);
               setDescription(product.name);
@@ -165,7 +178,7 @@ export default function DonateFoodScreen({ navigation, route }) {
       } else if (data.rejected && data.reason?.includes("تالف")) {
         Alert.alert(
           "Rejected",
-          `${data.reason}\nPlease try again with a clear photo.`
+          "This item appears damaged and cannot be accepted. Please try again with a clear photo."
         );
         setProductImages([]);
         resetWorkflow();
@@ -404,7 +417,13 @@ export default function DonateFoodScreen({ navigation, route }) {
 
       console.log("🎉 [handleNext] Donation submitted successfully!");
       Alert.alert("Success", "Your donation has been submitted!");
-      navigation.goBack();
+      navigation.navigate("DeliveryMethodScreen", {
+        ...route.params,
+        donation_id,
+        donor_id,
+        association_id,
+        address,
+      });
     } catch (err) {
       console.error("❌ [handleNext] Submit error:", err);
       Alert.alert("Error", err.message || "Failed to submit donation");
