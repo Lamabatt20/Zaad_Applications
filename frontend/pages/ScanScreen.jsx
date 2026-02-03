@@ -1,5 +1,5 @@
 // ScanScreen.js
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { searchProductByBarcode } from "../utils/productDatabase";
@@ -9,10 +9,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function ScanScreen({ navigation, route }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [value, setValue] = useState(null);
   const [product, setProduct] = useState(null);
   const [foundMessage, setFoundMessage] = useState("");
   const [cameraKey, setCameraKey] = useState(0);
+  const autoCloseRef = useRef(null);
 
   const images = useMemo(() => route?.params?.images || [], [route?.params?.images]);
   const returnTo = useMemo(() => route?.params?.returnTo || "DonateFoodScreen", [route?.params?.returnTo]);
@@ -81,9 +83,10 @@ export default function ScanScreen({ navigation, route }) {
   };
 
   const handleBarcodeScan = async (scanningResult) => {
-    if (scanned) return;
+    if (scanned || closing) return;
 
     setScanned(true);
+    setClosing(true);
     setValue(scanningResult.data);
 
     const foundProduct = await lookupProduct(scanningResult.data);
@@ -99,22 +102,42 @@ export default function ScanScreen({ navigation, route }) {
 
     // Show results for 1.5 seconds, then auto-close
     console.log("📱 [handleBarcodeScan] Barcode scanned:", scanningResult.data);
-    setTimeout(() => {
+    if (autoCloseRef.current) {
+      clearTimeout(autoCloseRef.current);
+    }
+
+    autoCloseRef.current = setTimeout(() => {
       console.log("🔙 [handleBarcodeScan] Auto-closing screen");
       if (navigation.canGoBack()) {
         navigation.goBack();
       } else {
         navigation.navigate(returnTo);
       }
+      setClosing(false);
+      autoCloseRef.current = null;
     }, 1500);
   };
 
   const resetScanner = () => {
+    if (autoCloseRef.current) {
+      clearTimeout(autoCloseRef.current);
+      autoCloseRef.current = null;
+    }
     setScanned(false);
+    setClosing(false);
     setValue(null);
     setProduct(null);
     setFoundMessage("");
   };
+
+  useEffect(() => {
+    return () => {
+      if (autoCloseRef.current) {
+        clearTimeout(autoCloseRef.current);
+        autoCloseRef.current = null;
+      }
+    };
+  }, []);
 
   if (!permission) {
     return (
