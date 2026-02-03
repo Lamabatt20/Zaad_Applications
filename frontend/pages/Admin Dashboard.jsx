@@ -60,7 +60,7 @@ export default function AdminDashboard({ navigation }) {
             </Text>
           </View>
 
-          {/* 🔴 LOGOUT ICON بدل الدرع */}
+          
           <TouchableOpacity onPress={handleLogout}>
             <Image
               source={require("../assets/images/logout.png")}

@@ -1637,7 +1637,100 @@ app.get('/assoc/delivery-persons', async (req, res) => {
     });
   }
 });
+app.get("/admin/donation-report", async (req, res) => {
+  try {
+    const [
+      donations,
+      associations,
+      donors,
+      delivery,
+      avgRating,
+      statusCounts,
+      typeCounts,
+      donorRatings
+    ] = await Promise.all([
 
+      // Total donations
+      pool.query(`SELECT COUNT(*) FROM donations`),
+
+      // Total approved associations
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'association' AND is_approved = true
+      `),
+
+      // Total donors
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'donor'
+      `),
+
+      // Total delivery persons
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'delivery'
+      `),
+
+      // Average rating
+      pool.query(`
+        SELECT ROUND(AVG(rating), 2) AS avg_rating
+        FROM ratings
+      `),
+
+      // Donations by status
+      pool.query(`
+        SELECT status, COUNT(*)::int AS count
+        FROM donations
+        GROUP BY status
+      `),
+
+      // Donations by type
+      pool.query(`
+        SELECT donation_type, COUNT(*)::int AS count
+        FROM donations
+        GROUP BY donation_type
+      `),
+
+      // Latest donor ratings
+      pool.query(`
+        SELECT
+          r.rating,
+          r.comment,
+          r.created_at,
+          d.donation_id,
+          acc.full_name AS donor_name
+        FROM ratings r
+        JOIN donations d ON d.donation_id = r.donation_id
+        JOIN donors dr ON dr.user_id = r.donor_id
+        JOIN users u ON u.user_id = dr.user_id
+        JOIN accounts acc ON acc.account_id = u.account_id
+        ORDER BY r.created_at DESC
+        LIMIT 10
+      `)
+    ]);
+
+    res.json({
+      ok: true,
+      data: {
+        total_donations: Number(donations.rows[0].count),
+        total_associations: Number(associations.rows[0].count),
+        total_donors: Number(donors.rows[0].count),
+        total_delivery_persons: Number(delivery.rows[0].count),
+        avg_rating: avgRating.rows[0].avg_rating || 0,
+        donations_by_status: statusCounts.rows,
+        donations_by_type: typeCounts.rows,
+        donor_ratings: donorRatings.rows || []
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Donation Report Error:", error);
+    res.status(500).json({ ok: false });
+  }
+});
 
 app.post('/assoc/donations/:id/accept', async (req, res) => {
   const id = req.params.id;
