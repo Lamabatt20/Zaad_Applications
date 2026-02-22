@@ -42,6 +42,7 @@ import ThankYouSelfDeliveryScreen from './pages/ThankYouSelfDeliveryScreen';
 import UnderReviewDeliveryScreen from './pages/UnderReviewDeliveryScreen';
 import DeliveryMethodScreen from './pages/DeliveryMethodScreen';
 import AddDeliveryPerson from './pages/AddDeliveryPersonScreen';
+import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
 import NotificationsScreen from './pages/NotificationsScreen';
 import DeliveryOrdersScreen from './pages/DeliveryOrdersScreen';
 import DeliveryTrackScreen from './pages/DeliveryTrackScreen';

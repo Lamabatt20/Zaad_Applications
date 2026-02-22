@@ -19,6 +19,7 @@ dayjs.extend(minMax);
 
 const app = express();
 const port = process.env.PORT || 5000;
+const isTest = process.env.NODE_ENV === 'test';
 
 app.use(cors());
 app.use(express.json());
@@ -159,7 +160,9 @@ async function addDeliveryMethodColumn() {
 }
 
 
-addDeliveryMethodColumn();
+if (!isTest) {
+  addDeliveryMethodColumn();
+}
 async function ensureAddressColumn() {
   try {
     const alterQuery = `
@@ -200,13 +203,11 @@ async function ensureEmailVerifiedColumn() {
   }
 }
 
-ensureEmailVerifiedColumn();
-
-
-
-
-ensureVerificationColumns();
-ensureAddressColumn();
+if (!isTest) {
+  ensureEmailVerifiedColumn();
+  ensureVerificationColumns();
+  ensureAddressColumn();
+}
 async function ensureAssociationColumns() {
   try {
     const alterQuery = `
@@ -222,8 +223,9 @@ async function ensureAssociationColumns() {
   }
 }
 
-
-ensureAssociationColumns();
+if (!isTest) {
+  ensureAssociationColumns();
+}
 async function changeAssociationAuthToText() {
   try {
     const alterQuery = `
@@ -239,7 +241,9 @@ async function changeAssociationAuthToText() {
   }
 }
 
-changeAssociationAuthToText();
+if (!isTest) {
+  changeAssociationAuthToText();
+}
 
 async function dropIsPerishableColumn() {
   try {
@@ -362,11 +366,15 @@ async function ensureDeliveryPersonCarType() {
   }
 }
 
-ensureDeliveryPersonCarType();
-ensureAdminAccount();
- ensureDonationAssociationColumn();
-dropIsPerishableColumn();
-ensureDonationAddressColumn();
+if (!isTest) {
+  ensureDeliveryPersonCarType();
+  ensureAdminAccount();
+  ensureDonationAssociationColumn();
+}
+if (!isTest) {
+  dropIsPerishableColumn();
+  ensureDonationAddressColumn();
+}
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -2791,7 +2799,9 @@ async function ensureAccountsApprovalColumns() {
     console.error("❌ ensureAccountsApprovalColumns:", err);
   }
 }
-ensureAccountsApprovalColumns();
+if (!isTest) {
+  ensureAccountsApprovalColumns();
+}
 async function ensureDeliveryPersonsUserLink() {
   try {
     
@@ -2822,7 +2832,9 @@ async function ensureDeliveryPersonsUserLink() {
   }
 }
 
-ensureDeliveryPersonsUserLink();
+if (!isTest) {
+  ensureDeliveryPersonsUserLink();
+}
 async function ensureDonationDeliveryTracking() {
   try {
     await pool.query(`
@@ -2836,7 +2848,9 @@ async function ensureDonationDeliveryTracking() {
     console.error("❌ ensureDonationDeliveryTracking:", err);
   }
 }
-ensureDonationDeliveryTracking();
+if (!isTest) {
+  ensureDonationDeliveryTracking();
+}
 
 app.post('/admin/approve-delivery/:account_id', async (req, res) => {
   const { account_id } = req.params;
@@ -2889,7 +2903,9 @@ async function createRequestDonationsTable() {
     console.error("❌ Error creating request_donations table:", err);
   }
 }
-createRequestDonationsTable();
+if (!isTest) {
+  createRequestDonationsTable();
+}
 
 
 app.post('/assoc/request-donation', async (req, res) => {
@@ -3061,7 +3077,9 @@ async function createProductsTable() {
     console.error("❌ Error creating products table:", err);
   }
 }
-createProductsTable();
+if (!isTest) {
+  createProductsTable();
+}
 
 // ===== PRODUCTS ENDPOINTS =====
 
@@ -3292,7 +3310,9 @@ async function createRatingsTable() {
     console.error("❌ Error creating ratings table:", err);
   }
 }
-createRatingsTable();
+if (!isTest) {
+  createRatingsTable();
+}
 
 // ===== RATINGS ENDPOINTS =====
 
@@ -3428,10 +3448,15 @@ app.get("/donations/:id/rating-status", async (req, res) => {
 
 
 // ...existing code...
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-  console.log(`API available at http://localhost:${port}`);
-});
+let server;
+if (require.main === module) {
+  server = app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`API available at http://localhost:${port}`);
+  });
+}
+
+module.exports = { app, pool, server };
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
