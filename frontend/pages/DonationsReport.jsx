@@ -71,9 +71,11 @@ export default function DonationsReport() {
                 Donation #{item.donation_id}
                 </Text>
 
+
                 <Text style={styles.ratingStars}>
                 {"⭐".repeat(item.rating)} ({item.rating}/5)
                 </Text>
+                
 
                 {item.comment ? (
                 <Text style={styles.ratingComment}>
