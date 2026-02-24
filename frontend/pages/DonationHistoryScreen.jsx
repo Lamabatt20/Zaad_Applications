@@ -27,8 +27,9 @@ export default function DonationHistoryScreen({ navigation }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    load();
-  }, []);
+  const unsubscribe = navigation.addListener("focus", load);
+  return unsubscribe;
+}, []);
 
   const load = async () => {
     try {
@@ -75,6 +76,7 @@ export default function DonationHistoryScreen({ navigation }) {
           const isAccepted = item.description === "ACCEPTED";
           const isAssociation = item.delivery_method === "association";
           const isDonor = item.delivery_method === "donor";
+          const isRated = item.is_rated === true;
 
           return (
             <View style={styles.card}>
@@ -130,7 +132,7 @@ export default function DonationHistoryScreen({ navigation }) {
                 </TouchableOpacity>
               )}
 
-              {isCompleted && (
+              {isCompleted && !isRated && (
                 <TouchableOpacity
                   style={styles.rateBtn}
                   onPress={() => {

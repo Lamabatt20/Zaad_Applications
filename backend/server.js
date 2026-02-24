@@ -1145,7 +1145,8 @@ app.get('/donation_history/donor/:account_id', async (req, res) => {
         h.event_time,
         d.status,
         d.delivery_method,
-        d.delivery_status
+        d.delivery_status,
+        d.is_rated
       FROM donation_history h
       JOIN donations d ON d.donation_id = h.donation_id
       JOIN donors dr ON dr.user_id = h.donor_id
@@ -1630,54 +1631,60 @@ app.get("/admin/donation-report", async (req, res) => {
       avgRating,
       statusCounts,
       typeCounts,
-      donorRatings
+      donorRatings,
+
+      donorsList,
+      associationsList,
+      deliveryPersonsList
     ] = await Promise.all([
 
-      // Total donations
+      // ===== Total donations =====
       pool.query(`SELECT COUNT(*) FROM donations`),
 
-      // Total approved associations
+      // ===== Total approved associations =====
       pool.query(`
         SELECT COUNT(*)
         FROM accounts
-        WHERE role = 'association' AND is_approved = true
+        WHERE role = 'association'
+          AND is_approved = true
       `),
 
-      // Total donors
+      // ===== Total donors =====
       pool.query(`
         SELECT COUNT(*)
         FROM accounts
         WHERE role = 'donor'
       `),
 
-      // Total delivery persons
+      // ===== Total delivery persons =====
       pool.query(`
         SELECT COUNT(*)
         FROM accounts
         WHERE role = 'delivery'
+          AND is_approved = true
       `),
 
-      // Average rating
+      // ===== Average rating =====
       pool.query(`
         SELECT ROUND(AVG(rating), 2) AS avg_rating
         FROM ratings
       `),
 
-      // Donations by status
+      // ===== Donations by status =====
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM donations
         GROUP BY status
       `),
 
-      // Donations by type
+      // ===== Donations by type =====
       pool.query(`
         SELECT donation_type, COUNT(*)::int AS count
         FROM donations
         GROUP BY donation_type
       `),
 
-      // Latest donor ratings
+      // ===== Latest donor ratings =====
       pool.query(`
         SELECT
           r.rating,
@@ -1692,7 +1699,48 @@ app.get("/admin/donation-report", async (req, res) => {
         JOIN accounts acc ON acc.account_id = u.account_id
         ORDER BY r.created_at DESC
         LIMIT 10
-      `)
+      `),
+
+      // ===== Donors list =====
+      pool.query(`
+        SELECT
+        acc.account_id,
+        acc.full_name AS name,
+        acc.phone,
+        acc.address
+      FROM accounts acc
+      WHERE acc.role = 'donor'
+      ORDER BY acc.full_name
+      `),
+
+      // ===== Associations list (REAL association name) =====
+      pool.query(`
+       SELECT
+        a.association_id,
+        a.name AS name,
+        acc.phone,
+        acc.address
+      FROM associations a
+      JOIN users u ON u.user_id = a.user_id
+      JOIN accounts acc ON acc.account_id = u.account_id
+      WHERE acc.is_approved = true
+      ORDER BY a.name
+      `),
+
+      // ===== Delivery persons list =====
+      pool.query(`
+        SELECT
+        acc.account_id,
+        COALESCE(acc.full_name, dp.name) AS name,
+        acc.phone,
+        acc.address
+      FROM accounts acc
+      JOIN users u ON u.account_id = acc.account_id
+      JOIN delivery_persons dp ON dp.user_id = u.user_id
+      WHERE acc.role = 'delivery'
+        AND acc.is_approved = true
+      ORDER BY name
+        `)
     ]);
 
     res.json({
@@ -1703,9 +1751,15 @@ app.get("/admin/donation-report", async (req, res) => {
         total_donors: Number(donors.rows[0].count),
         total_delivery_persons: Number(delivery.rows[0].count),
         avg_rating: avgRating.rows[0].avg_rating || 0,
+
         donations_by_status: statusCounts.rows,
         donations_by_type: typeCounts.rows,
-        donor_ratings: donorRatings.rows || []
+        donor_ratings: donorRatings.rows || [],
+
+        // ===== Lists for modals =====
+        donors_list: donorsList.rows,
+        associations_list: associationsList.rows,
+        delivery_persons_list: deliveryPersonsList.rows
       }
     });
 
@@ -2026,19 +2080,37 @@ app.post('/delivery/update-status', async (req, res) => {
     return res.status(400).json({ ok:false });
 
   try {
-    await pool.query(`
+    const d = await pool.query(`
       UPDATE donations
       SET delivery_status = $2,
           delivered_at = CASE WHEN $2 = 'DELIVERED' THEN NOW() ELSE delivered_at END
       WHERE donation_id = $1
+      RETURNING delivery_person_id
     `, [donation_id, next_status]);
 
+   
     await pool.query(`
       INSERT INTO donation_history (donation_id, description)
       VALUES ($1, $2)
     `, [donation_id, next_status]);
 
+    // 3️⃣ 🧹 فك ربط الجمعية عن الديليفري بعد اكتمال الطلب
+    if (next_status === 'DELIVERED' && d.rows.length > 0) {
+      const deliveryPersonId = d.rows[0].delivery_person_id;
+
+      if (deliveryPersonId) {
+        await pool.query(`
+          UPDATE delivery_persons
+          SET association_id = NULL
+          WHERE delivery_person_id = $1
+        `, [deliveryPersonId]);
+
+        console.log("✅ Delivery person released from association");
+      }
+    }
+
     res.json({ ok:true });
+
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok:false });
