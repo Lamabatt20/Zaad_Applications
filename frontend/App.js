@@ -23,6 +23,8 @@ import RejectedClothesScreen from './pages/RejectedClothesScreen';
 import ChatBotScreen from "./pages/Chatbot";
 import ProfileScreen from "./pages/Profile";
 import EditProfileScreen from "./pages/EditProfile";
+import RewardScreen from "./pages/RewardScreen";
+import CertificateViewerScreen from "./pages/CertificateViewerScreen";
 import ChangePassword from './pages/ChangePassword';
 import SearchAssociation from './pages/SearchAssociation';
 import ApprovedClothesScreen from './pages/ApprovedClothesScreen';
@@ -50,6 +52,7 @@ import DonationHistoryScreen from './pages/DonationHistoryScreen';
 import DonationTrackScreen from './pages/DonationTrackScreen';
 import DonationDeliverScreen from './pages/DonationDeliverScreen';
 import DonationRating from './pages/DonationRating';
+import DonationsReport from './pages/DonationsReport';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -79,6 +82,8 @@ export default function App() {
           <Stack.Screen name="ChatBotScreen" component={ChatBotScreen} />
           <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
           <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
+          <Stack.Screen name="RewardScreen" component={RewardScreen} />
+          <Stack.Screen name="CertificateViewerScreen" component={CertificateViewerScreen} />
           <Stack.Screen name="ChangePassword" component={ChangePassword} />
           <Stack.Screen name="ApprovedClothesScreen" component={ApprovedClothesScreen} /> 
           <Stack.Screen name="AcceptedFoodsScreen" component={AcceptedFoodsScreen} />
@@ -106,6 +111,7 @@ export default function App() {
           <Stack.Screen name="DonationTrackScreen" component={DonationTrackScreen} />
           <Stack.Screen name="DonationDeliverScreen" component={DonationDeliverScreen} />
           <Stack.Screen name="DonationRating" component={DonationRating} />
+          <Stack.Screen name="DonationsReport" component={DonationsReport} />
           </Stack.Navigator>
       </NavigationContainer>
   );

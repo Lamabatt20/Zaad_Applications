@@ -105,6 +105,21 @@ export default function NotificationsScreen({ navigation }) {
     return;
   }
 
+  if (item._kind === "certificate") {
+    Alert.alert(
+      "🎉 Certificate Earned!",
+      item._text || "You've earned a certificate!",
+      [
+        {
+          text: "View Rewards",
+          onPress: () => navigation.navigate("RewardScreen", { user_id: userId }),
+        },
+        { text: "OK" },
+      ]
+    );
+    return;
+  }
+
   if (item._kind === "association_request") {
   navigation.navigate("AssociationInfo", {
     association_id: item.association_id,   
@@ -133,7 +148,12 @@ export default function NotificationsScreen({ navigation }) {
 
     // Determine badge text based on notification type and delivery method
     let badgeText = "View";
-    if (item.type === "donation_accepted" || item.type === "donation_approved") {
+    let notificationIcon = "notifications";
+    
+    if (item.type === "certificate_earned") {
+      badgeText = "View Rewards";
+      notificationIcon = "trophy";
+    } else if (item.type === "donation_accepted" || item.type === "donation_approved") {
       console.log('🔍 Item type:', item.type);
       console.log('🔍 _delivery_method:', item._delivery_method);
       console.log('🔍 All item keys:', Object.keys(item));
@@ -156,7 +176,7 @@ export default function NotificationsScreen({ navigation }) {
       >
         <View style={styles.rowTop}>
           <View style={styles.iconWrap}>
-            <Ionicons name="notifications" size={18} color="#A27571" />
+            <Ionicons name={notificationIcon} size={18} color="#A27571" />
           </View>
 
           <View style={styles.textWrap}>

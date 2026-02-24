@@ -207,6 +207,13 @@ if (!isTest) {
   ensureEmailVerifiedColumn();
   ensureVerificationColumns();
   ensureAddressColumn();
+  ensureDonorPointsColumn();
+  createCertificatesTable();
+  
+  // Run migration after tables are created
+  setTimeout(() => {
+    migrateExistingDonationsToPoints();
+  }, 2000);
 }
 async function ensureAssociationColumns() {
   try {
@@ -282,6 +289,159 @@ async function ensureDonationAssociationColumn() {
     console.error('❌ Error adding association_id column to donations:', error);
   }
 }
+
+async function ensureDonorPointsColumn() {
+  try {
+    const alterQuery = `
+      ALTER TABLE donors
+      ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 0;
+    `;
+    await pool.query(alterQuery);
+    console.log('✅ points column verified/added successfully in donors table.');
+  } catch (error) {
+    console.error('❌ Error adding points column to donors:', error);
+  }
+}
+
+async function createCertificatesTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        certificate_id SERIAL PRIMARY KEY,
+        donor_id INTEGER REFERENCES donors(user_id),
+        points_milestone INTEGER NOT NULL,
+        certificate_data TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('✅ certificates table created/verified successfully.');
+  } catch (error) {
+    console.error('❌ Error creating certificates table:', error);
+  }
+}
+
+async function migrateExistingDonationsToPoints() {
+  try {
+    console.log('🔄 Starting retroactive points migration...');
+    
+    // Get all donors with their accepted donations count
+    const result = await pool.query(`
+      SELECT d.user_id, COUNT(don.donation_id) as donation_count
+      FROM donors d
+      LEFT JOIN donations don ON don.donor_id = d.user_id AND don.status = 'accepted'
+      GROUP BY d.user_id
+      HAVING COUNT(don.donation_id) > 0
+    `);
+
+    if (result.rows.length === 0) {
+      console.log('ℹ️ No existing donations found to migrate.');
+      return;
+    }
+
+    for (const row of result.rows) {
+      const donor_id = row.user_id;
+      const donationCount = parseInt(row.donation_count);
+      const points = donationCount * 10;
+
+      // Check current points
+      const currentPoints = await pool.query(
+        `SELECT COALESCE(points, 0) as points FROM donors WHERE user_id = $1`,
+        [donor_id]
+      );
+
+      const existing = currentPoints.rows[0]?.points || 0;
+
+      // Only update if current points are less than what they should have
+      if (existing < points) {
+        await pool.query(
+          `UPDATE donors SET points = $1 WHERE user_id = $2`,
+          [points, donor_id]
+        );
+
+        console.log(`✅ Updated donor ${donor_id}: ${donationCount} donations = ${points} points`);
+
+        // Generate certificates for all eligible milestones
+        if (points >= 100) {
+          const milestones = [];
+          for (let m = 100; m <= points; m += 100) {
+            milestones.push(m);
+          }
+
+          for (const milestone of milestones) {
+            const certCheck = await pool.query(
+              `SELECT certificate_id FROM certificates WHERE donor_id = $1 AND points_milestone = $2`,
+              [donor_id, milestone]
+            );
+
+            if (certCheck.rows.length === 0) {
+              const donorInfo = await pool.query(
+                `SELECT acc.full_name 
+                 FROM donors d
+                 JOIN users u ON u.user_id = d.user_id
+                 JOIN accounts acc ON acc.account_id = u.account_id
+                 WHERE d.user_id = $1`,
+                [donor_id]
+              );
+
+              const donorName = donorInfo.rows[0]?.full_name || 'Donor';
+
+              let message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+              let level = 'Bronze';
+              
+              if (milestone >= 300) {
+                message = 'Your exceptional dedication to helping others is truly inspiring. You are making a lasting impact!';
+                level = 'Platinum';
+              } else if (milestone >= 200) {
+                message = 'Your continued generosity shows remarkable commitment to our community. Keep shining!';
+                level = 'Gold';
+              } else if (milestone >= 100) {
+                message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+                level = 'Silver';
+              }
+
+              const certificateData = JSON.stringify({
+                donor_name: donorName,
+                points: points,
+                milestone: milestone,
+                level: level,
+                date: new Date().toISOString(),
+                message: message,
+                certificate_number: `ZAAD-${milestone}-${donor_id}-${Date.now()}`
+              });
+
+              await pool.query(
+                `INSERT INTO certificates (donor_id, points_milestone, certificate_data)
+                 VALUES ($1, $2, $3)`,
+                [donor_id, milestone, certificateData]
+              );
+
+              // Send notification
+              const certNotificationMessage = JSON.stringify({
+                text: `🎉 تهانينا! لقد حصلت على شهادة تقدير ${level} لبلوغك ${milestone} نقطة. شكراً لكرمك وعطائك!`,
+                kind: 'certificate',
+                milestone: milestone,
+                level: level
+              });
+
+              await pool.query(
+                `INSERT INTO notifications (user_id, type, message)
+                 VALUES ($1, 'certificate_earned', $2)`,
+                [donor_id, certNotificationMessage]
+              );
+
+              console.log(`🎉 ${level} Certificate generated for donor ${donor_id} at ${milestone} points`);
+            }
+          }
+        }
+      }
+    }
+
+    console.log('✅ Retroactive points migration completed successfully.');
+  } catch (error) {
+    console.error('❌ Error migrating existing donations to points:', error);
+  }
+}
+
 async function ensureAdminAccount() {
   try {
     // 1️⃣ Check if admin already exists
@@ -1628,7 +1788,100 @@ app.get('/assoc/delivery-persons', async (req, res) => {
     });
   }
 });
+app.get("/admin/donation-report", async (req, res) => {
+  try {
+    const [
+      donations,
+      associations,
+      donors,
+      delivery,
+      avgRating,
+      statusCounts,
+      typeCounts,
+      donorRatings
+    ] = await Promise.all([
 
+      // Total donations
+      pool.query(`SELECT COUNT(*) FROM donations`),
+
+      // Total approved associations
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'association' AND is_approved = true
+      `),
+
+      // Total donors
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'donor'
+      `),
+
+      // Total delivery persons
+      pool.query(`
+        SELECT COUNT(*)
+        FROM accounts
+        WHERE role = 'delivery'
+      `),
+
+      // Average rating
+      pool.query(`
+        SELECT ROUND(AVG(rating), 2) AS avg_rating
+        FROM ratings
+      `),
+
+      // Donations by status
+      pool.query(`
+        SELECT status, COUNT(*)::int AS count
+        FROM donations
+        GROUP BY status
+      `),
+
+      // Donations by type
+      pool.query(`
+        SELECT donation_type, COUNT(*)::int AS count
+        FROM donations
+        GROUP BY donation_type
+      `),
+
+      // Latest donor ratings
+      pool.query(`
+        SELECT
+          r.rating,
+          r.comment,
+          r.created_at,
+          d.donation_id,
+          acc.full_name AS donor_name
+        FROM ratings r
+        JOIN donations d ON d.donation_id = r.donation_id
+        JOIN donors dr ON dr.user_id = r.donor_id
+        JOIN users u ON u.user_id = dr.user_id
+        JOIN accounts acc ON acc.account_id = u.account_id
+        ORDER BY r.created_at DESC
+        LIMIT 10
+      `)
+    ]);
+
+    res.json({
+      ok: true,
+      data: {
+        total_donations: Number(donations.rows[0].count),
+        total_associations: Number(associations.rows[0].count),
+        total_donors: Number(donors.rows[0].count),
+        total_delivery_persons: Number(delivery.rows[0].count),
+        avg_rating: avgRating.rows[0].avg_rating || 0,
+        donations_by_status: statusCounts.rows,
+        donations_by_type: typeCounts.rows,
+        donor_ratings: donorRatings.rows || []
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ Donation Report Error:", error);
+    res.status(500).json({ ok: false });
+  }
+});
 
 app.post('/assoc/donations/:id/accept', async (req, res) => {
   const id = req.params.id;
@@ -1701,6 +1954,105 @@ app.post('/assoc/donations/:id/accept', async (req, res) => {
       } catch (notifError) {
         console.warn('⚠️ Notification error (non-critical):', notifError.message);
       }
+    }
+
+    // 5️⃣ Award 10 points to donor
+    try {
+      await pool.query(
+        `UPDATE donors 
+         SET points = COALESCE(points, 0) + 10 
+         WHERE user_id = $1`,
+        [donation.donor_id]
+      );
+
+      // Check if donor reached 100 points milestone
+      const pointsCheck = await pool.query(
+        `SELECT points FROM donors WHERE user_id = $1`,
+        [donation.donor_id]
+      );
+
+      const currentPoints = pointsCheck.rows[0]?.points || 0;
+      console.log('✅ Points awarded! Current points:', currentPoints);
+
+      // Generate certificates for ALL milestones up to current points (100, 200, 300, etc.)
+      if (currentPoints >= 100) {
+        // Get donor info once
+        const donorInfo = await pool.query(
+          `SELECT acc.full_name 
+           FROM donors d
+           JOIN users u ON u.user_id = d.user_id
+           JOIN accounts acc ON acc.account_id = u.account_id
+           WHERE d.user_id = $1`,
+          [donation.donor_id]
+        );
+
+        const donorName = donorInfo.rows[0]?.full_name || 'Donor';
+
+        // Generate certificates for all milestones up to current points
+        for (let milestone = 100; milestone <= currentPoints; milestone += 100) {
+          // Check if certificate already exists for this milestone
+          const certCheck = await pool.query(
+            `SELECT certificate_id FROM certificates WHERE donor_id = $1 AND points_milestone = $2`,
+            [donation.donor_id, milestone]
+          );
+
+          if (certCheck.rows.length === 0) {
+            // Determine level and message based on milestone
+            // Platinum: 300, 400, 500, 600+ points
+            // Gold: 200 points
+            // Silver: 100 points
+            let message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+            let level = 'Bronze';
+            
+            if (milestone >= 300) {
+              // Platinum for 300, 400, 500, 600, etc.
+              message = 'Your exceptional dedication to helping others is truly inspiring. You are making a lasting impact!';
+              level = 'Platinum';
+            } else if (milestone >= 200) {
+              message = 'Your continued generosity shows remarkable commitment to our community. Keep shining!';
+              level = 'Gold';
+            } else if (milestone >= 100) {
+              message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+              level = 'Silver';
+            }
+
+            const certificateData = JSON.stringify({
+              donor_name: donorName,
+              points: currentPoints,
+              milestone: milestone,
+              level: level,
+              date: new Date().toISOString(),
+              message: message,
+              certificate_number: `ZAAD-${milestone}-${donation.donor_id}-${Date.now()}`
+            });
+
+            // Save certificate
+            await pool.query(
+              `INSERT INTO certificates (donor_id, points_milestone, certificate_data)
+               VALUES ($1, $2, $3)`,
+              [donation.donor_id, milestone, certificateData]
+            );
+
+            // Send certificate notification
+            const certNotificationMessage = JSON.stringify({
+              text: `🎉 تهانينا! لقد حصلت على شهادة تقدير ${level} لبلوغك ${milestone} نقطة. شكراً لكرمك وعطائك!`,
+              kind: 'certificate',
+              milestone: milestone,
+              level: level
+            });
+
+            await pool.query(
+              `INSERT INTO notifications (user_id, type, message)
+               VALUES ($1, 'certificate_earned', $2)`,
+              [donation.donor_id, certNotificationMessage]
+            );
+
+            console.log(`🎉 ${level} Certificate generated for donor ${donation.donor_id} at ${milestone} points!`);
+          }
+        }
+      }
+    } catch (pointsError) {
+      console.warn('⚠️ Points/certificate error (non-critical):', pointsError.message);
     }
 
     console.log('✅ Accept successful!');
@@ -3443,6 +3795,170 @@ app.get("/donations/:id/rating-status", async (req, res) => {
   } catch (e) {
     console.error("❌ rating-status error:", e);
     res.status(500).json({ ok: false });
+  }
+});
+
+// ===== REWARDS ENDPOINTS =====
+
+// GET /donors/:donor_id/points -> get donor points
+app.get('/donors/:donor_id/points', async (req, res) => {
+  const { donor_id } = req.params;
+
+  try {
+    console.log(`⭐ Fetching points for donor ${donor_id}`);
+    
+    const result = await pool.query(
+      `SELECT points FROM donors WHERE user_id = $1`,
+      [donor_id]
+    );
+
+    if (result.rows.length === 0) {
+      console.log(`⚠️ Donor ${donor_id} not found`);
+      return res.status(404).json({ ok: false, message: 'Donor not found' });
+    }
+
+    const points = result.rows[0].points || 0;
+    console.log(`⭐ Donor ${donor_id} has ${points} points`);
+    
+    res.json({ ok: true, points });
+  } catch (e) {
+    console.error('❌ Get points error:', e);
+    res.status(500).json({ ok: false, message: 'Server error' });
+  }
+});
+
+// GET /donors/:donor_id/certificates -> get donor certificates
+app.get('/donors/:donor_id/certificates', async (req, res) => {
+  const { donor_id } = req.params;
+
+  try {
+    console.log(`📜 Fetching certificates for donor ${donor_id}`);
+    
+    const result = await pool.query(
+      `SELECT certificate_id, points_milestone, certificate_data, created_at
+       FROM certificates
+       WHERE donor_id = $1
+       ORDER BY points_milestone ASC`,
+      [donor_id]
+    );
+
+    console.log(`📜 Found ${result.rows.length} certificates for donor ${donor_id}`);
+    result.rows.forEach(row => {
+      console.log(`  - Certificate ${row.certificate_id}: ${row.points_milestone} points`);
+    });
+
+    const certificates = result.rows.map(row => ({
+      ...row,
+      certificate_data: JSON.parse(row.certificate_data || '{}')
+    }));
+
+    res.json({ ok: true, certificates });
+  } catch (e) {
+    console.error('❌ Get certificates error:', e);
+    res.status(500).json({ ok: false, message: 'Server error' });
+  }
+});
+
+// POST /admin/backfill-certificates -> Backfill missing certificates for all donors
+app.post('/admin/backfill-certificates', async (req, res) => {
+  try {
+    console.log('🔄 Starting certificate backfill...');
+    
+    // Get all donors with their points
+    const donorsResult = await pool.query(`
+      SELECT user_id, COALESCE(points, 0) as points
+      FROM donors
+      WHERE points >= 100
+    `);
+
+    let backfilledCount = 0;
+
+    for (const donor of donorsResult.rows) {
+      const donor_id = donor.user_id;
+      const points = donor.points;
+
+      // Get donor name
+      const donorInfo = await pool.query(
+        `SELECT acc.full_name 
+         FROM donors d
+         JOIN users u ON u.user_id = d.user_id
+         JOIN accounts acc ON acc.account_id = u.account_id
+         WHERE d.user_id = $1`,
+        [donor_id]
+      );
+
+      const donorName = donorInfo.rows[0]?.full_name || 'Donor';
+
+      // Generate certificates for all milestones up to current points
+      for (let milestone = 100; milestone <= points; milestone += 100) {
+        // Check if certificate already exists
+        const certCheck = await pool.query(
+          `SELECT certificate_id FROM certificates WHERE donor_id = $1 AND points_milestone = $2`,
+          [donor_id, milestone]
+        );
+
+        if (certCheck.rows.length === 0) {
+          // Determine level and message
+          // Platinum: 300, 400, 500, 600+ points
+          // Gold: 200 points
+          // Silver: 100 points
+          let message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+          let level = 'Bronze';
+          
+          if (milestone >= 300) {
+            // Platinum for 300, 400, 500, 600, etc.
+            message = 'Your exceptional dedication to helping others is truly inspiring. You are making a lasting impact!';
+            level = 'Platinum';
+          } else if (milestone >= 200) {
+            message = 'Your continued generosity shows remarkable commitment to our community. Keep shining!';
+            level = 'Gold';
+          } else if (milestone >= 100) {
+            message = 'Thank you for your generous contributions to our community. Your kindness makes a difference!';
+            level = 'Silver';
+          }
+
+          const certificateData = JSON.stringify({
+            donor_name: donorName,
+            points: points,
+            milestone: milestone,
+            level: level,
+            date: new Date().toISOString(),
+            message: message,
+            certificate_number: `ZAAD-${milestone}-${donor_id}-${Date.now()}`
+          });
+
+          // Save certificate
+          await pool.query(
+            `INSERT INTO certificates (donor_id, points_milestone, certificate_data)
+             VALUES ($1, $2, $3)`,
+            [donor_id, milestone, certificateData]
+          );
+
+          // Send notification
+          const certNotificationMessage = JSON.stringify({
+            text: `🎉 تهانينا! لقد حصلت على شهادة تقدير ${level} لبلوغك ${milestone} نقطة. شكراً لكرمك وعطائك!`,
+            kind: 'certificate',
+            milestone: milestone,
+            level: level
+          });
+
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, message)
+             VALUES ($1, 'certificate_earned', $2)`,
+            [donor_id, certNotificationMessage]
+          );
+
+          backfilledCount++;
+          console.log(`✅ Backfilled ${level} certificate for donor ${donor_id} at ${milestone} points`);
+        }
+      }
+    }
+
+    console.log(`🎉 Certificate backfill completed! ${backfilledCount} certificates created.`);
+    res.json({ ok: true, message: `Backfilled ${backfilledCount} certificates`, count: backfilledCount });
+  } catch (e) {
+    console.error('❌ Certificate backfill error:', e);
+    res.status(500).json({ ok: false, error: 'Failed to backfill certificates' });
   }
 });
 

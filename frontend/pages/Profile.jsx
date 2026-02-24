@@ -81,12 +81,24 @@ export default function ProfileScreen({ route, navigation }) {
           My Profile
         </Text>
 
-        <TouchableOpacity onPress={handleLogout}>
-          <Image
-            source={require("../assets/images/logout.png")}
-            style={[styles.headerIcon, { tintColor: theme.iconColor }]}
-          />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {!isAssociation && (
+            <TouchableOpacity onPress={() => navigation.navigate("NotificationsScreen")}>
+              <Ionicons
+                name="notifications-outline"
+                size={26}
+                color={theme.iconColor}
+              />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity onPress={handleLogout}>
+            <Image
+              source={require("../assets/images/logout.png")}
+              style={[styles.headerIcon, { tintColor: theme.iconColor }]}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ===== PROFILE INFO ===== */}
@@ -127,15 +139,18 @@ export default function ProfileScreen({ route, navigation }) {
         </View>
       </View>
 
-      {/* ===== REWARD ===== */}
+      {/* ===== REWARDS & CERTIFICATES ===== */}
       {!isAssociation && (
-        <TouchableOpacity style={styles.row}>
+        <TouchableOpacity 
+          style={styles.row}
+          onPress={() => navigation.navigate("RewardScreen", { user_id })}
+        >
           <Image
             source={require("../assets/images/heart.png")}
             style={[styles.icon, { tintColor: theme.iconColor }]}
           />
           <Text style={[styles.rowText, { color: theme.text }]}>
-            Reward
+            Rewards & Certificates
           </Text>
           <Image
             source={require("../assets/images/arrow.png")}

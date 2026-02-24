@@ -90,20 +90,48 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
         throw new Error("Donation not created");
       }
 
-      for (const item of finalItems) {
-        const res = await fetch(`${config.API_URL}/clothes_donations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            donation_id: donation.donation_id,
-            clothes_type: item.category,
-          }),
-        });
+      if (donationType === "food") {
+        for (const item of finalItems) {
+          const foodForm = new FormData();
+          const foodCategory = item.category || item.food_type || category;
+          const expiryDate =
+            item.expiry_date ||
+            item.expiryDate ||
+            item.expiration_date ||
+            item.expirationDate ||
+            null;
 
-        if (!res.ok) {
-          throw new Error("Failed to save item");
+          foodForm.append("donation_id", donation.donation_id);
+          foodForm.append("category", foodCategory || "غير محدد");
+          if (expiryDate) foodForm.append("expiry_date", expiryDate);
+
+          const res = await fetch(`${config.API_URL}/food_donations`, {
+            method: "POST",
+            body: foodForm,
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText || "Failed to save item");
+          }
+        }
+      } else {
+        for (const item of finalItems) {
+          const res = await fetch(`${config.API_URL}/clothes_donations`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              donation_id: donation.donation_id,
+              clothes_type: item.category,
+            }),
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText || "Failed to save item");
+          }
         }
       }
 
