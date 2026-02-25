@@ -1,6 +1,6 @@
 
-const API_URL = "http://172.19.9.154:5000"; 
-const SERVER_URL = "http://172.19.9.154:5000";
+const API_URL = "http://192.168.1.18:5000"; 
+const SERVER_URL = "http://192.168.1.18:5000";
  
 export default {
   API_URL,

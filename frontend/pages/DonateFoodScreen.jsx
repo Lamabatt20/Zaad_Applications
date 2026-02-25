@@ -55,14 +55,14 @@ export default function DonateFoodScreen({ navigation, route }) {
   // Apply scanned product when returning from ScanScreen
   useFocusEffect(
     React.useCallback(() => {
-      console.log("👁️ [useFocusEffect] Screen focused, checking for scanned product...");
+      console.log(" [useFocusEffect] Screen focused, checking for scanned product...");
       const applyScannedProduct = async () => {
         try {
           const stored = await AsyncStorage.getItem("scanned_product");
-          console.log("📦 [useFocusEffect] AsyncStorage scanned_product:", stored);
+          console.log(" [useFocusEffect] AsyncStorage scanned_product:", stored);
           if (stored) {
             const product = JSON.parse(stored);
-            console.log("✅ [useFocusEffect] Parsed product:", product);
+            console.log(" [useFocusEffect] Parsed product:", product);
             // Remove immediately to prevent re-applying on next focus
             await AsyncStorage.removeItem("scanned_product");
             console.log("🧹 [useFocusEffect] Removed scanned_product from AsyncStorage");
@@ -80,15 +80,15 @@ export default function DonateFoodScreen({ navigation, route }) {
               return;
             }
             if (product?.name) {
-              console.log("📝 [useFocusEffect] Setting description:", product.name);
+              console.log(" [useFocusEffect] Setting description:", product.name);
               setDescription(product.name);
               setCategory(product.category || "");
               setStep2Complete(true);
-              console.log("🎯 [useFocusEffect] Step 2 marked complete");
+              console.log(" [useFocusEffect] Step 2 marked complete");
             }
           }
         } catch (e) {
-          console.error("⚠️ [useFocusEffect] Error applying scanned product:", e);
+          console.error(" [useFocusEffect] Error applying scanned product:", e);
         }
       };
 
@@ -103,27 +103,27 @@ export default function DonateFoodScreen({ navigation, route }) {
   const nextBtnBg = "#A27571";
 
   const requestAndFetchLocation = async () => {
-    console.log("📍 [requestAndFetchLocation] Requesting location...");
+    console.log(" [requestAndFetchLocation] Requesting location...");
     const { status } = await Location.requestForegroundPermissionsAsync();
-    console.log("📍 [requestAndFetchLocation] Permission status:", status);
+    console.log(" [requestAndFetchLocation] Permission status:", status);
     if (status !== "granted") {
       Alert.alert("Permission denied", "Location permission is required");
       return;
     }
     const pos = await Location.getCurrentPositionAsync({});
     const { latitude, longitude } = pos.coords;
-    console.log("📍 [requestAndFetchLocation] Got coords:", latitude, longitude);
+    console.log(" [requestAndFetchLocation] Got coords:", latitude, longitude);
     setCoords({ latitude, longitude });
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
     );
     const data = await res.json();
-    console.log("📍 [requestAndFetchLocation] Geocoded address:", data.display_name);
+    console.log(" [requestAndFetchLocation] Geocoded address:", data.display_name);
     setAddress(data.display_name || `${latitude}, ${longitude}`);
   };
 
   const resetWorkflow = () => {
-    console.log("🔄 [resetWorkflow] Resetting workflow steps");
+    console.log(" [resetWorkflow] Resetting workflow steps");
     setStep1Complete(false);
     setStep2Complete(false);
     setStep3Complete(false);
@@ -131,7 +131,7 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const clearForm = () => {
-    console.log("🧹 [clearForm] Clearing entire form state");
+    console.log(" [clearForm] Clearing entire form state");
     setCategory("");
     setDescription("");
     setQuantity("1");
@@ -143,15 +143,15 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const checkAI = async (imageUris) => {
-    console.log("🔍 [checkAI] Starting AI check with", imageUris?.length, "images");
+    console.log(" [checkAI] Starting AI check with", imageUris?.length, "images");
     if (!imageUris || imageUris.length === 0) {
-      console.log("❌ [checkAI] No images provided, resetting");
+      console.log(" [checkAI] No images provided, resetting");
       resetWorkflow();
       return;
     }
     setCheckingAI(true);
     try {
-      console.log("📤 [checkAI] Sending images to /ai/check-food-new");
+      console.log(" [checkAI] Sending images to /ai/check-food-new");
       const aiForm = new FormData();
       imageUris.forEach((uri, index) => {
         aiForm.append("images", { uri, name: `img_${index}.jpg`, type: "image/jpeg" });
@@ -160,14 +160,14 @@ export default function DonateFoodScreen({ navigation, route }) {
         method: "POST",
         body: aiForm,
       });
-      console.log("📥 [checkAI] AI response status:", aiRes.status);
+      console.log(" [checkAI] AI response status:", aiRes.status);
       if (!aiRes.ok) {
         const errorText = await aiRes.text();
-        console.log("❌ [checkAI] AI check failed:", errorText);
+        console.log(" [checkAI] AI check failed:", errorText);
         throw new Error(errorText || "AI check failed");
       }
       const data = await aiRes.json();
-      console.log("✅ [checkAI] AI response data:", data);
+      console.log("[checkAI] AI response data:", data);
       if (data.rejected && data.reason?.includes("مطبوخ")) {
         Alert.alert(
           "Rejected",
@@ -190,7 +190,7 @@ export default function DonateFoodScreen({ navigation, route }) {
         setProductImages([]);
         resetWorkflow();
       } else if (data.passed_checks) {
-        console.log("✅ [checkAI] Passed all checks!");
+        console.log("[checkAI] Passed all checks!");
         setStep1Complete(true);
         Alert.alert("Step 1 complete", "Item passed checks. Next: scan the barcode.");
       }
@@ -216,11 +216,11 @@ export default function DonateFoodScreen({ navigation, route }) {
   const checkExpiry = async () => {
     console.log("📅 [checkExpiry] Starting expiry check");
     if (!expiryImage) {
-      console.log("❌ [checkExpiry] No expiry image provided");
+      console.log(" [checkExpiry] No expiry image provided");
       Alert.alert("Error", "Please add an expiry-date photo first.");
       return;
     }
-    console.log("📤 [checkExpiry] Sending expiry image to AI");
+    console.log(" [checkExpiry] Sending expiry image to AI");
     setCheckingExpiry(true);
     try {
       const expiryForm = new FormData();
@@ -229,10 +229,10 @@ export default function DonateFoodScreen({ navigation, route }) {
         method: "POST",
         body: expiryForm,
       });
-      console.log("📥 [checkExpiry] Response status:", expiryRes.status);
+      console.log(" [checkExpiry] Response status:", expiryRes.status);
       if (!expiryRes.ok) throw new Error("Failed to check expiry date");
       const expiryData = await expiryRes.json();
-      console.log("✅ [checkExpiry] Expiry data:", expiryData);
+      console.log(" [checkExpiry] Expiry data:", expiryData);
       if (expiryData.expired) {
         Alert.alert("Expired", "This product is expired and cannot be donated.");
         return;
@@ -243,7 +243,7 @@ export default function DonateFoodScreen({ navigation, route }) {
       }
       setStep3Complete(true);
       setExpiryDate(expiryData.expiry_date);
-      console.log("✅ [checkExpiry] Expiry validated:", expiryData.expiry_date);
+      console.log(" [checkExpiry] Expiry validated:", expiryData.expiry_date);
       Alert.alert("Validated", `Valid until: ${expiryData.expiry_date || "Date unclear"}`);
     } catch (err) {
       console.error("Expiry check error:", err);
@@ -254,7 +254,7 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const pickProductImage = async (fromCamera = false) => {
-    console.log("📸 [pickProductImage] Picking product image from", fromCamera ? "camera" : "gallery");
+    console.log(" [pickProductImage] Picking product image from", fromCamera ? "camera" : "gallery");
     if (step3Complete) {
       Alert.alert("Already validated", "Cannot modify images after validation.");
       return;
@@ -271,7 +271,7 @@ export default function DonateFoodScreen({ navigation, route }) {
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
     if (!result.canceled) {
       const newImages = [...productImages, result.assets[0].uri];
-      console.log("✅ [pickProductImage] Image selected, total images now:", newImages.length);
+      console.log(" [pickProductImage] Image selected, total images now:", newImages.length);
       setProductImages(newImages);
       resetWorkflow();
       checkAI(newImages);
@@ -279,7 +279,7 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const removeProductImage = (uri) => {
-    console.log("🗑️ [removeProductImage] Removing image");
+    console.log(" [removeProductImage] Removing image");
     if (step3Complete) {
       Alert.alert("Already validated", "Cannot modify images after validation.");
       return;
@@ -291,7 +291,7 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const pickExpiryImage = async (fromCamera = false) => {
-    console.log("📸 [pickExpiryImage] Picking expiry image from", fromCamera ? "camera" : "gallery");
+    console.log(" [pickExpiryImage] Picking expiry image from", fromCamera ? "camera" : "gallery");
     if (!step2Complete) {
       Alert.alert("Scan barcode first", "Please scan the barcode before adding expiry photo.");
       return;
@@ -311,7 +311,7 @@ export default function DonateFoodScreen({ navigation, route }) {
       ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
       : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
     if (!result.canceled) {
-      console.log("✅ [pickExpiryImage] Expiry image selected");
+      console.log(" [pickExpiryImage] Expiry image selected");
       setExpiryImage(result.assets[0].uri);
       setStep3Complete(false);
       setExpiryDate(null);
@@ -329,7 +329,7 @@ export default function DonateFoodScreen({ navigation, route }) {
   };
 
   const handleNext = async () => {
-    console.log("📤 [handleNext] Submitting donation...");
+    console.log(" [handleNext] Submitting donation...");
     console.log("  - Address:", address);
     console.log("  - Product images:", productImages.length);
     console.log("  - Step 1 (AI):", step1Complete);
@@ -348,18 +348,18 @@ export default function DonateFoodScreen({ navigation, route }) {
       const user = route?.params?.user;
       if (!user?.account_id) throw new Error("Session expired. Please log in again.");
 
-      console.log("👤 [handleNext] Fetching user data...");
+      console.log(" [handleNext] Fetching user data...");
       const usersRes = await fetch(`${API.API_URL}/users`);
       const users = await usersRes.json();
       const realUser = users.find((u) => u.account_id === user.account_id);
-      console.log("✅ [handleNext] User found:", realUser?.account_id);
+      console.log(" [handleNext] User found:", realUser?.account_id);
       if (!realUser) throw new Error("User not found");
 
-      console.log("💳 [handleNext] Fetching donor data...");
+      console.log(" [handleNext] Fetching donor data...");
       const donorsRes = await fetch(`${API.API_URL}/donors`);
       const donors = await donorsRes.json();
       const donor = donors.find((d) => d.user_id === realUser.user_id);
-      console.log("✅ [handleNext] Donor found:", donor?.user_id);
+      console.log("[handleNext] Donor found:", donor?.user_id);
       if (!donor) throw new Error("Not registered as donor");
 
       const donor_id = donor.user_id;
@@ -378,10 +378,10 @@ export default function DonateFoodScreen({ navigation, route }) {
         type: "image/jpeg",
       });
 
-      console.log("📮 [handleNext] Creating donation...");
+      console.log(" [handleNext] Creating donation...");
       const donationRes = await fetch(`${API.API_URL}/donations`, { method: "POST", body: donationForm });
       const textResp = await donationRes.text();
-      console.log("📥 [handleNext] Donation creation response:", donationRes.status);
+      console.log(" [handleNext] Donation creation response:", donationRes.status);
       if (!donationRes.ok) throw new Error(textResp || "Donation creation failed");
 
       const donation = JSON.parse(textResp);
@@ -392,40 +392,50 @@ export default function DonateFoodScreen({ navigation, route }) {
       foodForm.append("category", category || "��� ����");
       foodForm.append("expiry_date", expiryDate || "");
 
-      console.log("🍽️ [handleNext] Creating food donation record...");
+      console.log(" [handleNext] Creating food donation record...");
       console.log("  - donation_id:", donation_id);
       console.log("  - category:", category || "غير محدد");
       console.log("  - expiry_date:", expiryDate || "");
 
       const foodRes = await fetch(`${API.API_URL}/food_donations`, { method: "POST", body: foodForm });
-      console.log("📥 [handleNext] Food donation response status:", foodRes.status);
+      console.log("[handleNext] Food donation response status:", foodRes.status);
       
       if (!foodRes.ok) {
         const foodError = await foodRes.text();
-        console.log("❌ [handleNext] Food donation error response:", foodError);
+        console.log(" [handleNext] Food donation error response:", foodError);
         throw new Error(foodError || "Failed to create food donation record");
       }
       
-      console.log("✅ [handleNext] Food donation record created");
+      console.log(" [handleNext] Food donation record created");
 
       // Clean up after successful submission
       await AsyncStorage.removeItem("scanned_product");
-      console.log("🧹 [handleNext] Cleaned up AsyncStorage");
+      console.log(" [handleNext] Cleaned up AsyncStorage");
       
       clearForm();
-      console.log("🧹 [handleNext] Cleared all form state");
+      console.log(" [handleNext] Cleared all form state");
 
-      console.log("🎉 [handleNext] Donation submitted successfully!");
+      console.log(" [handleNext] Donation submitted successfully!");
       Alert.alert("Success", "Your donation has been submitted!");
       navigation.navigate("DeliveryMethodScreen", {
         ...route.params,
+        donationType: "food",
+        items: [
+          {
+            category,
+            description,
+            address,
+            images: productImages,
+            expiry_date: expiryDate,
+          },
+        ],
         donation_id,
         donor_id,
         association_id,
         address,
       });
     } catch (err) {
-      console.error("❌ [handleNext] Submit error:", err);
+      console.error(" [handleNext] Submit error:", err);
       Alert.alert("Error", err.message || "Failed to submit donation");
     } finally {
       setLoading(false);
@@ -485,8 +495,8 @@ export default function DonateFoodScreen({ navigation, route }) {
           >
             <Text style={{ color: text }}>{address || "Use current location"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={requestAndFetchLocation}>
-            <Ionicons name="location" size={28} color={nextBtnBg} />
+          <TouchableOpacity onPress={requestAndFetchLocation} style={{ justifyContent: "center" }}>           
+            <Ionicons name="location" size={30} color={nextBtnBg} />
           </TouchableOpacity>
         </View>
 
@@ -502,19 +512,21 @@ export default function DonateFoodScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ))}
-          <TouchableOpacity
-            style={[styles.imagePickerBox, { borderColor: border }]}
-            onPress={() =>
-              Alert.alert("Add Product Photo", "Choose", [
-                { text: "Camera", onPress: () => pickProductImage(true) },
-                { text: "Gallery", onPress: () => pickProductImage(false) },
-                { text: "Cancel", style: "cancel" },
-              ])
-            }
-            disabled={checkingAI || step3Complete}
-          >
-            {checkingAI ? <ActivityIndicator color="#A27571" /> : <Text style={styles.plus}>+</Text>}
-          </TouchableOpacity>
+          {productImages.length === 0 && (
+            <TouchableOpacity
+              style={[styles.imagePickerBox, { borderColor: border }]}
+              onPress={() =>
+                Alert.alert("Add Product Photo", "Choose", [
+                  { text: "Camera", onPress: () => pickProductImage(true) },
+                  { text: "Gallery", onPress: () => pickProductImage(false) },
+                  { text: "Cancel", style: "cancel" },
+                ])
+              }
+              disabled={checkingAI || step3Complete}
+            >
+              {checkingAI ? <ActivityIndicator color="#A27571" /> : <Text style={styles.plus}>+</Text>}
+            </TouchableOpacity>
+          )}
         </View>
 
         {step1Complete && !step2Complete && (

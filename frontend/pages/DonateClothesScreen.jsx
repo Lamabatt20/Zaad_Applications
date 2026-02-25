@@ -209,8 +209,8 @@ export default function DonateClothesScreen({ navigation, route }) {
               {address || "Use current location"}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={requestAndFetchLocation}>
-            <Ionicons name="location" size={28} color={nextBtnBg} />
+          <TouchableOpacity onPress={requestAndFetchLocation} style={{ justifyContent: "center" }}>           
+            <Ionicons name="location" size={30} color={nextBtnBg} />
           </TouchableOpacity>
         </View>
 
@@ -331,6 +331,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 12,
     borderWidth: 1,
+    marginTop: 10,
+
   },
   textArea: { height: 90, textAlignVertical: "top"},
   dropdown: {
@@ -341,7 +343,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: -1,
   },
   dropdownText: { fontSize: 15 },
   imagePickerBox: {

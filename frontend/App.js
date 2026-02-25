@@ -23,6 +23,8 @@ import RejectedClothesScreen from './pages/RejectedClothesScreen';
 import ChatBotScreen from "./pages/Chatbot";
 import ProfileScreen from "./pages/Profile";
 import EditProfileScreen from "./pages/EditProfile";
+import RewardScreen from "./pages/RewardScreen";
+import CertificateViewerScreen from "./pages/CertificateViewerScreen";
 import ChangePassword from './pages/ChangePassword';
 import SearchAssociation from './pages/SearchAssociation';
 import ApprovedClothesScreen from './pages/ApprovedClothesScreen';
@@ -42,6 +44,7 @@ import ThankYouSelfDeliveryScreen from './pages/ThankYouSelfDeliveryScreen';
 import UnderReviewDeliveryScreen from './pages/UnderReviewDeliveryScreen';
 import DeliveryMethodScreen from './pages/DeliveryMethodScreen';
 import AddDeliveryPerson from './pages/AddDeliveryPersonScreen';
+import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
 import NotificationsScreen from './pages/NotificationsScreen';
 import DeliveryOrdersScreen from './pages/DeliveryOrdersScreen';
 import DeliveryTrackScreen from './pages/DeliveryTrackScreen';
@@ -50,7 +53,6 @@ import DonationTrackScreen from './pages/DonationTrackScreen';
 import DonationDeliverScreen from './pages/DonationDeliverScreen';
 import DonationRating from './pages/DonationRating';
 import DonationsReport from './pages/DonationsReport';
-import AssignDeliveryPerson from './pages/AssignDeliveryPerson';
 import AdminUsersList from './pages/AdminUsersList';
 const Stack = createNativeStackNavigator();
 
@@ -81,6 +83,8 @@ export default function App() {
           <Stack.Screen name="ChatBotScreen" component={ChatBotScreen} />
           <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
           <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
+          <Stack.Screen name="RewardScreen" component={RewardScreen} />
+          <Stack.Screen name="CertificateViewerScreen" component={CertificateViewerScreen} />
           <Stack.Screen name="ChangePassword" component={ChangePassword} />
           <Stack.Screen name="ApprovedClothesScreen" component={ApprovedClothesScreen} /> 
           <Stack.Screen name="AcceptedFoodsScreen" component={AcceptedFoodsScreen} />
