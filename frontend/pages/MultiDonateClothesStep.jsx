@@ -9,6 +9,7 @@ import {
   Image,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -17,18 +18,23 @@ import * as ImagePicker from "expo-image-picker";
 import config from "../config";
 
 export default function MultiDonateClothesStep({ navigation, route }) {
-  const { total = 1, index = 1, association, user: routeUser } = route.params || {};
+  const { total = 1, index = 1, association, user: routeUser, savedAddress, savedCoords } = route.params || {};
   const [user, setUser] = useState(routeUser);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [address, setAddress] = useState("");
-  const [coords, setCoords] = useState(null);
+  const [address, setAddress] = useState(savedAddress || "");
+  const [coords, setCoords] = useState(savedCoords || null);
   const [condition, setCondition] = useState("New");
   const [darkMode, setDarkMode] = useState(false);
   const [images, setImages] = useState([]);
   const [showCondition, setShowCondition] = useState(false);
   const [showCategory, setShowCategory] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Validation steps
+  const [step1Complete, setStep1Complete] = useState(false); // Basic info
+  const [step2Complete, setStep2Complete] = useState(false); // Images added
+  const [step3Complete, setStep3Complete] = useState(false); // Location set
   const CATEGORIES = ["Newborn", "Toddlers", "Kids", "Women", "Men"];
   const CONDITIONS = ["New", "Like New", "Used", "Needs Repair"];
 
@@ -53,6 +59,30 @@ export default function MultiDonateClothesStep({ navigation, route }) {
     };
     loadData();
   }, []);
+
+  // Validation effect
+  useEffect(() => {
+    // Step 1: Basic info (category, description, condition)
+    if (category && description && condition) {
+      setStep1Complete(true);
+    } else {
+      setStep1Complete(false);
+    }
+
+    // Step 2: At least one image
+    if (images.length > 0) {
+      setStep2Complete(true);
+    } else {
+      setStep2Complete(false);
+    }
+
+    // Step 3: Address
+    if (address) {
+      setStep3Complete(true);
+    } else {
+      setStep3Complete(false);
+    }
+  }, [category, description, condition, images, address]);
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
   const text = darkMode ? "#fff" : "#333";
@@ -107,55 +137,53 @@ const removeImage = (uri) => {
 
 
   const handleNext = () => {
-  if (!category || !description || !address) {
-    Alert.alert("Validation", "Please fill all required fields");
-    return;
-  }
+    // Validate all steps are complete
+    if (!step1Complete) {
+      Alert.alert("Incomplete", "Please fill in category, description, and condition");
+      return;
+    }
+    if (!step2Complete) {
+      Alert.alert("Incomplete", "Please add at least one photo of the item");
+      return;
+    }
+    if (!step3Complete) {
+      Alert.alert("Incomplete", "Please set the pickup location");
+      return;
+    }
 
-  
-  const currentItem = {
-    category,
-    description,
-    address,
-    images,
-    condition,
+    const currentItem = {
+      category,
+      description,
+      address,
+      images,
+      condition,
+    };
+
+    const previousItems = route.params?.items || [];
+    const updatedItems = [...previousItems, currentItem];
+
+    // If more items to add, go to next item
+    if (index < total) {
+      navigation.replace("MultiDonateClothesStep", {
+        total,
+        index: index + 1,
+        association,
+        user,
+        items: updatedItems,
+        savedAddress: address,  // Pass location to next item
+        savedCoords: coords,    // Pass coordinates to next item
+      });
+    } 
+    // All items collected, proceed to delivery method
+    else {
+      navigation.navigate("DeliveryMethodScreen", {
+        association,
+        user,
+        donationType: "clothes",
+        items: updatedItems,
+      });
+    }
   };
-
-  
-  const previousItems = route.params?.items || [];
-
-  const updatedItems = [...previousItems, currentItem];
-
- 
-  if (index < total) {
-    navigation.replace("MultiDonateClothesStep", {
-      total,
-      index: index + 1,
-      association,
-      user,
-      items: updatedItems,
-    });
-  } 
-  
-  else {
-    Alert.alert(
-      "Request Under Review",
-      "Your donation request will be reviewed by the association.\n\nPlease choose your delivery method.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "OK",
-          onPress: () =>
-            navigation.navigate("DeliveryMethodScreen", {
-              association,
-              donationType: "clothes",
-              items: updatedItems, 
-            }),
-        },
-      ]
-    );
-  }
-};
 
 
   return (
@@ -245,21 +273,39 @@ const removeImage = (uri) => {
         />
 
         {/* ===== Address (LIKE FOOD) ===== */}
+        <Text style={[styles.label, { color: text }]}>Pickup Location</Text>
+        {savedAddress && index > 1 && (
+          <Text style={styles.hint}>Using location from first item (locked)</Text>
+        )}
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity
             style={[
               styles.input,
-              { flex: 1, backgroundColor: inputBg, borderColor: border },
+              { 
+                flex: 1, 
+                backgroundColor: savedAddress && index > 1 ? (darkMode ? "#1a1a1a" : "#f5f5f5") : inputBg, 
+                borderColor: border,
+                opacity: savedAddress && index > 1 ? 0.6 : 1
+              },
             ]}
             onPress={requestAndFetchLocation}
+            disabled={savedAddress && index > 1}
           >
             <Text style={{ color: text }}>
               {address || "Use current location"}
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={requestAndFetchLocation}>
-            <Ionicons name="location" size={28} color={nextBtnBg} />
+          <TouchableOpacity 
+            onPress={requestAndFetchLocation} 
+            style={{ justifyContent: "center" }}
+            disabled={savedAddress && index > 1}
+          >           
+            <Ionicons 
+              name={savedAddress && index > 1 ? "lock-closed" : "location"} 
+              size={30} 
+              color={savedAddress && index > 1 ? "#999" : nextBtnBg} 
+            />
           </TouchableOpacity>
         </View>
 
@@ -314,45 +360,56 @@ const removeImage = (uri) => {
 
         {/* Images */}
         <Text style={[styles.label, { color: text }]}>
-          Take pictures of the Donated Item
+          Take pictures of the Donated Item *
         </Text>
+        <Text style={styles.hint}>At least one photo is required</Text>
 
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {images.map((uri) => (
-                <View key={uri} style={{ position: "relative" }}>
-                <Image source={{ uri }} style={styles.image} />
-                <TouchableOpacity
-                    onPress={() => removeImage(uri)}
-                    style={{ position: "absolute", top: -6, right: -6 }}
-                >
-                    <Ionicons name="close-circle" size={18} color="#A27571" />
-                </TouchableOpacity>
-                </View>
-            ))}
-
-            <TouchableOpacity
-                style={[styles.imagePickerBox, { borderColor: border }]}
-                onPress={() =>
-                Alert.alert("Add Photo", "Choose", [
-                    { text: "Camera", onPress: () => pickImage(true) },
-                    { text: "Gallery", onPress: () => pickImage(false) },
-                    { text: "Cancel", style: "cancel" },
-                ])
-                }
-            >
-                <Text style={styles.plus}>+</Text>
-            </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {images.map((uri) => (
+            <View key={uri} style={{ position: "relative" }}>
+              <Image source={{ uri }} style={styles.image} />
+              <TouchableOpacity
+                onPress={() => removeImage(uri)}
+                style={styles.removeBtn}
+              >
+                <Ionicons name="close-circle" size={20} color="#A27571" />
+              </TouchableOpacity>
             </View>
+          ))}
+
+          {images.length === 0 && (
+            <TouchableOpacity
+              style={[styles.imagePickerBox, { borderColor: border }]}
+              onPress={() =>
+                Alert.alert("Add Photo", "Choose", [
+                  { text: "Camera", onPress: () => pickImage(true) },
+                  { text: "Gallery", onPress: () => pickImage(false) },
+                  { text: "Cancel", style: "cancel" },
+                ])
+              }
+            >
+              <Text style={styles.plus}>+</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
 
         {/* Next */}
         <TouchableOpacity
-          style={[styles.nextBtn, { backgroundColor: nextBtnBg }]}
+          style={[
+            styles.nextBtn, 
+            { backgroundColor: (step1Complete && step2Complete && step3Complete) ? nextBtnBg : "#ccc" }
+          ]}
           onPress={handleNext}
+          disabled={!step1Complete || !step2Complete || !step3Complete || submitting}
         >
-          <Text style={styles.nextText}>
-            {index < total ? "Next Item" : "Next"}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.nextText}>
+              {index < total ? `Next Item (${index}/${total})` : "Continue to Delivery"}
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
@@ -391,6 +448,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
   },
+  hint: { 
+    fontSize: 13, 
+    color: "#999", 
+    marginBottom: 10 
+  },
   input: {
     borderRadius: 10,
     paddingHorizontal: 16,
@@ -398,6 +460,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 12,
     borderWidth: 1,
+    marginTop: 8,
   },
   textArea: { height: 90, textAlignVertical: "top" },
   dropdown: {
@@ -412,8 +475,8 @@ const styles = StyleSheet.create({
   },
   dropdownText: { fontSize: 15 },
   imagePickerBox: {
-    width: 60,
-    height: 60,
+    width: 80,
+    height: 80,
     borderRadius: 10,
     borderWidth: 2,
     borderStyle: "dashed",
@@ -423,6 +486,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   image: { width: 80, height: 80, borderRadius: 8 },
+  removeBtn: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+  },
   plus: { fontSize: 32, color: "#A27571", fontWeight: "300" },
   nextBtn: {
     paddingVertical: 14,
