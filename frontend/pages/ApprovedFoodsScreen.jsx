@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Modal,
   Pressable,
+  TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -21,6 +22,11 @@ export default function ApprovedFoodScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [items, setItems] = useState([]);
+
+  // 🔴 FEEDBACK
+    const [feedbackText, setFeedbackText] = useState({});
+    const [sendingFeedback, setSendingFeedback] = useState(false);
+    const [feedbackSent, setFeedbackSent] = useState({});
 
   // Details modal
   const [detailsVisible, setDetailsVisible] = useState(false);
@@ -346,6 +352,55 @@ export default function ApprovedFoodScreen() {
                 Driver: <Text style={{ fontWeight: "800" }}>{selected.delivery_person_name}</Text>
               </Text>
             )}
+            {/* 🔴 FEEDBACK (only when delivered) */}
+            {selected?.delivery_status === "DELIVERED" &&
+              !feedbackSent[selected?.donation_id] && (
+                <View style={styles.feedbackBox}>
+                  <Text style={styles.feedbackTitle}>Feedback</Text>
+
+                  <TextInput
+                    placeholder="Write feedback..."
+                    multiline
+                    value={feedbackText[selected.donation_id] || ""}
+                    onChangeText={(text) =>
+                      setFeedbackText((prev) => ({
+                        ...prev,
+                        [selected.donation_id]: text,
+                      }))
+                    }
+                    style={styles.feedbackInput}
+                  />
+
+                  <TouchableOpacity
+                    disabled={sendingFeedback}
+                    onPress={async () => {
+                      const msg = feedbackText[selected.donation_id]?.trim();
+                      if (!msg) return;
+
+                      try {
+                        setSendingFeedback(true);
+                        await axios.post(`${config.API_URL}/delivery/feedback`, {
+                          donation_id: selected.donation_id,
+                          message: msg,
+                        });
+
+                        setFeedbackText((prev) => ({
+                          ...prev,
+                          [selected.donation_id]: "",
+                        }));
+                        setFeedbackSent((prev) => ({
+                          ...prev,
+                          [selected.donation_id]: true,
+                        }));
+                      } finally {
+                        setSendingFeedback(false);
+                      }
+                    }}
+                  >
+                    <Text style={styles.feedbackSend}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -513,4 +568,29 @@ const styles = StyleSheet.create({
   dateRowActive: { backgroundColor: "#8b6f69" },
   dateText: { fontSize: 14, fontWeight: "800", color: "#333" },
   dateTextActive: { color: "#fff" },
+  // 🔴 FEEDBACK styles
+feedbackBox: {
+  marginTop: 10,
+  backgroundColor: "#f5f5f5",
+  padding: 10,
+  borderRadius: 12,
+},
+feedbackTitle: {
+  fontSize: 13,
+  fontWeight: "700",
+  marginBottom: 6,
+},
+feedbackInput: {
+  minHeight: 50,
+  backgroundColor: "#fff",
+  borderRadius: 10,
+  padding: 8,
+  fontSize: 14,
+},
+feedbackSend: {
+  marginTop: 6,
+  alignSelf: "flex-end",
+  fontWeight: "800",
+  color: "#8b6f69",
+},
 });

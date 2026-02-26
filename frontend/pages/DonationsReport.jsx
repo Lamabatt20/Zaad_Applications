@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from "react-native";
 import axios from "axios";
 import API from "../config";
+import { useNavigation } from "@react-navigation/native";
 
 export default function DonationsReport() {
   const [report, setReport] = useState(null);
+  const navigation = useNavigation();
 
   useEffect(() => {
     axios
@@ -20,13 +28,43 @@ export default function DonationsReport() {
 
       {/* ===== KPIs ===== */}
       <View style={styles.row}>
-        <Card title="Donations" value={report.total_donations} />
-        <Card title="Associations" value={report.total_associations} />
+        <Card
+          title="Donations"
+          value={report.total_donations}
+        />
+        <Card
+          title="Associations"
+          value={report.total_associations}
+          onPress={() =>
+            navigation.navigate("AdminUsersList", {
+              title: "Associations",
+              data: report.associations_list || [],
+            })
+          }
+        />
       </View>
 
       <View style={styles.row}>
-        <Card title="Donors" value={report.total_donors} />
-        <Card title="Delivery" value={report.total_delivery_persons} />
+        <Card
+          title="Donors"
+          value={report.total_donors}
+          onPress={() =>
+            navigation.navigate("AdminUsersList", {
+              title: "Donors",
+              data: report.donors_list || [],
+            })
+          }
+        />
+        <Card
+          title="Delivery"
+          value={report.total_delivery_persons}
+          onPress={() =>
+            navigation.navigate("AdminUsersList", {
+              title: "Delivery Persons",
+              data: report.delivery_persons_list || [],
+            })
+          }
+        />
       </View>
 
       <Card
@@ -57,35 +95,32 @@ export default function DonationsReport() {
         ))}
       </Section>
 
+      {/* ===== Ratings ===== */}
       <Section title="Latest Donor Ratings">
         {!report.donor_ratings || report.donor_ratings.length === 0 ? (
-            <Text style={styles.emptyText}>No ratings yet</Text>
+          <Text style={styles.emptyText}>No ratings yet</Text>
         ) : (
-            report.donor_ratings.map((item, index) => (
+          report.donor_ratings.map((item, index) => (
             <View key={index} style={styles.ratingCard}>
-                <Text style={styles.ratingName}>
-                {item.donor_name}
-                </Text>
+              <Text style={styles.ratingName}>{item.donor_name}</Text>
 
-                <Text style={styles.ratingInfo}>
+              <Text style={styles.ratingInfo}>
                 Donation #{item.donation_id}
-                </Text>
+              </Text>
 
-
-                <Text style={styles.ratingStars}>
+              <Text style={styles.ratingStars}>
                 {"⭐".repeat(item.rating)} ({item.rating}/5)
-                </Text>
-                
+              </Text>
 
-                {item.comment ? (
+              {item.comment ? (
                 <Text style={styles.ratingComment}>
-                    “{item.comment}”
+                  “{item.comment}”
                 </Text>
-                ) : null}
+              ) : null}
             </View>
-            ))
+          ))
         )}
-        </Section>
+      </Section>
 
     </ScrollView>
   );
@@ -93,11 +128,15 @@ export default function DonationsReport() {
 
 /* ===== Components ===== */
 
-const Card = ({ title, value, full }) => (
-  <View style={[styles.card, full && { width: "100%" }]}>
+const Card = ({ title, value, full, onPress }) => (
+  <TouchableOpacity
+    activeOpacity={0.8}
+    onPress={onPress}
+    style={[styles.card, full && { width: "100%" }]}
+  >
     <Text style={styles.cardTitle}>{title}</Text>
     <Text style={styles.cardValue}>{value}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 const Section = ({ title, children }) => (
@@ -113,8 +152,6 @@ const Line = ({ label, value }) => (
     <Text style={styles.lineValue}>{value}</Text>
   </View>
 );
-
-/* ===== Styles ===== */
 
 const styles = StyleSheet.create({
   container: {

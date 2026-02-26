@@ -53,6 +53,7 @@ import DonationTrackScreen from './pages/DonationTrackScreen';
 import DonationDeliverScreen from './pages/DonationDeliverScreen';
 import DonationRating from './pages/DonationRating';
 import DonationsReport from './pages/DonationsReport';
+import AdminUsersList from './pages/AdminUsersList';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -112,6 +113,7 @@ export default function App() {
           <Stack.Screen name="DonationDeliverScreen" component={DonationDeliverScreen} />
           <Stack.Screen name="DonationRating" component={DonationRating} />
           <Stack.Screen name="DonationsReport" component={DonationsReport} />
+          <Stack.Screen name="AdminUsersList" component={AdminUsersList} />
           </Stack.Navigator>
       </NavigationContainer>
   );
