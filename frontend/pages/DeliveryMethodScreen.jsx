@@ -46,7 +46,7 @@ export default function DeliveryMethodScreen({ navigation, route }) {
         onPress={() =>
           navigation.navigate("ThankYouSelfDeliveryScreen", {
             ...route.params,
-            delivery_method: "self",
+            delivery_method: "donor",
           })
         }
       >
@@ -62,7 +62,7 @@ export default function DeliveryMethodScreen({ navigation, route }) {
         onPress={() =>
           navigation.navigate("UnderReviewDeliveryScreen", {
             ...route.params,
-            delivery_method: "service",
+            delivery_method: "association",
           })
         }
       >

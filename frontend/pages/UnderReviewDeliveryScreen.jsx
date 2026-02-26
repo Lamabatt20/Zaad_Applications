@@ -22,6 +22,8 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
     description,
     address,
     images,
+    donation_ids = null,  // Existing donation IDs from multi-donation flow
+    delivery_method = "association",  // "association" or "donor"
   } = route.params || {};
 
   const [darkMode, setDarkMode] = useState(false);
@@ -37,6 +39,56 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
     setLoading(true);
 
     try {
+      console.log("🚀 [UnderReviewDelivery] ========================================");
+      console.log("🚀 [UnderReviewDelivery] Starting submission");
+      console.log("🚀 [UnderReviewDelivery] donation_ids from params:", donation_ids);
+      console.log("🚀 [UnderReviewDelivery] donation_ids type:", typeof donation_ids);
+      console.log("🚀 [UnderReviewDelivery] Is array?:", Array.isArray(donation_ids));
+      console.log("🚀 [UnderReviewDelivery] Length:", donation_ids?.length);
+      console.log("🚀 [UnderReviewDelivery] ========================================");
+      
+      // If donations already exist (from MultiDonateClothesStep), just update delivery method
+      if (donation_ids && Array.isArray(donation_ids) && donation_ids.length > 0) {
+        console.log("✅ [UnderReviewDelivery] Using existing donations - NO NEW DONATIONS WILL BE CREATED");
+        console.log("✅ [UnderReviewDelivery] Existing donation IDs:", donation_ids);
+        
+        // Update delivery_method for each existing donation
+        for (const donationId of donation_ids) {
+          console.log(`📦 [UnderReviewDelivery] Updating donation ${donationId} with delivery method`);
+          
+          const updateRes = await fetch(`${config.API_URL}/donations/${donationId}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              delivery_method: "association",
+            }),
+          });
+          
+          if (!updateRes.ok) {
+            const error = await updateRes.text();
+            console.error(`❌ [UnderReviewDelivery] Failed to update donation ${donationId}:`, error);
+          } else {
+            console.log(`✅ [UnderReviewDelivery] Updated donation ${donationId}`);
+          }
+        }
+        
+        Alert.alert(
+          "Request Sent 🤍",
+          "Your donation request was sent successfully.\n\n" +
+            "The association will review it first.\n" +
+            "You will be notified once it is accepted.",
+          [{ text: "OK", onPress: () => navigation.popToTop() }]
+        );
+        
+        setLoading(false);
+        return;
+      }
+      
+      // Original flow: Create new donation (for single donation or old flow)
+      console.log("📝 [UnderReviewDelivery] Creating NEW donation");
+      
       const userData = await AsyncStorage.getItem("user_data");
       if (!userData) throw new Error("Session expired");
 

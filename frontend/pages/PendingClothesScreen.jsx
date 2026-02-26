@@ -40,45 +40,35 @@ export default function PendingClothesScreen({ navigation }) {
 
   const normalizeDonation = (x) => ({
   donation_id: x.donation_id ?? x.id,
+  donor_id: x.donor_id,  // Add donor_id for grouping
   donor_name: x.donor_name ?? x.full_name ?? "Donor",
   item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
   note: x.note ?? x.description ?? "",
   created_at: x.created_at ?? x.createdAt ?? new Date().toISOString(),
   status: x.status ?? "pending",
-delivery_method: String(x.delivery_method ?? x.deliveryMethod ?? "donor").trim().toLowerCase(),
+  delivery_method: String(x.delivery_method ?? x.deliveryMethod ?? "donor").trim().toLowerCase(),
 });
 
-const acceptDonation = async (id, deliveryMethod) => {
+const acceptDonation = async (donation) => {
   try {
+    const id = donation.donation_id;
     setSubmitting((s) => ({ ...s, [id]: "accept" }));
-    removeFromUI(id); // optimistic
+    
+    // Remove from UI
+    setPendingDonations((prev) => prev.filter((d) => d.donation_id !== id));
 
     console.log('🔵 Accepting donation:', id);
 
-    // ✅ accept endpoint handles delivery_status internally
     const response = await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`, {});
-    
-    console.log('✅ Accept response:', response.data);
-
-    // ✅ if association pickup -> go assign
-    if (String(deliveryMethod).toLowerCase() === "association") {
-      const userDataStr = await AsyncStorage.getItem("user_data");
-      const userData = userDataStr ? JSON.parse(userDataStr) : null;
-      const associationId = userData?.association_id;
-
-      navigation.navigate("AssignDeliveryPerson", {
-        donation_id: id,
-        association_id: associationId,
-      });
-    }
+    console.log('✅ Accept response:', response);
   } catch (e) {
     console.error('❌ Accept error:', e.response?.data || e.message);
-    Alert.alert("Error", e.response?.data?.details || e.response?.data?.error || "Could not accept. Restoring item.");
+    Alert.alert("Error", e.response?.data?.details || e.response?.data?.error || "Could not accept. Restoring items.");
     fetchPending();
   } finally {
     setSubmitting((s) => {
       const c = { ...s };
-      delete c[id];
+      delete c[donation.donation_id];
       return c;
     });
   }
@@ -151,18 +141,27 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
   };
 
 
-  const rejectDonation = async (id) => {
+  const rejectDonation = async (donation) => {
     try {
+      const id = donation.donation_id;
       setSubmitting((s) => ({ ...s, [id]: "reject" }));
-      removeFromUI(id);
-      await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`);
+      
+      // Remove from UI
+      setPendingDonations((prev) => prev.filter((d) => d.donation_id !== id));
+
+      console.log('❌ Rejecting donation:', id);
+
+      await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`, {});
+      console.log('✅ Donation rejected');
+      
     } catch (e) {
-      Alert.alert("Error", "Could not reject. Restoring item.");
+      console.error('❌ Reject error:', e);
+      Alert.alert("Error", "Could not reject. Restoring items.");
       fetchPending();
     } finally {
       setSubmitting((s) => {
         const c = { ...s };
-        delete c[id];
+        delete c[donation.donation_id];
         return c;
       });
     }
@@ -196,9 +195,11 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
 
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.donor_name}</Text>
+          
           <Text numberOfLines={2} style={styles.subtitle}>
             {item.note || "No description"}
           </Text>
+          
           <Text style={styles.deadline}>
             Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
           </Text>
@@ -219,7 +220,7 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.btn, styles.acceptBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => acceptDonation(item.donation_id, item.delivery_method)}
+            onPress={() => acceptDonation(item)}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Accept</Text>
@@ -227,7 +228,7 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
 
           <TouchableOpacity
             style={[styles.btn, styles.rejectBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => rejectDonation(item.donation_id)}
+            onPress={() => rejectDonation(item)}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Reject</Text>
@@ -247,8 +248,6 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
       </View>
     );
   };
-
-  const keyExtractor = (item) => String(item.donation_id);
 
   const filterLabel = selectedDate === "ALL" ? "All Pending Dates" : selectedDate;
 
@@ -296,7 +295,7 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
         ) : (
           <FlatList
             data={filteredPending}
-            keyExtractor={keyExtractor}
+            keyExtractor={(item) => String(item.donation_id)}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
@@ -379,10 +378,9 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
               <TouchableOpacity
                 style={[styles.btn, styles.acceptBtn]}
                 onPress={() => {
-                  const id = selected?.donation_id;
                   setDetailsVisible(false);
+                  if (selected) acceptDonation(selected);
                   setSelected(null);
-                  if (id) acceptDonation(id, selected.delivery_method);
                 }}
               >
                 <Text style={styles.btnText}>Accept</Text>
@@ -391,10 +389,9 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
               <TouchableOpacity
                 style={[styles.btn, styles.rejectBtn]}
                 onPress={() => {
-                  const id = selected?.donation_id;
                   setDetailsVisible(false);
+                  if (selected) rejectDonation(selected);
                   setSelected(null);
-                  if (id) rejectDonation(id);
                 }}
               >
                 <Text style={styles.btnText}>Reject</Text>

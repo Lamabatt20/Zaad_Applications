@@ -19,6 +19,13 @@ import config from "../config";
 
 export default function MultiDonateClothesStep({ navigation, route }) {
   const { total = 1, index = 1, association, user: routeUser, savedAddress, savedCoords } = route.params || {};
+  
+  console.log("🎬 [MultiDonateClothesStep] Component initialized with:");
+  console.log("   - total:", total);
+  console.log("   - index:", index);
+  console.log("   - items count:", route.params?.items?.length || 0);
+  console.log("   - association:", association?.association_name || "none");
+  
   const [user, setUser] = useState(routeUser);
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -136,7 +143,9 @@ const removeImage = (uri) => {
 };
 
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    console.log("🚀 [handleNext] START - index:", index, "total:", total);
+    
     // Validate all steps are complete
     if (!step1Complete) {
       Alert.alert("Incomplete", "Please fill in category, description, and condition");
@@ -161,9 +170,14 @@ const removeImage = (uri) => {
 
     const previousItems = route.params?.items || [];
     const updatedItems = [...previousItems, currentItem];
+    
+    console.log("📋 [handleNext] previousItems count:", previousItems.length);
+    console.log("📋 [handleNext] updatedItems count:", updatedItems.length);
+    console.log("📋 [handleNext] updatedItems:", updatedItems.map((item, i) => `Item ${i+1}: ${item.category}`));
 
     // If more items to add, go to next item
     if (index < total) {
+      console.log("➡️ [handleNext] Going to NEXT item. index < total:", index, "<", total);
       navigation.replace("MultiDonateClothesStep", {
         total,
         index: index + 1,
@@ -174,14 +188,171 @@ const removeImage = (uri) => {
         savedCoords: coords,    // Pass coordinates to next item
       });
     } 
-    // All items collected, proceed to delivery method
+    // All items collected, create donations and proceed to delivery
     else {
-      navigation.navigate("DeliveryMethodScreen", {
-        association,
-        user,
-        donationType: "clothes",
-        items: updatedItems,
-      });
+      console.log("✨ [handleNext] FINAL SUBMISSION - Creating donations for ALL items");
+      console.log("✨ [handleNext] Total items to create:", updatedItems.length);
+      console.log("⚠️  [handleNext] ALL DONATIONS WILL BE CREATED WITH STATUS: 'pending'");
+      
+      setSubmitting(true);
+      try {
+        // Get user data with multiple fallbacks
+        let userData = user;
+        console.log("🔍 [handleNext] Current state user:", userData);
+        
+        // Try route params user
+        if (!userData) {
+          userData = route.params?.user;
+          console.log("🔍 [handleNext] Route params user:", userData);
+        }
+        
+        // Try AsyncStorage
+        if (!userData) {
+          const storedData = await AsyncStorage.getItem("user_data");
+          if (storedData) {
+            userData = JSON.parse(storedData);
+            console.log("🔍 [handleNext] AsyncStorage user:", userData);
+          }
+        }
+        
+        console.log("✅ [handleNext] Final userData:", userData);
+        console.log("🔍 [handleNext] userData properties:", userData ? Object.keys(userData) : "null");
+        
+        // Check for any user identifier
+        const userId = userData?.user_id || userData?.account_id;
+        const accountId = userData?.account_id;
+        
+        if (!userId && !accountId) {
+          console.log("❌ [handleNext] Missing user identifiers. userData keys:", userData ? Object.keys(userData) : "null");
+          console.log("❌ [handleNext] Full userData:", JSON.stringify(userData));
+          throw new Error("Session expired. Please log in again.");
+        }
+
+        // Fetch user data - try using account_id first, then user_id
+        console.log("📡 [handleNext] Fetching users...");
+        const usersRes = await fetch(`${config.API_URL}/users`);
+        if (!usersRes.ok) throw new Error("Failed to fetch users");
+        const users = await usersRes.json();
+        
+        let realUser;
+        if (accountId) {
+          realUser = users.find((u) => u.account_id === accountId);
+        } else if (userId) {
+          realUser = users.find((u) => u.user_id === userId);
+        }
+        
+        console.log("🔍 [handleNext] Found user:", realUser);
+        if (!realUser) {
+          console.log("❌ [handleNext] User not found. Searched for account_id:", accountId, "or user_id:", userId);
+          throw new Error("User not found in database");
+        }
+
+        console.log("📡 [handleNext] Fetching donors...");
+        const donorsRes = await fetch(`${config.API_URL}/donors`);
+        if (!donorsRes.ok) throw new Error("Failed to fetch donors");
+        const donors = await donorsRes.json();
+        
+        const donor = donors.find((d) => d.user_id === realUser.user_id);
+        console.log("🔍 [handleNext] Found donor:", donor);
+        if (!donor) throw new Error("Not registered as donor");
+
+        const donor_id = donor.user_id;
+
+        // Create donations for all items
+        const donationIds = [];
+        console.log("🔄 [handleNext] Starting donation creation loop for", updatedItems.length, "items");
+        
+        for (let i = 0; i < updatedItems.length; i++) {
+          const item = updatedItems[i];
+          console.log(`\n📦 [handleNext] ========== ITEM ${i + 1}/${updatedItems.length} ==========`);
+          console.log(`📦 [handleNext] Category: ${item.category}, Condition: ${item.condition}`);
+          console.log(`📦 [handleNext] Description: ${item.description?.substring(0, 50)}...`);
+          
+          const donationForm = new FormData();
+          donationForm.append("donor_id", donor_id);
+          donationForm.append("donation_type", "clothes");
+          donationForm.append("status", "pending");
+          donationForm.append("note", item.description);
+          donationForm.append("address", item.address);
+          
+          console.log(`📤 [handleNext] Sending donation with status: "pending"`);
+          
+          if (association?.association_id) {
+            donationForm.append("association_id", association.association_id);
+            console.log(`📤 [handleNext] Association ID: ${association.association_id}`);
+          }
+          if (item.images && item.images.length > 0) {
+            donationForm.append("item_image", {
+              uri: item.images[0],
+              name: "main.jpg",
+              type: "image/jpeg",
+            });
+          }
+
+          const donationRes = await fetch(`${config.API_URL}/donations`, {
+            method: "POST",
+            body: donationForm,
+          });
+          if (!donationRes.ok) {
+            const error = await donationRes.text();
+            throw new Error(error || "Failed to create donation");
+          }
+
+          const donationData = await donationRes.json();
+          console.log(`✅ [handleNext] Created donation ID: ${donationData.donation_id}`);
+          donationIds.push(donationData.donation_id);
+
+          // Create clothes donation record with JSON
+          const clothesPayload = {
+            donation_id: donationData.donation_id,
+            clothes_type: item.category || "Unspecified",
+            item_condition: item.condition || "New",
+          };
+
+          console.log(`📦 [handleNext] Creating clothes record with:`, clothesPayload);
+          const clothesRes = await fetch(`${config.API_URL}/clothes_donations`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(clothesPayload),
+          });
+          
+          if (!clothesRes.ok) {
+            const error = await clothesRes.text();
+            console.error(`❌ [handleNext] Clothes record error:`, error);
+            
+            // If duplicate key error, it means the clothes record already exists - skip it
+            if (error.includes("already exists") || error.includes("duplicate key")) {
+              console.log(`⚠️ [handleNext] Clothes record already exists for donation ${donationData.donation_id}, skipping...`);
+            } else {
+              throw new Error(error || "Failed to create clothes record");
+            }
+          } else {
+            console.log(`✅ [handleNext] Created clothes record for donation ${donationData.donation_id}`);
+          }
+        }
+
+        console.log("\n✅ [handleNext] ========== SUMMARY ==========");
+        console.log("✅ [handleNext] Total donations created:", donationIds.length);
+        console.log("✅ [handleNext] Donation IDs:", donationIds);
+        console.log("✅ [handleNext] ================================\n");
+        
+        // Navigate to delivery screen with all donation IDs
+        navigation.navigate("DeliveryMethodScreen", {
+          association,
+          user: userData,
+          donationType: "clothes",
+          items: updatedItems,
+          donation_ids: donationIds,  // Pass all donation IDs
+          donor_id,
+        });
+      } catch (err) {
+        console.error("❌ Error creating donations:", err);
+        Alert.alert("Error", err.message || "Failed to process donations");
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 

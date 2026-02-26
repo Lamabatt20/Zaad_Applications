@@ -42,6 +42,7 @@ export default function EnterQuantityScreen({ navigation, route }) {
 		}
 		if (donationType === "clothes") {
 			if (value > 1) {
+				console.log("➡️ [EnterQuantityScreen] Navigating to MultiDonateClothesStep with total:", value);
 				navigation.navigate("MultiDonateClothesStep", {
 					total: value,
 					index: 1,
@@ -49,6 +50,7 @@ export default function EnterQuantityScreen({ navigation, route }) {
 					user,
 				});
 			} else {
+				console.log("➡️ [EnterQuantityScreen] Navigating to DonateClothesScreen");
 				navigation.navigate("DonateClothesScreen", {
 					quantity: 1,
 					association,

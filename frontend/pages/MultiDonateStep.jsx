@@ -352,7 +352,7 @@ export default function MultiDonateStep({ route, navigation }) {
       const donationForm = new FormData();
       donationForm.append("donor_id", donor.user_id);
       donationForm.append("donation_type", donationType || "food");
-      donationForm.append("status", "accepted");
+      donationForm.append("status", "pending");
       donationForm.append("note", description);
       donationForm.append("address", address);
 

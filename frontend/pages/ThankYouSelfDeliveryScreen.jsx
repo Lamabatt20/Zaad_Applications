@@ -67,6 +67,7 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
     description,
     address,
     images,
+    donation_ids = null,  // Existing donation IDs from multi-donation flow
   } = route.params || {};
 
   const [darkMode, setDarkMode] = useState(false);
@@ -119,6 +120,64 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
      setLoading(true);
  
      try {
+       console.log("🚀 [ThankYouSelfDelivery] ========================================");
+       console.log("🚀 [ThankYouSelfDelivery] Starting submission");
+       console.log("🚀 [ThankYouSelfDelivery] donation_ids from params:", donation_ids);
+       console.log("🚀 [ThankYouSelfDelivery] donation_ids type:", typeof donation_ids);
+       console.log("🚀 [ThankYouSelfDelivery] Is array?:", Array.isArray(donation_ids));
+       console.log("🚀 [ThankYouSelfDelivery] Length:", donation_ids?.length);
+       console.log("🚀 [ThankYouSelfDelivery] ========================================");
+       
+       // If donations already exist (from MultiDonateClothesStep), just update delivery method
+       if (donation_ids && Array.isArray(donation_ids) && donation_ids.length > 0) {
+         console.log("✅ [ThankYouSelfDelivery] Using existing donations - NO NEW DONATIONS WILL BE CREATED");
+         console.log("✅ [ThankYouSelfDelivery] Existing donation IDs:", donation_ids);
+         
+         // Update delivery_method for each existing donation
+         for (const donationId of donation_ids) {
+           console.log(`📦 [ThankYouSelfDelivery] Updating donation ${donationId} with delivery method`);
+           
+           const updateRes = await fetch(`${config.API_URL}/donations/${donationId}`, {
+             method: "PATCH",
+             headers: {
+               "Content-Type": "application/json",
+             },
+             body: JSON.stringify({
+               delivery_method: "donor"
+             }),
+           });
+           
+           if (!updateRes.ok) {
+             const error = await updateRes.text();
+             console.error(`❌ [ThankYouSelfDelivery] Failed to update donation ${donationId}:`, error);
+           } else {
+             console.log(`✅ [ThankYouSelfDelivery] Updated donation ${donationId}`);
+           }
+         }
+         
+         Alert.alert(
+           "Request Sent ",
+           "Your donation request has been sent successfully.\n\n" +
+             "The association will review your request first.\n" +
+             "You will be notified once the donation is accepted,\n" +
+             "then you can deliver it to the association.",
+           [
+             {
+               text: "OK",
+               onPress: () => {
+                 navigation.popToTop();
+               },
+             },
+           ]
+         );
+         
+         setLoading(false);
+         return;
+       }
+       
+       // Original flow: Create new donation (for single donation or old flow)
+       console.log("📝 [ThankYouSelfDelivery] Creating NEW donation");
+       
        const userData = await AsyncStorage.getItem("user_data");
        if (!userData) throw new Error("Session expired");
  
@@ -153,7 +212,7 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
         donationForm.append("donor_id", donorId);
         donationForm.append("donation_type", donationType);
         donationForm.append("status", "pending");
-        donationForm.append("delivery_method", "association");
+        donationForm.append("delivery_method", "donor");
         donationForm.append("association_id", association.association_id);
 
         

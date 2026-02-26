@@ -1151,10 +1151,24 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
     delivery_method 
   } = req.body;
 
+  console.log("📥 [POST /donations] Received:", {
+    donor_id,
+    donation_type,
+    status,
+    address,
+    association_id,
+    delivery_method,
+    has_image: !!req.file
+  });
+
   try {
     const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const method = (delivery_method || 'donor').toLowerCase(); 
+    const method = (delivery_method || 'donor').toLowerCase();
+    const finalStatus = status || 'pending';
+    
+    console.log(`✨ [POST /donations] Creating with status: "${finalStatus}"`);
+    
     const result = await pool.query(
       `INSERT INTO donations
         (donor_id, donation_type, item_image, note, status, address, association_id, delivery_method)
@@ -1165,17 +1179,84 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
         donation_type,
         imagePath,
         note,
-        status || 'pending',
+        finalStatus,
         address,
         association_id || null,
         method
       ]
     );
 
+    console.log(`✅ [POST /donations] Created donation_id: ${result.rows[0].donation_id} with status: "${result.rows[0].status}"`);
     res.json(result.rows[0]);
   } catch (err) {
     console.error('❌ Donation creation error:', err);
     res.status(500).json({ success:false, message: err.message || "Server error" });
+  }
+});
+
+// PATCH /donations/:id - Update donation fields (e.g., delivery_method, status)
+app.patch('/donations/:id', async (req, res) => {
+  const { id } = req.params;
+  const { delivery_method, status, note, address } = req.body;
+  
+  try {
+    // Build dynamic update query based on provided fields
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+    
+    if (delivery_method !== undefined) {
+      updates.push(`delivery_method = $${paramIndex}`);
+      values.push(delivery_method);
+      paramIndex++;
+    }
+    if (status !== undefined) {
+      updates.push(`status = $${paramIndex}`);
+      values.push(status);
+      paramIndex++;
+    }
+    if (note !== undefined) {
+      updates.push(`note = $${paramIndex}`);
+      values.push(note);
+      paramIndex++;
+    }
+    if (address !== undefined) {
+      updates.push(`address = $${paramIndex}`);
+      values.push(address);
+      paramIndex++;
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "No fields to update" 
+      });
+    }
+    
+    values.push(id);
+    const query = `UPDATE donations SET ${updates.join(', ')} WHERE donation_id = $${paramIndex} RETURNING *`;
+    
+    console.log(`🔄 [PATCH /donations/${id}] Updating with:`, req.body);
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Donation not found" 
+      });
+    }
+    
+    console.log(`✅ [PATCH /donations/${id}] Updated successfully`);
+    res.json({
+      success: true,
+      donation: result.rows[0]
+    });
+  } catch (err) {
+    console.error(`❌ [PATCH /donations/${id}] Error:`, err);
+    res.status(500).json({ 
+      success: false, 
+      message: err.message || "Server error" 
+    });
   }
 });
 
@@ -1223,6 +1304,7 @@ app.post('/clothes_donations', async (req, res) => {
       `
       INSERT INTO clothes_donations (donation_id, clothes_type)
       VALUES ($1, $2)
+      ON CONFLICT (donation_id) DO NOTHING
       RETURNING *
       `,
       [donation_id, clothes_type]
@@ -1230,7 +1312,7 @@ app.post('/clothes_donations', async (req, res) => {
 
     res.json({
       success: true,
-      item: result.rows[0]
+      item: result.rows[0] || { donation_id, clothes_type }
     });
   } catch (err) {
     console.error("❌ clothes_donations error:", err);
@@ -2523,10 +2605,15 @@ app.post('/assoc/donations/:id/approve', async (req, res) => {
     const donation = d.rows[0];
     const method = donation.delivery_method || 'donor';
 
-    let nextDeliveryStatus =
-      method === 'association'
-        ? 'NEEDS_ASSIGNMENT'
-        : 'WAITING_FOR_DONOR';
+    const currentDeliveryStatus = donation.delivery_status;
+    let nextDeliveryStatus = currentDeliveryStatus;
+
+    if (!nextDeliveryStatus) {
+      nextDeliveryStatus =
+        method === 'association'
+          ? 'NEEDS_ASSIGNMENT'
+          : 'WAITING_FOR_DONOR';
+    }
 
     // 1️⃣ Update donation
     await pool.query(
