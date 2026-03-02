@@ -39,8 +39,9 @@ export default function DonationHistoryScreen({ navigation }) {
       const res = await axios.get(
         `${config.API_URL}/donation_history/donor/${userData.user_id}`
       );
-      setItems(res.data || []);
-    } catch (e) {
+      setItems(
+        (res.data || []).sort((a, b) => b.donation_id - a.donation_id)
+      );    } catch (e) {
       console.log("Error loading donation history:", e);
     } finally {
       setLoading(false);

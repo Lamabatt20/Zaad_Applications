@@ -252,6 +252,8 @@ const [feedbackSent, setFeedbackSent] = useState({});
             <Text style={styles.btnText}>Details</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 🔴 FEEDBACK (only when delivered) - moved to before details button */}
       </View>
     );
   };
