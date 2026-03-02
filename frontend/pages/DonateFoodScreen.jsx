@@ -71,12 +71,9 @@ export default function DonateFoodScreen({ navigation, route }) {
               normalizedCategory.includes(term)
             );
             if (isDairy) {
-              Alert.alert("Not allowed", "Dairy items are not accepted for donation.", [
-                {
-                  text: "OK",
-                  onPress: () => navigation.navigate("ChooseDonationType"),
-                },
-              ]);
+              Alert.alert("Not allowed", "Dairy items are not accepted for donation.");
+              setProductImages([]);
+              resetWorkflow();
               return;
             }
             if (product?.name) {
@@ -495,9 +492,9 @@ export default function DonateFoodScreen({ navigation, route }) {
           >
             <Text style={{ color: text }}>{address || "Use current location"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={requestAndFetchLocation} style={{ justifyContent: "center" }}>           
-            <Ionicons name="location" size={30} color={nextBtnBg} />
-          </TouchableOpacity>
+            <TouchableOpacity onPress={requestAndFetchLocation} style={{ justifyContent: "center" }}>           
+               <Ionicons name="location" size={30} color={nextBtnBg} />
+            </TouchableOpacity>
         </View>
 
         <Text style={[styles.label, { color: text, marginTop: 18 }]}>Product Photos (for AI check)</Text>
@@ -512,21 +509,19 @@ export default function DonateFoodScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
           ))}
-          {productImages.length === 0 && (
-            <TouchableOpacity
-              style={[styles.imagePickerBox, { borderColor: border }]}
-              onPress={() =>
-                Alert.alert("Add Product Photo", "Choose", [
-                  { text: "Camera", onPress: () => pickProductImage(true) },
-                  { text: "Gallery", onPress: () => pickProductImage(false) },
-                  { text: "Cancel", style: "cancel" },
-                ])
-              }
-              disabled={checkingAI || step3Complete}
-            >
-              {checkingAI ? <ActivityIndicator color="#A27571" /> : <Text style={styles.plus}>+</Text>}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.imagePickerBox, { borderColor: border }]}
+            onPress={() =>
+              Alert.alert("Add Product Photo", "Choose", [
+                { text: "Camera", onPress: () => pickProductImage(true) },
+                { text: "Gallery", onPress: () => pickProductImage(false) },
+                { text: "Cancel", style: "cancel" },
+              ])
+            }
+            disabled={checkingAI || step3Complete}
+          >
+            {checkingAI ? <ActivityIndicator color="#A27571" /> : <Text style={styles.plus}>+</Text>}
+          </TouchableOpacity>
         </View>
 
         {step1Complete && !step2Complete && (

@@ -55,7 +55,7 @@ export default function RegisterForDonor({ navigation }) {
    const phoneRegex = /^\+?\d{8,20}$/;
     if (!phone) newErrors.phone = 'Phone is required';
     else if (!phoneRegex.test(phone)) newErrors.phone = 'Phone must be 8-20 digits';
-    if (!address) newErrors.address = 'Address is required';
+    if (!address) newErrors.address = 'City is required';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -208,7 +208,7 @@ export default function RegisterForDonor({ navigation }) {
             styles.input,
             { backgroundColor: theme.inputBackground, borderColor: theme.border, color: theme.text },
           ]}
-          placeholder="Address"
+          placeholder="City"
           placeholderTextColor={theme.placeholder}
           value={address}
           onChangeText={setAddress}

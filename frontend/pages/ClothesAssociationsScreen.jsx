@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from "react-native";
+import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, Modal, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import SideMenu from "../components/SideMenu";
 import axios from "axios";
 import API from "../config";
@@ -7,6 +8,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function ClothesAssociationsScreen({ navigation, route }) {
   const [associations, setAssociations] = useState([]);
+  const [allAssociations, setAllAssociations] = useState([]);
+  const [showLocationFilters, setShowLocationFilters] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const { user_id, username, email, full_name, phone, role, address } =
     route?.params || {};
   const donationType =
@@ -14,6 +18,16 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
   
   // ✅ Get location filter from route params (from ChatBot)
   const filterLocation = route?.params?.location;
+
+  const locations = [
+    "Ramallah",
+    "Hebron",
+    "Nablus",
+    "Jenin",
+    "Jericho",
+    "Tulkarem",
+    "Bethlehem",
+  ];
 
   const [darkMode, setDarkMode] = useState(false);
 
@@ -27,25 +41,50 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
 
   useEffect(() => {
     fetchAssociations();
-  }, [donationType, filterLocation]);
+  }, [donationType]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [allAssociations, filterLocation, selectedLocation]);
 
   const fetchAssociations = async () => {
     try {
       const res = await axios.get(`${API.API_URL}/associations/${donationType}`);
       let data = Array.isArray(res.data) ? res.data : res.data.items || [];
-      
-      // Filter by location if provided (from ChatBot link)
-      if (filterLocation) {
-        data = data.filter(a =>
-          a.name?.toLowerCase().includes(filterLocation.toLowerCase()) ||
-          a.description?.toLowerCase().includes(filterLocation.toLowerCase()) ||
-          a.address?.toLowerCase().includes(filterLocation.toLowerCase())
-        );
-      }
-      
-      setAssociations(data);
+      setAllAssociations(data);
     } catch (err) {
     }
+  };
+
+  const associationSearchText = (association) => {
+    return [
+      association?.name,
+      association?.description,
+      association?.address,
+      association?.city,
+      association?.location,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  };
+
+  const applyFilters = () => {
+    let data = allAssociations;
+
+    if (filterLocation) {
+      data = data.filter((a) =>
+        associationSearchText(a).includes(filterLocation.toLowerCase())
+      );
+    }
+
+    if (selectedLocation) {
+      data = data.filter((a) =>
+        associationSearchText(a).includes(selectedLocation.toLowerCase())
+      );
+    }
+
+    setAssociations(data);
   };
 
   const bg = darkMode ? "#1c1c1c" : "#EBE1D7";
@@ -84,10 +123,73 @@ export default function ClothesAssociationsScreen({ navigation, route }) {
 
         <Text style={[styles.headerTitle, { color: text }]}>Clothes Donation</Text>
 
-        <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
-          <Image source={require("../assets/menu.png")} style={[styles.menuIcon, { tintColor: text }]} />
-        </TouchableOpacity>
+        <View style={styles.headerRightButtons}>
+          <TouchableOpacity
+            style={styles.filterButtonHeader}
+            onPress={() => setShowLocationFilters(true)}
+          >
+            <Ionicons name="filter" size={24} color={text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuButtonRight} onPress={openSidebar}>
+            <Image source={require("../assets/menu.png")} style={[styles.menuIcon, { tintColor: text }]} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {selectedLocation && (
+        <View style={styles.selectedFilterContainer}>
+          <Text style={[styles.selectedFilterText, { color: text }]}>City: {selectedLocation}</Text>
+          <TouchableOpacity onPress={() => setSelectedLocation(null)}>
+            <Ionicons name="close-circle" size={18} color={text} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <Modal
+        visible={showLocationFilters}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLocationFilters(false)}
+      >
+        <Pressable
+          style={styles.filterModalOverlay}
+          onPress={() => setShowLocationFilters(false)}
+        >
+          <Pressable
+            style={[
+              styles.filterModalCard,
+              { backgroundColor: darkMode ? "#2b2b2b" : "#fff" },
+            ]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.filterModalTitle, { color: text }]}>Filter by city</Text>
+
+            {locations.map((location) => {
+              const active = selectedLocation === location;
+              return (
+                <TouchableOpacity
+                  key={location}
+                  style={styles.filterOptionRow}
+                  onPress={() => {
+                    setSelectedLocation(location);
+                    setShowLocationFilters(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      { color: active ? "#4CAF50" : text },
+                    ]}
+                  >
+                    {location}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={18} color="#4CAF50" />}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <FlatList
         data={associations}
@@ -160,12 +262,27 @@ const styles = StyleSheet.create({
     fontFamily: "Times New Roman",
     fontSize: 25,
     color: "#8b6f69",
-    marginLeft: -150,
+    marginLeft: -100,
     marginBottom: 30,
   },
 
   menuButtonRight: {
-    padding: -10,
+    marginTop: -15,
+  },
+
+  headerRightButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  filterButtonHeader: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.08)",
     marginTop: -15,
   },
 
@@ -190,6 +307,58 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 10,
     marginBottom: -10,
+  },
+
+  selectedFilterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginLeft: 15,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
+
+  selectedFilterText: {
+    fontSize: 13,
+    marginRight: 6,
+    fontWeight: "500",
+  },
+
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  filterModalCard: {
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+
+  filterModalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 8,
+    paddingHorizontal: 6,
+  },
+
+  filterOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+
+  filterOptionText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
 
   bottomContainer: {

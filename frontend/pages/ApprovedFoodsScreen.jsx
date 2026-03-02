@@ -185,6 +185,56 @@ export default function ApprovedFoodScreen() {
           <Text style={styles.statusApproved}>Approved</Text>
         </View>
 
+        {/* 🔴 FEEDBACK (only when delivered) */}
+        {item.delivery_status === "DELIVERED" &&
+          !feedbackSent[item.donation_id] && (
+            <View style={styles.feedbackBox}>
+              <Text style={styles.feedbackTitle}>Feedback</Text>
+
+              <TextInput
+                placeholder="Write feedback..."
+                multiline
+                value={feedbackText[item.donation_id] || ""}
+                onChangeText={(text) =>
+                  setFeedbackText((prev) => ({
+                    ...prev,
+                    [item.donation_id]: text,
+                  }))
+                }
+                style={styles.feedbackInput}
+              />
+
+              <TouchableOpacity
+                disabled={sendingFeedback}
+                onPress={async () => {
+                  const msg = feedbackText[item.donation_id]?.trim();
+                  if (!msg) return;
+
+                  try {
+                    setSendingFeedback(true);
+                    await axios.post(`${config.API_URL}/delivery/feedback`, {
+                      donation_id: item.donation_id,
+                      message: msg,
+                    });
+
+                    setFeedbackText((prev) => ({
+                      ...prev,
+                      [item.donation_id]: "",
+                    }));
+                    setFeedbackSent((prev) => ({
+                      ...prev,
+                      [item.donation_id]: true,
+                    }));
+                  } finally {
+                    setSendingFeedback(false);
+                  }
+                }}
+              >
+                <Text style={styles.feedbackSend}>Send</Text>
+              </TouchableOpacity>
+            </View>
+        )}
+
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.btn, styles.detailsBtn]}
@@ -196,6 +246,8 @@ export default function ApprovedFoodScreen() {
             <Text style={styles.btnText}>Details</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 🔴 FEEDBACK (only when delivered) - moved to before details button */}
       </View>
     );
   };
@@ -364,55 +416,6 @@ export default function ApprovedFoodScreen() {
               <Text style={styles.modalDate}>
                 Driver: <Text style={{ fontWeight: "800" }}>{selected.delivery_person_name}</Text>
               </Text>
-            )}
-            {/* 🔴 FEEDBACK (only when delivered) */}
-            {selected?.delivery_status === "DELIVERED" &&
-              !feedbackSent[selected?.donation_id] && (
-                <View style={styles.feedbackBox}>
-                  <Text style={styles.feedbackTitle}>Feedback</Text>
-
-                  <TextInput
-                    placeholder="Write feedback..."
-                    multiline
-                    value={feedbackText[selected.donation_id] || ""}
-                    onChangeText={(text) =>
-                      setFeedbackText((prev) => ({
-                        ...prev,
-                        [selected.donation_id]: text,
-                      }))
-                    }
-                    style={styles.feedbackInput}
-                  />
-
-                  <TouchableOpacity
-                    disabled={sendingFeedback}
-                    onPress={async () => {
-                      const msg = feedbackText[selected.donation_id]?.trim();
-                      if (!msg) return;
-
-                      try {
-                        setSendingFeedback(true);
-                        await axios.post(`${config.API_URL}/delivery/feedback`, {
-                          donation_id: selected.donation_id,
-                          message: msg,
-                        });
-
-                        setFeedbackText((prev) => ({
-                          ...prev,
-                          [selected.donation_id]: "",
-                        }));
-                        setFeedbackSent((prev) => ({
-                          ...prev,
-                          [selected.donation_id]: true,
-                        }));
-                      } finally {
-                        setSendingFeedback(false);
-                      }
-                    }}
-                  >
-                    <Text style={styles.feedbackSend}>Send</Text>
-                  </TouchableOpacity>
-                </View>
             )}
 
             <View style={styles.modalActions}>

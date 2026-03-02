@@ -1055,7 +1055,12 @@ app.post('/donors', async (req, res) => {
 
 app.get('/associations', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM associations');
+    const result = await pool.query(`
+      SELECT a.*, acc.address
+      FROM associations a
+      LEFT JOIN users u ON u.user_id = a.user_id
+      LEFT JOIN accounts acc ON acc.account_id = u.account_id
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).send('Server error');
@@ -1072,7 +1077,11 @@ app.get('/associations/:param', async (req, res) => {
     if (!isNaN(param)) {
       // It's an ID - fetch specific association
       const result = await pool.query(
-        'SELECT * FROM associations WHERE association_id = $1',
+        `SELECT a.*, acc.address
+         FROM associations a
+         LEFT JOIN users u ON u.user_id = a.user_id
+         LEFT JOIN accounts acc ON acc.account_id = u.account_id
+         WHERE a.association_id = $1`,
         [parseInt(param)]
       );
       if (result.rows.length === 0) {
@@ -1084,9 +1093,21 @@ app.get('/associations/:param', async (req, res) => {
       // It's a donation type
       let query = '';
       if (param === 'clothes') {
-        query = "SELECT association_id, name, description, association_logo FROM associations WHERE clothes = true";
+        query = `
+          SELECT a.association_id, a.name, a.description, a.association_logo, acc.address
+          FROM associations a
+          LEFT JOIN users u ON u.user_id = a.user_id
+          LEFT JOIN accounts acc ON acc.account_id = u.account_id
+          WHERE a.clothes = true
+        `;
       } else if (param === 'food') {
-        query = "SELECT association_id, name, description, association_logo FROM associations WHERE food = true";
+        query = `
+          SELECT a.association_id, a.name, a.description, a.association_logo, acc.address
+          FROM associations a
+          LEFT JOIN users u ON u.user_id = a.user_id
+          LEFT JOIN accounts acc ON acc.account_id = u.account_id
+          WHERE a.food = true
+        `;
       } else {
         return res.status(400).json({ error: "Invalid donation type" });
       }
@@ -1197,65 +1218,97 @@ app.post('/donations', upload.single("item_image"), async (req, res) => {
 // PATCH /donations/:id - Update donation fields (e.g., delivery_method, status)
 app.patch('/donations/:id', async (req, res) => {
   const { id } = req.params;
-  const { delivery_method, status, note, address } = req.body;
-  
+  const { delivery_method } = req.body;
+
   try {
-    // Build dynamic update query based on provided fields
-    const updates = [];
-    const values = [];
-    let paramIndex = 1;
-    
-    if (delivery_method !== undefined) {
-      updates.push(`delivery_method = $${paramIndex}`);
-      values.push(delivery_method);
-      paramIndex++;
-    }
-    if (status !== undefined) {
-      updates.push(`status = $${paramIndex}`);
-      values.push(status);
-      paramIndex++;
-    }
-    if (note !== undefined) {
-      updates.push(`note = $${paramIndex}`);
-      values.push(note);
-      paramIndex++;
-    }
-    if (address !== undefined) {
-      updates.push(`address = $${paramIndex}`);
-      values.push(address);
-      paramIndex++;
-    }
-    
-    if (updates.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "No fields to update" 
+    /* =========================
+       0️⃣ Validation
+    ========================= */
+    if (!delivery_method) {
+      return res.status(400).json({
+        success: false,
+        message: "delivery_method is required",
       });
     }
-    
-    values.push(id);
-    const query = `UPDATE donations SET ${updates.join(', ')} WHERE donation_id = $${paramIndex} RETURNING *`;
-    
-    console.log(`🔄 [PATCH /donations/${id}] Updating with:`, req.body);
-    const result = await pool.query(query, values);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Donation not found" 
+
+    /* =========================
+       1️⃣ Get old delivery method
+    ========================= */
+    const beforeRes = await pool.query(
+      `
+      SELECT donor_id, delivery_method
+      FROM donations
+      WHERE donation_id = $1
+      `,
+      [id]
+    );
+
+    if (beforeRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Donation not found",
       });
     }
-    
-    console.log(`✅ [PATCH /donations/${id}] Updated successfully`);
-    res.json({
-      success: true,
-      donation: result.rows[0]
-    });
+
+    const {
+      donor_id,
+      delivery_method: oldMethodRaw,
+    } = beforeRes.rows[0];
+
+    // 🔑 Normalize old method (null => donor)
+    const oldMethod = oldMethodRaw || "donor";
+
+    /* =========================
+       2️⃣ Update delivery method
+    ========================= */
+    await pool.query(
+      `
+      UPDATE donations
+      SET delivery_method = $2
+      WHERE donation_id = $1
+      `,
+      [id, delivery_method]
+    );
+
+    /* =========================
+       3️⃣ Send notification ONLY if changed
+    ========================= */
+    if (oldMethod !== delivery_method && donor_id) {
+      const notificationMessage = JSON.stringify({
+        text:
+          delivery_method === "association"
+            ? "تم قبول تبرعك وسيتم استلامه بأقرب وقت، يمكنك تتبع الطلب"
+            : "تم قبول طلبك، يمكنك إيصال التبرع إلى عنوان الجمعية",
+        donation_id: id,
+        delivery_method,
+      });
+
+      await pool.query(
+        `
+        INSERT INTO notifications (user_id, type, message)
+        SELECT u.user_id, 'donation_accepted', $1
+        FROM donors d
+        JOIN users u ON u.user_id = d.user_id
+        WHERE d.user_id = $2
+        `,
+        [notificationMessage, donor_id]
+      );
+
+      console.log("📩 Delivery method notification sent");
+    } else {
+      console.log("🔕 No notification (method unchanged)");
+    }
+
+    /* =========================
+       4️⃣ Response
+    ========================= */
+    res.json({ success: true });
+
   } catch (err) {
-    console.error(`❌ [PATCH /donations/${id}] Error:`, err);
-    res.status(500).json({ 
-      success: false, 
-      message: err.message || "Server error" 
+    console.error("❌ [PATCH /donations/:id] Error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error",
     });
   }
 });
@@ -1263,23 +1316,63 @@ app.patch('/donations/:id', async (req, res) => {
 app.post('/food_donations', upload.none(), async (req, res) => {
   const { donation_id, category, expiry_date } = req.body;
   console.log("🍽️ [POST /food_donations] Request body:", { donation_id, category, expiry_date });
-  
+
   try {
     if (!donation_id) {
-      console.error("❌ donation_id is missing from request body");
       return res.status(400).json({
         success: false,
         message: "donation_id is required"
       });
     }
 
+    /* =========================
+       1️⃣ Insert food donation
+    ========================= */
     const result = await pool.query(
-      `INSERT INTO food_donations (donation_id, food_type, expiration_date)
-       VALUES ($1, $2, $3) RETURNING *`,
+      `
+      INSERT INTO food_donations (donation_id, food_type, expiration_date)
+      VALUES ($1, $2, $3)
+      RETURNING *
+      `,
       [donation_id, category || "غير محدد", expiry_date || null]
     );
-    console.log("✅ [POST /food_donations] Created:", result.rows[0]);
+
+    /* =========================
+       2️⃣ Get donation info
+    ========================= */
+    const donationRes = await pool.query(
+      `
+      SELECT donor_id
+      FROM donations
+      WHERE donation_id = $1
+      `,
+      [donation_id]
+    );
+
+    if (donationRes.rows.length === 0) {
+      return res.json(result.rows[0]);
+    }
+
+    const { donor_id } = donationRes.rows[0];
+
+    /* =========================
+       3️⃣ Add to donation history (ACCEPTED once)
+    ========================= */
+    await pool.query(
+      `
+      INSERT INTO donation_history (donation_id, donor_id, description)
+      SELECT $1, $2, 'ACCEPTED'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM donation_history
+        WHERE donation_id = $1
+          AND description = 'ACCEPTED'
+      )
+      `,
+      [donation_id, donor_id]
+    );
+
     res.json(result.rows[0]);
+
   } catch (err) {
     console.error("❌ [POST /food_donations] Error:", err.message);
     res.status(500).json({
@@ -1326,12 +1419,17 @@ app.post('/clothes_donations', async (req, res) => {
 
 app.get('/donation_history', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM donation_history');
+    const result = await pool.query(
+      'SELECT * FROM donation_history ORDER BY donation_id DESC'
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).send('Server error');
   }
 });
+
+
+
 
 app.post('/donation_history', async (req, res) => {
   const { donation_id, donor_id, quantity, description, event_time } = req.body;

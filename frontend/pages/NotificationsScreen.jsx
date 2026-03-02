@@ -19,6 +19,7 @@ export default function NotificationsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [items, setItems] = useState([]);
+  const [userId, setUserId] = useState(null);
 
   const API = axios.create({ baseURL: config.API_URL, timeout: 15000 });
 
@@ -55,13 +56,14 @@ export default function NotificationsScreen({ navigation }) {
       }
 
       const user = JSON.parse(userData);
-      const userId = user.user_id;
-      if (!userId) {
+      const _userId = user.user_id;
+      if (!_userId) {
         setItems([]);
         return;
       }
+      setUserId(_userId);
 
-      const res = await API.get(`/notifications/${userId}`);
+      const res = await API.get(`/notifications/${_userId}`);
 
       const mapped = res.data.map((n) => {
         const parsed = parseNotificationMessage(n.message);
@@ -112,7 +114,7 @@ export default function NotificationsScreen({ navigation }) {
       [
         {
           text: "View Rewards",
-          onPress: () => navigation.navigate("RewardScreen", { user_id: userId }),
+          onPress: () => userId && navigation.navigate("RewardScreen", { user_id: userId }),
         },
         { text: "OK" },
       ]

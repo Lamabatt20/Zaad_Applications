@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -65,7 +66,7 @@ export default function AcceptedClothesScreen({ navigation }) {
     delivery_status: x.delivery_status ?? null,
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setErrorMsg("");
       setLoading(true);
@@ -91,12 +92,17 @@ export default function AcceptedClothesScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedDate]);
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);

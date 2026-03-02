@@ -320,6 +320,8 @@ const [feedbackSent, setFeedbackSent] = useState({});
             );
           })}
         </View>
+
+        {/* 🔴 FEEDBACK (only when delivered) - moved to before details button */}
       </View>
     );
   };

@@ -23,8 +23,12 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
     address,
     images,
     donation_ids = null,  // Existing donation IDs from multi-donation flow
+    donation_id = null,   // Single donation ID from DonateFoodScreen
     delivery_method = "association",  // "association" or "donor"
   } = route.params || {};
+
+  // Normalize to array for consistent handling (multi-donate uses donation_ids, single food uses donation_id)
+  const normalizedDonationIds = donation_ids || (donation_id ? [donation_id] : null);
 
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,19 +45,18 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
     try {
       console.log("🚀 [UnderReviewDelivery] ========================================");
       console.log("🚀 [UnderReviewDelivery] Starting submission");
-      console.log("🚀 [UnderReviewDelivery] donation_ids from params:", donation_ids);
-      console.log("🚀 [UnderReviewDelivery] donation_ids type:", typeof donation_ids);
-      console.log("🚀 [UnderReviewDelivery] Is array?:", Array.isArray(donation_ids));
-      console.log("🚀 [UnderReviewDelivery] Length:", donation_ids?.length);
+      console.log("🚀 [UnderReviewDelivery] normalizedDonationIds:", normalizedDonationIds);
+      console.log("🚀 [UnderReviewDelivery] Is array?:", Array.isArray(normalizedDonationIds));
+      console.log("🚀 [UnderReviewDelivery] Length:", normalizedDonationIds?.length);
       console.log("🚀 [UnderReviewDelivery] ========================================");
       
-      // If donations already exist (from MultiDonateClothesStep), just update delivery method
-      if (donation_ids && Array.isArray(donation_ids) && donation_ids.length > 0) {
+      // If donations already exist (from DonateFoodScreen or MultiDonateClothesStep), just update delivery method
+      if (normalizedDonationIds && Array.isArray(normalizedDonationIds) && normalizedDonationIds.length > 0) {
         console.log("✅ [UnderReviewDelivery] Using existing donations - NO NEW DONATIONS WILL BE CREATED");
-        console.log("✅ [UnderReviewDelivery] Existing donation IDs:", donation_ids);
+        console.log("✅ [UnderReviewDelivery] Existing donation IDs:", normalizedDonationIds);
         
         // Update delivery_method for each existing donation
-        for (const donationId of donation_ids) {
+        for (const donationId of normalizedDonationIds) {
           console.log(`📦 [UnderReviewDelivery] Updating donation ${donationId} with delivery method`);
           
           const updateRes = await fetch(`${config.API_URL}/donations/${donationId}`, {
@@ -74,11 +77,18 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
           }
         }
         
-        Alert.alert(
-          "Request Sent 🤍",
-          "Your donation request was sent successfully.\n\n" +
+        const messageTitle = donationType === "food" ? "Thank You! " : "Request Sent ";
+        const messageBody = donationType === "food"
+          ? "Your food donation has been accepted!\n\n" +
+            "We are now finding a delivery person.\n" +
+            "You will be notified once assigned."
+          : "Your donation request was sent successfully.\n\n" +
             "The association will review it first.\n" +
-            "You will be notified once it is accepted.",
+            "You will be notified once it is accepted.";
+        
+        Alert.alert(
+          messageTitle,
+          messageBody,
           [{ text: "OK", onPress: () => navigation.popToTop() }]
         );
         
@@ -187,11 +197,18 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
         }
       }
 
-      Alert.alert(
-        "Request Sent 🤍",
-        "Your donation request was sent successfully.\n\n" +
+      const messageTitle = donationType === "food" ? "Thank You! ❤️" : "Request Sent 🤍";
+      const messageBody = donationType === "food"
+        ? "Your food donation has been accepted!\n\n" +
+          "We are now finding a delivery person.\n" +
+          "You will be notified once assigned."
+        : "Your donation request was sent successfully.\n\n" +
           "The association will review it first.\n" +
-          "You will be notified once it is accepted.",
+          "You will be notified once it is accepted.";
+      
+      Alert.alert(
+        messageTitle,
+        messageBody,
         [{ text: "OK", onPress: () => navigation.popToTop() }]
       );
     } catch (err) {
@@ -216,15 +233,13 @@ export default function UnderReviewDeliveryScreen({ navigation, route }) {
       />
 
       <Text style={[styles.title, { color: text }]}>
-        Request Under Review
+        {donationType === "food" ? "Thank You!" : "Request Under Review"}
       </Text>
 
       <Text style={[styles.message, { color: text }]}>
-        Your donation request has been submitted successfully.
-        {"\n\n"}
-        The association will review your request.
-        {"\n"}
-        You will be notified once it is accepted.
+        {donationType === "food"
+          ? "Your food donation has been accepted!\n\nWe are now finding a delivery person.\n\nYou will be notified once assigned."
+          : "Your donation request has been submitted successfully.\n\nThe association will review your request.\n\nYou will be notified once it is accepted."}
       </Text>
 
       <TouchableOpacity

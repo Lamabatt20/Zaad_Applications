@@ -68,15 +68,17 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
     address,
     images,
     donation_ids = null,  // Existing donation IDs from multi-donation flow
+    donation_id = null,   // Single donation ID from DonateFoodScreen
   } = route.params || {};
+
+  // Normalize to array for consistent handling (multi-donate uses donation_ids, single food uses donation_id)
+  const normalizedDonationIds = donation_ids || (donation_id ? [donation_id] : null);
 
   const [darkMode, setDarkMode] = useState(false);
   const [coords, setCoords] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  /* =========================
-     🔹 Load Theme
-  ========================= */
+
   useEffect(() => {
     AsyncStorage.getItem("dark_mode").then((v) => {
       if (v !== null) setDarkMode(v === "true");
@@ -84,7 +86,7 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
   }, []);
 
   /* =========================
-     🔹 Fetch Location
+     Fetch Location
   ========================= */
   useEffect(() => {
     fetchAssociationLocation();
@@ -113,34 +115,33 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
     }
   };
 
-  /* =========================
-     🔹 Submit Donation
-  ========================= */
+
   const submitDonation = async () => {
      setLoading(true);
  
      try {
        console.log("🚀 [ThankYouSelfDelivery] ========================================");
        console.log("🚀 [ThankYouSelfDelivery] Starting submission");
-       console.log("🚀 [ThankYouSelfDelivery] donation_ids from params:", donation_ids);
-       console.log("🚀 [ThankYouSelfDelivery] donation_ids type:", typeof donation_ids);
-       console.log("🚀 [ThankYouSelfDelivery] Is array?:", Array.isArray(donation_ids));
-       console.log("🚀 [ThankYouSelfDelivery] Length:", donation_ids?.length);
+       console.log("🚀 [ThankYouSelfDelivery] normalizedDonationIds:", normalizedDonationIds);
+       console.log("🚀 [ThankYouSelfDelivery] Is array?:", Array.isArray(normalizedDonationIds));
+       console.log("🚀 [ThankYouSelfDelivery] Length:", normalizedDonationIds?.length);
        console.log("🚀 [ThankYouSelfDelivery] ========================================");
        
-       // If donations already exist (from MultiDonateClothesStep), just update delivery method
-       if (donation_ids && Array.isArray(donation_ids) && donation_ids.length > 0) {
+       // If donations already exist (from DonateFoodScreen or MultiDonateClothesStep), just update delivery method
+       if (normalizedDonationIds && Array.isArray(normalizedDonationIds) && normalizedDonationIds.length > 0) {
          console.log("✅ [ThankYouSelfDelivery] Using existing donations - NO NEW DONATIONS WILL BE CREATED");
-         console.log("✅ [ThankYouSelfDelivery] Existing donation IDs:", donation_ids);
+         console.log("✅ [ThankYouSelfDelivery] Existing donation IDs:", normalizedDonationIds);
          
          // Update delivery_method for each existing donation
-         for (const donationId of donation_ids) {
+         for (const donationId of normalizedDonationIds) {
            console.log(`📦 [ThankYouSelfDelivery] Updating donation ${donationId} with delivery method`);
            
            const updateRes = await fetch(`${config.API_URL}/donations/${donationId}`, {
              method: "PATCH",
              headers: {
                "Content-Type": "application/json",
+
+
              },
              body: JSON.stringify({
                delivery_method: "donor"
@@ -149,18 +150,25 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
            
            if (!updateRes.ok) {
              const error = await updateRes.text();
-             console.error(`❌ [ThankYouSelfDelivery] Failed to update donation ${donationId}:`, error);
+             console.error(` [ThankYouSelfDelivery] Failed to update donation ${donationId}:`, error);
            } else {
-             console.log(`✅ [ThankYouSelfDelivery] Updated donation ${donationId}`);
+             console.log(`[ThankYouSelfDelivery] Updated donation ${donationId}`);
            }
          }
          
-         Alert.alert(
-           "Request Sent ",
-           "Your donation request has been sent successfully.\n\n" +
+         const messageTitle = donationType === "food" ? "Thank You!" : "Request Sent ";
+         const messageBody = donationType === "food" 
+           ? "Your food donation has been registered!\n\n" +
+             "People are waiting for your donation.\n" +
+             "Please deliver it as soon as possible.\n\n"
+           : "Your donation request has been sent successfully.\n\n" +
              "The association will review your request first.\n" +
              "You will be notified once the donation is accepted,\n" +
-             "then you can deliver it to the association.",
+             "then you can deliver it to the association.";
+         
+         Alert.alert(
+           messageTitle,
+           messageBody,
            [
              {
                text: "OK",
@@ -176,7 +184,7 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
        }
        
        // Original flow: Create new donation (for single donation or old flow)
-       console.log("📝 [ThankYouSelfDelivery] Creating NEW donation");
+       console.log("[ThankYouSelfDelivery] Creating NEW donation");
        
        const userData = await AsyncStorage.getItem("user_data");
        if (!userData) throw new Error("Session expired");
@@ -282,12 +290,20 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
            }
          }
        }
-    Alert.alert(
-      "Request Sent ",
-      "Your donation request has been sent successfully.\n\n" +
+    const messageTitle = donationType === "food" ? "Thank You! " : "Request Sent ";
+    const messageBody = donationType === "food" 
+      ? "Your food donation has been registered!\n\n" +
+        "People are waiting for your donation.\n" +
+        "Please deliver it as soon as possible.\n\n" +
+        "The association will guide you on the exact time and location."
+      : "Your donation request has been sent successfully.\n\n" +
         "The association will review your request first.\n" +
         "You will be notified once the donation is accepted,\n" +
-        "then you can deliver it to the address shown above.",
+        "then you can deliver it to the address shown above.";
+    
+    Alert.alert(
+      messageTitle,
+      messageBody,
       [
         {
           text: "OK",
@@ -313,17 +329,13 @@ export default function ThankYouSelfDeliveryScreen({ navigation, route }) {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <Text style={[styles.title, { color: text }]}>
-        Thank you for your donation 
+        {donationType === "food" ? "Thank you! ❤️" : "Thank you for your donation"}
       </Text>
 
       <Text style={[styles.message, { color: text }]}>
-        Your donation request has been sent successfully.
-        {"\n\n"}
-        The association will review your request first.
-        {"\n"}
-        You will be notified once the donation is accepted,
-        {"\n"}
-        then you can deliver it to the following address:
+        {donationType === "food"
+          ? "Your food donation has been registered!\n\nPeople are waiting for your donation.\nPlease deliver it as soon as possible.\n\nThe association will guide you on the exact time and location."
+          : "Your donation request has been sent successfully.\n\nThe association will review your request first.\n\nYou will be notified once the donation is accepted,\nthen you can deliver it to the following address:"}
         </Text>
 
 

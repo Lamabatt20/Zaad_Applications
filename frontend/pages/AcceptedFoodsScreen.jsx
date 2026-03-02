@@ -180,6 +180,8 @@ export default function AcceptedFoodScreen() {
     return st;
   };
 
+
+
   const renderItem = ({ item }) => {
     const dateStr = getYMD(item.created_at);
     const isSubmitting = !!submitting[item.donation_id];
