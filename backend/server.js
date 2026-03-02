@@ -2496,6 +2496,93 @@ app.post('/assoc/donations/:id/reject', async (req, res) => {
   }
 });
 
+// 🔵 BULK ACCEPT - Accept multiple donations at once
+app.post('/assoc/donations/bulk/accept', async (req, res) => {
+  const { donation_ids } = req.body;
+
+  if (!Array.isArray(donation_ids) || donation_ids.length === 0) {
+    return res.status(400).json({ ok: false, error: 'Invalid donation_ids' });
+  }
+
+  try {
+    console.log('🔵 Bulk accepting donations:', donation_ids);
+
+    // Get all donations first to determine delivery status for each
+    const donationsRes = await pool.query(
+      `SELECT donation_id, donor_id, delivery_method FROM donations WHERE donation_id = ANY($1)`,
+      [donation_ids]
+    );
+
+    if (donationsRes.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'No donations found' });
+    }
+
+    // Update all donations
+    const updateRes = await pool.query(
+      `UPDATE donations 
+       SET status='accepted', 
+           delivery_status = CASE 
+             WHEN delivery_method='association' THEN 'NEEDS_ASSIGNMENT'
+             ELSE 'WAITING_FOR_DONOR'
+           END
+       WHERE donation_id = ANY($1)
+       RETURNING donation_id, donor_id`,
+      [donation_ids]
+    );
+
+    // Insert history for each
+    for (const row of updateRes.rows) {
+      await pool.query(
+        `INSERT INTO donation_history (donation_id, donor_id, description)
+         VALUES ($1, $2, 'ACCEPTED')`,
+        [row.donation_id, row.donor_id]
+      );
+    }
+
+    console.log('✅ Bulk accept completed:', updateRes.rowCount, 'donations accepted');
+    res.json({ ok: true, count: updateRes.rowCount });
+  } catch (e) {
+    console.error('❌ Bulk accept error:', e);
+    res.status(500).json({ ok: false, error: 'Failed to accept donations' });
+  }
+});
+
+// ❌ BULK REJECT - Reject multiple donations at once
+app.post('/assoc/donations/bulk/reject', async (req, res) => {
+  const { donation_ids } = req.body;
+
+  if (!Array.isArray(donation_ids) || donation_ids.length === 0) {
+    return res.status(400).json({ ok: false, error: 'Invalid donation_ids' });
+  }
+
+  try {
+    console.log('❌ Bulk rejecting donations:', donation_ids);
+
+    const updateRes = await pool.query(
+      `UPDATE donations SET status='rejected' WHERE donation_id = ANY($1) RETURNING donation_id, donor_id`,
+      [donation_ids]
+    );
+
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'No donations found' });
+    }
+
+    // Insert history for each
+    for (const row of updateRes.rows) {
+      await pool.query(
+        `INSERT INTO donation_history (donation_id, donor_id, description)
+         VALUES ($1, $2, 'REJECTED')`,
+        [row.donation_id, row.donor_id]
+      );
+    }
+
+    console.log('✅ Bulk reject completed:', updateRes.rowCount, 'donations rejected');
+    res.json({ ok: true, count: updateRes.rowCount });
+  } catch (e) {
+    console.error('❌ Bulk reject error:', e);
+    res.status(500).json({ ok: false, error: 'Failed to reject donations' });
+  }
+});
 
 app.get('/donations/clothes/accepted', async (req, res) => {
   const { association_id } = req.query;

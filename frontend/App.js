@@ -40,7 +40,6 @@ import PendingAssociations from './pages/PendingAssociations';
 import WaitingApproval from './pages/WaitingForApprovalScreen';
 import VerifyPhone from './pages/VerifyPhone';
 import ScanScreen from './pages/ScanScreen';
-import ThankYouSelfDeliveryScreen from './pages/ThankYouSelfDeliveryScreen';
 import UnderReviewDeliveryScreen from './pages/UnderReviewDeliveryScreen';
 import DeliveryMethodScreen from './pages/DeliveryMethodScreen';
 import AddDeliveryPerson from './pages/AddDeliveryPersonScreen';
@@ -50,7 +49,6 @@ import DeliveryOrdersScreen from './pages/DeliveryOrdersScreen';
 import DeliveryTrackScreen from './pages/DeliveryTrackScreen';
 import DonationHistoryScreen from './pages/DonationHistoryScreen';
 import DonationTrackScreen from './pages/DonationTrackScreen';
-import DonationDeliverScreen from './pages/DonationDeliverScreen';
 import DonationRating from './pages/DonationRating';
 import DonationsReport from './pages/DonationsReport';
 import AdminUsersList from './pages/AdminUsersList';
@@ -101,7 +99,6 @@ export default function App() {
           <Stack.Screen name="VerifyPhone" component={VerifyPhone} />
           <Stack.Screen name="AssignDeliveryPerson" component={AssignDeliveryPerson} />
           <Stack.Screen name="ScanScreen" component={ScanScreen} />
-          <Stack.Screen name="ThankYouSelfDeliveryScreen" component={ThankYouSelfDeliveryScreen} />
           <Stack.Screen name="UnderReviewDeliveryScreen" component={UnderReviewDeliveryScreen} />
           <Stack.Screen name="DeliveryMethodScreen" component={DeliveryMethodScreen} />
           <Stack.Screen name="AddDeliveryPerson" component={AddDeliveryPerson} />
@@ -110,7 +107,6 @@ export default function App() {
           <Stack.Screen name="DeliveryTrackScreen" component={DeliveryTrackScreen} />
           <Stack.Screen name="DonationHistoryScreen" component={DonationHistoryScreen} />
           <Stack.Screen name="DonationTrackScreen" component={DonationTrackScreen} />
-          <Stack.Screen name="DonationDeliverScreen" component={DonationDeliverScreen} />
           <Stack.Screen name="DonationRating" component={DonationRating} />
           <Stack.Screen name="DonationsReport" component={DonationsReport} />
           <Stack.Screen name="AdminUsersList" component={AdminUsersList} />

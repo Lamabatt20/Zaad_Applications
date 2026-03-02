@@ -32,6 +32,10 @@ const [feedbackSent, setFeedbackSent] = useState({});
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
+  // ✅ Image viewer (full-screen zoom)
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+
   // ✅ Date filter (same as pending)
   const [selectedDate, setSelectedDate] = useState("ALL");
   const [filterVisible, setFilterVisible] = useState(false);
@@ -75,6 +79,7 @@ const [feedbackSent, setFeedbackSent] = useState({});
 
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
+    donor_id: x.donor_id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
     item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
     note: x.note ?? x.description ?? "",
@@ -145,112 +150,175 @@ const [feedbackSent, setFeedbackSent] = useState({});
   const filteredItems =
     selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
-  const renderItem = ({ item }) => {
-    const dateStr = getYMD(item.created_at);
+  // ✅ Group donations by donor_id and time
+  const groupDonations = (donations) => {
+    // Group by donor_id first
+    const byDonor = {};
+    donations.forEach((d) => {
+      if (!byDonor[d.donor_id]) {
+        byDonor[d.donor_id] = [];
+      }
+      byDonor[d.donor_id].push(d);
+    });
+
+    // Within each donor, group by time (5 minute windows)
+    const groups = [];
+    Object.values(byDonor).forEach((donorDonations) => {
+      const sorted = donorDonations.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      let currentGroup = [sorted[0]];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date(sorted[i - 1].created_at).getTime();
+        const curr = new Date(sorted[i].created_at).getTime();
+        const diffMinutes = (curr - prev) / (1000 * 60);
+
+        if (diffMinutes <= 5) {
+          currentGroup.push(sorted[i]);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = [sorted[i]];
+        }
+      }
+      if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+      }
+    });
+
+    return groups;
+  };
+
+  // ✅ Group the filtered items
+  const groupedItems = useMemo(() => {
+    return groupDonations(filteredItems);
+  }, [filteredItems]);
+
+  const renderItem = ({ item: group }) => {
+    const firstDonation = group[0];
 
     return (
       <View style={styles.card}>
-        {item.item_image ? (
-          <Image source={{ uri: item.item_image }} style={styles.itemImage} />
-        ) : (
-          <Image source={require("../assets/icon.png")} style={styles.itemImage} />
-        )}
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{item.donor_name}</Text>
-          <Text numberOfLines={2} style={styles.subtitle}>
-            {item.note || "No description"}
-          </Text>
-
-          <Text style={styles.deadline}>
-            Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
-          </Text>
-
-          {/* ✅ Delivery info */}
-          <Text style={styles.deliveryInfo}>
-            Delivery Method:{" "}
-            <Text style={{ fontWeight: "800" }}>
-              {item.delivery_method === "association" ? "Association Pickup" : "Donor will deliver"}
+        {/* Group Header */}
+        <View style={styles.groupHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{firstDonation.donor_name}</Text>
+            <Text style={styles.itemCount}>
+              {group.length} item{group.length > 1 ? "s" : ""}
             </Text>
-          </Text>
-
-          <Text style={styles.deliveryInfo}>
-            Delivery Status:{" "}
-            <Text style={{ fontWeight: "800" }}>
-              {formatDeliveryStatus(item.delivery_method, item.delivery_status)}
-            </Text>
-          </Text>
-          {item.delivery_method === "association" && !!item.delivery_person_name && (
-            <Text style={styles.deliveryInfo}>
-              Driver: <Text style={{ fontWeight: "800" }}>{item.delivery_person_name}</Text>
-            </Text>
-          )}
-        </View>
-        {/* 🔴 FEEDBACK (only when delivered) */}
-          {item.delivery_status === "DELIVERED" && !feedbackSent[item.donation_id] && (
-            <View style={styles.feedbackBox}>
-              <Text style={styles.feedbackTitle}>Feedback</Text>
-
-              <TextInput
-                placeholder="Write feedback..."
-                multiline
-                value={feedbackText[item.donation_id] || ""}
-                onChangeText={(text) =>
-                  setFeedbackText((prev) => ({
-                    ...prev,
-                    [item.donation_id]: text,
-                  }))
-                }
-                style={styles.feedbackInput}
-              />
-
-              <TouchableOpacity
-                disabled={sendingFeedback}
-                onPress={async () => {
-                  const msg = feedbackText[item.donation_id]?.trim();
-                  if (!msg) return;
-
-                  try {
-                    setSendingFeedback(true);
-                    await axios.post(`${config.API_URL}/delivery/feedback`, {
-                        donation_id: item.donation_id,
-                        message: msg,
-                      });
-
-                      
-                      setFeedbackText((prev) => ({
-                        ...prev,
-                        [item.donation_id]: "",
-                      }));
-                      setFeedbackSent((prev) => ({
-                        ...prev,
-                        [item.donation_id]: true,
-                      }));
-                  } finally {
-                    setSendingFeedback(false);
-                  }
-                }}
-              >
-                <Text style={styles.feedbackSend}>Send</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-         
-
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusApproved}>Approved</Text>
+          </View>
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusApproved}>Approved</Text>
+          </View>
         </View>
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn]}
-            onPress={() => {
-              setSelected(item);
-              setDetailsVisible(true);
-            }}
-          >
-            <Text style={styles.btnText}>Details</Text>
-          </TouchableOpacity>
+        {/* Items in Group */}
+        <View style={styles.itemsContainer}>
+          {group.map((item, idx) => {
+            const dateStr = getYMD(item.created_at);
+
+            return (
+              <View key={item.donation_id} style={[styles.groupItem, idx > 0 && styles.groupItemBorder]}>
+                <View style={styles.itemContent}>
+                  {item.item_image ? (
+                    <Image source={{ uri: item.item_image }} style={styles.itemImage} />
+                  ) : (
+                    <Image source={require("../assets/icon.png")} style={styles.itemImage} />
+                  )}
+
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text numberOfLines={2} style={styles.subtitle}>
+                      {item.note || "No description"}
+                    </Text>
+
+                    <Text style={styles.deadline}>
+                      Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
+                    </Text>
+
+                    {/* ✅ Delivery info */}
+                    <Text style={styles.deliveryInfo}>
+                      Method:{" "}
+                      <Text style={{ fontWeight: "700" }}>
+                        {item.delivery_method === "association" ? "Association Pickup" : "Donor will deliver"}
+                      </Text>
+                    </Text>
+
+                    <Text style={styles.deliveryInfo}>
+                      Status:{" "}
+                      <Text style={{ fontWeight: "700" }}>
+                        {formatDeliveryStatus(item.delivery_method, item.delivery_status)}
+                      </Text>
+                    </Text>
+                    {item.delivery_method === "association" && !!item.delivery_person_name && (
+                      <Text style={styles.deliveryInfo}>
+                        Driver: <Text style={{ fontWeight: "700" }}>{item.delivery_person_name}</Text>
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* 🔴 FEEDBACK (only when delivered) */}
+                {item.delivery_status === "DELIVERED" && !feedbackSent[item.donation_id] && (
+                  <View style={styles.feedbackBox}>
+                    <Text style={styles.feedbackTitle}>Feedback</Text>
+
+                    <TextInput
+                      placeholder="Write feedback..."
+                      multiline
+                      value={feedbackText[item.donation_id] || ""}
+                      onChangeText={(text) =>
+                        setFeedbackText((prev) => ({
+                          ...prev,
+                          [item.donation_id]: text,
+                        }))
+                      }
+                      style={styles.feedbackInput}
+                    />
+
+                    <TouchableOpacity
+                      disabled={sendingFeedback}
+                      onPress={async () => {
+                        const msg = feedbackText[item.donation_id]?.trim();
+                        if (!msg) return;
+
+                        try {
+                          setSendingFeedback(true);
+                          await axios.post(`${config.API_URL}/delivery/feedback`, {
+                              donation_id: item.donation_id,
+                              message: msg,
+                            });
+
+                          setFeedbackText((prev) => ({
+                            ...prev,
+                            [item.donation_id]: "",
+                          }));
+                          setFeedbackSent((prev) => ({
+                            ...prev,
+                            [item.donation_id]: true,
+                          }));
+                        } finally {
+                          setSendingFeedback(false);
+                        }
+                      }}
+                    >
+                      <Text style={styles.feedbackSend}>Send</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Item Details Button */}
+                <View style={styles.itemActionButtons}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.detailsBtn]}
+                    onPress={() => {
+                      setSelected(item);
+                      setDetailsVisible(true);
+                    }}
+                  >
+                    <Text style={styles.btnText}>Details</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
         </View>
       </View>
     );
@@ -345,8 +413,8 @@ const [feedbackSent, setFeedbackSent] = useState({});
           </View>
         ) : (
           <FlatList
-            data={filteredItems}
-            keyExtractor={(it) => String(it.donation_id)}
+            data={groupedItems}
+            keyExtractor={(it, idx) => `group-${idx}`}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
@@ -374,11 +442,20 @@ const [feedbackSent, setFeedbackSent] = useState({});
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Donation Details</Text>
 
-            {selected?.item_image ? (
-              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
-            ) : (
-              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
-            )}
+            {/* Clickable Image */}
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedImage(selected.item_image);
+                setImageViewerVisible(true);
+              }}
+            >
+              {selected?.item_image ? (
+                <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+              ) : (
+                <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+              )}
+              <Text style={{ fontSize: 12, color: "#8b6f69", marginBottom: 8, fontWeight: "600", textAlign: "center" }}>👆 Tap to zoom</Text>
+            </TouchableOpacity>
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
             <Text style={styles.modalDesc}>
@@ -421,6 +498,30 @@ const [feedbackSent, setFeedbackSent] = useState({});
               </TouchableOpacity>
             </View>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Full-Screen Image Viewer */}
+      <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)}>
+        <Pressable
+          style={styles.imageViewerOverlay}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <View style={styles.imageViewerContent}>
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage }} style={styles.imageViewerImage} resizeMode="contain" />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.imageViewerImage} resizeMode="contain" />
+            )}
+
+            {/* Close Button */}
+            <TouchableOpacity
+              style={styles.imageCloseBtn}
+              onPress={() => setImageViewerVisible(false)}
+            >
+              <Text style={styles.imageCloseBtnText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -466,7 +567,14 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     elevation: 3,
   },
-  itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
+  groupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  itemCount: { fontSize: 12, color: "#666", marginTop: 3 },
+  itemsContainer: { marginBottom: 15 },
+  groupItem: { paddingVertical: 10 },
+  groupItemBorder: { borderTopWidth: 1, borderTopColor: "#e0e0e0" },
+  itemContent: { flexDirection: "row", alignItems: "flex-start" },
+  itemImage: { width: 70, height: 70, borderRadius: 10 },
+  itemActionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 10 },
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
@@ -484,8 +592,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  actionButtons: { flexDirection: "row", justifyContent: "flex-start", marginTop: 15 },
-  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
+  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center", flex: 1 },
   detailsBtn: { backgroundColor: "#8b6f69" },
   closeBtn: { backgroundColor: "#8b6f69" },
   btnText: { color: "#fff", fontWeight: "700" },
@@ -604,5 +711,35 @@ feedbackSend: {
   alignSelf: "flex-end",
   fontWeight: "800",
   color: "#8b6f69",
+},
+// Image Viewer Styles
+imageViewerOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.95)",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+},
+imageViewerContent: {
+  width: "100%",
+  height: "100%",
+  justifyContent: "center",
+  alignItems: "center",
+},
+imageViewerImage: {
+  width: "100%",
+  height: "80%",
+},
+imageCloseBtn: {
+  backgroundColor: "#8b6f69",
+  paddingVertical: 10,
+  paddingHorizontal: 20,
+  borderRadius: 8,
+  marginTop: 20,
+},
+imageCloseBtnText: {
+  color: "#fff",
+  fontWeight: "700",
+  fontSize: 14,
 },
 });

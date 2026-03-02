@@ -40,7 +40,7 @@ export default function DeliveryMethodScreen({ navigation, route }) {
         Please select how you would like your donation to be delivered.
       </Text>
 
-      {/* Self Delivery */}
+      {/* Self Delivery - DISABLED: Uses react-native-maps which is not compatible with web
       <TouchableOpacity
         style={[styles.card, { backgroundColor: cardBg }]}
         onPress={() =>
@@ -55,6 +55,7 @@ export default function DeliveryMethodScreen({ navigation, route }) {
           I will deliver it myself
         </Text>
       </TouchableOpacity>
+      */}
 
       {/* Delivery Service */}
       <TouchableOpacity

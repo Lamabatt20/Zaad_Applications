@@ -29,6 +29,10 @@ export default function RejectedClothesScreen() {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
+  // ✅ Image viewer (full-screen zoom)
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+
   // ✅ Date filter (Dropdown)
   const [selectedDate, setSelectedDate] = useState("ALL");
    const [filterVisible, setFilterVisible] = useState(false);
@@ -56,6 +60,7 @@ export default function RejectedClothesScreen() {
 
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id ?? x.id,
+    donor_id: x.donor_id,
     donor_name: x.donor_name ?? x.full_name ?? "Donor",
     item_image: buildImageUrl(x.item_image ?? x.photo_url ?? null),
     note: x.note ?? x.description ?? "",
@@ -161,60 +166,125 @@ export default function RejectedClothesScreen() {
   const filteredItems =
     selectedDate === "ALL" ? items : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
+  // ✅ Group donations
+  const groupDonations = (donations) => {
+    // Group by donor_id first
+    const byDonor = {};
+    donations.forEach((d) => {
+      if (!byDonor[d.donor_id]) {
+        byDonor[d.donor_id] = [];
+      }
+      byDonor[d.donor_id].push(d);
+    });
+
+    // Within each donor, group by time (5 minute windows)
+    const groups = [];
+    Object.values(byDonor).forEach((donorDonations) => {
+      const sorted = donorDonations.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      let currentGroup = [sorted[0]];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date(sorted[i - 1].created_at).getTime();
+        const curr = new Date(sorted[i].created_at).getTime();
+        const diffMinutes = (curr - prev) / (1000 * 60);
+
+        if (diffMinutes <= 5) {
+          currentGroup.push(sorted[i]);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = [sorted[i]];
+        }
+      }
+      if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+      }
+    });
+
+    return groups;
+  };
+
+  // ✅ Group the filtered items
+  const groupedItems = useMemo(() => {
+    return groupDonations(filteredItems);
+  }, [filteredItems]);
+
   const filterLabel = selectedDate === "ALL" ? "All Rejected Dates" : selectedDate;
 
-  const renderItem = ({ item }) => {
-    const isSubmitting = !!submitting[item.donation_id];
-    const dateStr = getYMD(item.created_at);
-
-    const rejectTime = getRejectTime(item);
-    const showRestore = canRestore(rejectTime);
-    const left = minutesLeft(rejectTime);
+  const renderItem = ({ item: group }) => {
+    const firstDonation = group[0];
 
     return (
       <View style={styles.card}>
-        {item.item_image ? (
-          <Image source={{ uri: item.item_image }} style={styles.itemImage} />
-        ) : (
-          <Image source={require("../assets/icon.png")} style={styles.itemImage} />
-        )}
-
-        <Text style={styles.title}>{item.donor_name}</Text>
-        <Text style={styles.subtitle} numberOfLines={2}>
-          {item.note || "No description"}
-        </Text>
-        <Text style={styles.date}>Date: {dateStr || "-"}</Text>
-
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusRejected}>Rejected</Text>
+        {/* Group Header */}
+        <View style={styles.groupHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{firstDonation.donor_name}</Text>
+            <Text style={styles.itemCount}>
+              {group.length} item{group.length > 1 ? "s" : ""}
+            </Text>
+          </View>
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusRejected}>Rejected</Text>
+          </View>
         </View>
 
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => {
-              setSelected(item);
-              setDetailsVisible(true);
-            }}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Details</Text>
-          </TouchableOpacity>
+        {/* Items in Group */}
+        <View style={styles.itemsContainer}>
+          {group.map((item, idx) => {
+            const isSubmitting = !!submitting[item.donation_id];
+            const dateStr = getYMD(item.created_at);
+            const rejectTime = getRejectTime(item);
+            const showRestore = canRestore(rejectTime);
+            const left = minutesLeft(rejectTime);
 
-          {showRestore && (
-            <TouchableOpacity
-              style={[styles.btn, styles.restoreBtn, isSubmitting && { opacity: 0.6 }]}
-              onPress={() => restoreDonation(item.donation_id)}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.btnText}>Restore</Text>
-              <Text style={styles.timerText}>{left} min left</Text>
-            </TouchableOpacity>
-          )}
+            return (
+              <View key={item.donation_id} style={[styles.groupItem, idx > 0 && styles.groupItemBorder]}>
+                <View style={styles.itemContent}>
+                  {item.item_image ? (
+                    <Image source={{ uri: item.item_image }} style={styles.itemImage} />
+                  ) : (
+                    <Image source={require("../assets/icon.png")} style={styles.itemImage} />
+                  )}
+
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.subtitle} numberOfLines={2}>
+                      {item.note || "No description"}
+                    </Text>
+                    <Text style={styles.date}>Date: {dateStr || "-"}</Text>
+                  </View>
+                </View>
+
+                {/* Item Action Buttons */}
+                <View style={styles.itemActionButtons}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
+                    onPress={() => {
+                      setSelected(item);
+                      setDetailsVisible(true);
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.btnText}>Details</Text>
+                  </TouchableOpacity>
+
+                  {showRestore && (
+                    <TouchableOpacity
+                      style={[styles.btn, styles.restoreBtn, isSubmitting && { opacity: 0.6 }]}
+                      onPress={() => restoreDonation(item.donation_id)}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.btnText}>Restore</Text>
+                      <Text style={styles.timerText}>{left} min</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* force re-render for countdown */}
+                <Text style={{ display: "none" }}>{tick}</Text>
+              </View>
+            );
+          })}
         </View>
-
-        {/* force re-render for countdown */}
-        <Text style={{ display: "none" }}>{tick}</Text>
       </View>
     );
   };
@@ -305,8 +375,8 @@ export default function RejectedClothesScreen() {
         <ActivityIndicator size="large" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={filteredItems}
-          keyExtractor={(item) => String(item.donation_id)}
+          data={groupedItems}
+          keyExtractor={(item, idx) => `group-${idx}`}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 20, paddingBottom: 30 }}
           ListEmptyComponent={
@@ -333,11 +403,20 @@ export default function RejectedClothesScreen() {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Donation Details</Text>
 
-            {selected?.item_image ? (
-              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
-            ) : (
-              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
-            )}
+            {/* Clickable Image */}
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedImage(selected.item_image);
+                setImageViewerVisible(true);
+              }}
+            >
+              {selected?.item_image ? (
+                <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+              ) : (
+                <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+              )}
+              <Text style={{ fontSize: 12, color: "#8b6f69", marginBottom: 8, fontWeight: "600", textAlign: "center" }}>👆 Tap to zoom</Text>
+            </TouchableOpacity>
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
 
@@ -378,6 +457,30 @@ export default function RejectedClothesScreen() {
               </TouchableOpacity>
             </View>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Full-Screen Image Viewer */}
+      <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)}>
+        <Pressable
+          style={styles.imageViewerOverlay}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <View style={styles.imageViewerContent}>
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage }} style={styles.imageViewerImage} resizeMode="contain" />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.imageViewerImage} resizeMode="contain" />
+            )}
+
+            {/* Close Button */}
+            <TouchableOpacity
+              style={styles.imageCloseBtn}
+              onPress={() => setImageViewerVisible(false)}
+            >
+              <Text style={styles.imageCloseBtnText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -455,18 +558,24 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
+  groupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  itemCount: { fontSize: 12, color: "#666", marginTop: 3 },
+  itemsContainer: { marginBottom: 15 },
+  groupItem: { paddingVertical: 10 },
+  groupItemBorder: { borderTopWidth: 1, borderTopColor: "#e0e0e0" },
+  itemContent: { flexDirection: "row", alignItems: "flex-start" },
   itemImage: {
     width: 70,
     height: 70,
     borderRadius: 10,
-    marginBottom: 8,
   },
+  itemActionButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, gap: 5 },
 
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 4 },
   date: { fontSize: 13, color: "#444" },
 
-  statusContainer: { position: "absolute", right: 10, top: 10 },
+  statusContainer: { position: "absolute", right: 15, top: 15 },
   statusRejected: {
     backgroundColor: "#ef4444",
     color: "#fff",
@@ -476,21 +585,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  actions: { flexDirection: "row", gap: 10, marginTop: 12, flexWrap: "wrap" },
-
   btn: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
     alignItems: "center",
+    flex: 1,
   },
 
   detailsBtn: { backgroundColor: "#8b6f69" },
   restoreBtn: { backgroundColor: "#fea86e" },
   closeBtn: { backgroundColor: "#8b6f69" },
 
-  btnText: { color: "#fff", fontWeight: "700" },
-  timerText: { color: "#fff", fontSize: 10, marginTop: 2, opacity: 0.9 },
+  btnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  timerText: { color: "#fff", fontSize: 9, marginTop: 1, opacity: 0.9 },
 
   // ✅ Modal
   modalOverlay: {
@@ -528,4 +636,34 @@ const styles = StyleSheet.create({
   modalDate: { fontSize: 13, color: "#666", marginBottom: 6 },
   modalHint: { fontSize: 12, color: "#8b6f69", marginBottom: 12 },
   modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
+  // Image Viewer Styles
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  imageViewerContent: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerImage: {
+    width: "100%",
+    height: "80%",
+  },
+  imageCloseBtn: {
+    backgroundColor: "#8b6f69",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  imageCloseBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 });

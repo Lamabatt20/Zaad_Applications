@@ -26,7 +26,11 @@ export default function PendingClothesScreen({ navigation }) {
 
   // ✅ Details modal
   const [detailsVisible, setDetailsVisible] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+
+  // ✅ Image viewer (full-screen zoom)
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   // ✅ Date filter
   const [selectedDate, setSelectedDate] = useState("ALL");
@@ -49,21 +53,82 @@ export default function PendingClothesScreen({ navigation }) {
   delivery_method: String(x.delivery_method ?? x.deliveryMethod ?? "donor").trim().toLowerCase(),
 });
 
+const groupDonations = (donations) => {
+  // Group by donor_id first
+  const byDonor = {};
+  donations.forEach((d) => {
+    if (!byDonor[d.donor_id]) {
+      byDonor[d.donor_id] = [];
+    }
+    byDonor[d.donor_id].push(d);
+  });
+
+  // Within each donor, group by time (5 minute windows)
+  const groups = [];
+  Object.values(byDonor).forEach((donorDonations) => {
+    const sorted = donorDonations.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    let currentGroup = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = new Date(sorted[i - 1].created_at).getTime();
+      const curr = new Date(sorted[i].created_at).getTime();
+      const diffMinutes = (curr - prev) / (1000 * 60);
+
+      if (diffMinutes <= 5) {
+        currentGroup.push(sorted[i]);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [sorted[i]];
+      }
+    }
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+  });
+
+  return groups;
+};
+
 const acceptDonation = async (donation) => {
   try {
     const id = donation.donation_id;
     setSubmitting((s) => ({ ...s, [id]: "accept" }));
-    
+
     // Remove from UI
     setPendingDonations((prev) => prev.filter((d) => d.donation_id !== id));
 
-    console.log('🔵 Accepting donation:', id);
+    console.log("🔵 Accepting donation:", id);
 
     const response = await axios.post(`${config.API_URL}/assoc/donations/${id}/accept`, {});
-    console.log('✅ Accept response:', response);
+    console.log("✅ Accept response:", response.data);
   } catch (e) {
-    console.error('❌ Accept error:', e.response?.data || e.message);
-    Alert.alert("Error", e.response?.data?.details || e.response?.data?.error || "Could not accept. Restoring items.");
+    console.error("❌ Accept error:", e.response?.data || e.message);
+    Alert.alert("Error", e.response?.data?.error || e.response?.data?.details || "Could not accept. Restoring items.");
+    fetchPending();
+  } finally {
+    setSubmitting((s) => {
+      const c = { ...s };
+      delete c[donation.donation_id];
+      return c;
+    });
+  }
+};
+
+const rejectDonation = async (donation) => {
+  try {
+    const id = donation.donation_id;
+    setSubmitting((s) => ({ ...s, [id]: "reject" }));
+
+    // Remove from UI
+    setPendingDonations((prev) => prev.filter((d) => d.donation_id !== id));
+
+    console.log("❌ Rejecting donation:", id);
+
+    const response = await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`, {});
+    console.log("✅ Reject response:", response.data);
+  } catch (e) {
+    console.error("❌ Reject error:", e.response?.data || e.message);
+    Alert.alert("Error", e.response?.data?.error || "Could not reject. Restoring items.");
     fetchPending();
   } finally {
     setSubmitting((s) => {
@@ -136,37 +201,6 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
     fetchPending();
   };
 
-  const removeFromUI = (id) => {
-    setPendingDonations((prev) => prev.filter((d) => String(d.donation_id) !== String(id)));
-  };
-
-
-  const rejectDonation = async (donation) => {
-    try {
-      const id = donation.donation_id;
-      setSubmitting((s) => ({ ...s, [id]: "reject" }));
-      
-      // Remove from UI
-      setPendingDonations((prev) => prev.filter((d) => d.donation_id !== id));
-
-      console.log('❌ Rejecting donation:', id);
-
-      await axios.post(`${config.API_URL}/assoc/donations/${id}/reject`, {});
-      console.log('✅ Donation rejected');
-      
-    } catch (e) {
-      console.error('❌ Reject error:', e);
-      Alert.alert("Error", "Could not reject. Restoring items.");
-      fetchPending();
-    } finally {
-      setSubmitting((s) => {
-        const c = { ...s };
-        delete c[donation.donation_id];
-        return c;
-      });
-    }
-  };
-
   const allDates = useMemo(() => {
     const set = new Set();
     pendingDonations.forEach((d) => {
@@ -181,69 +215,92 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
       ? pendingDonations
       : pendingDonations.filter((d) => getYMD(d.created_at) === selectedDate);
 
-  const renderItem = ({ item }) => {
-    const dateStr = getYMD(item.created_at);
-    const isSubmitting = Boolean(submitting[item.donation_id]);
+  // Group the filtered donations
+  const groupedPending = useMemo(() => {
+    return groupDonations(filteredPending);
+  }, [filteredPending]);
+
+  const renderItem = ({ item: group }) => {
+    const firstDonation = group[0];
 
     return (
       <View style={styles.card}>
-        {item.item_image ? (
-          <Image source={{ uri: item.item_image }} style={styles.itemImage} />
-        ) : (
-          <Image source={require("../assets/icon.png")} style={styles.itemImage} />
-        )}
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{item.donor_name}</Text>
-          
-          <Text numberOfLines={2} style={styles.subtitle}>
-            {item.note || "No description"}
-          </Text>
-          
-          <Text style={styles.deadline}>
-            Date: <Text style={{ fontWeight: "700" }}>{dateStr || "-"}</Text>
-          </Text>
-          <Text style={styles.deadline}>
-            Delivery:{" "}
-            <Text style={{ fontWeight: "700" }}>
-              {item.delivery_method === "association"
-                ? "Association Pickup"
-                : "Donor will deliver"}
+        {/* Group Header */}
+        <View style={styles.groupHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{firstDonation.donor_name}</Text>
+            <Text style={styles.itemCount}>
+              {group.length} item{group.length > 1 ? "s" : ""}
             </Text>
-          </Text>
+          </View>
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusPending}>Pending</Text>
+          </View>
         </View>
 
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusPending}>Pending</Text>
-        </View>
+        {/* Items in Group */}
+        <View style={styles.itemsContainer}>
+          {group.map((item, idx) => {
+            const isSubmitting = Boolean(submitting[item.donation_id]);
+            return (
+              <View key={item.donation_id} style={[styles.groupItem, idx > 0 && styles.groupItemBorder]}>
+                <View style={styles.itemContent}>
+                  {item.item_image ? (
+                    <Image source={{ uri: item.item_image }} style={styles.itemImage} />
+                  ) : (
+                    <Image source={require("../assets/icon.png")} style={styles.itemImage} />
+                  )}
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.btn, styles.acceptBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => acceptDonation(item)}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Accept</Text>
-          </TouchableOpacity>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text numberOfLines={2} style={styles.subtitle}>
+                      {item.note || "No description"}
+                    </Text>
+                    <Text style={styles.deadline}>
+                      Date: <Text style={{ fontWeight: "700" }}>{getYMD(item.created_at) || "-"}</Text>
+                    </Text>
+                    <Text style={styles.deadline}>
+                      Delivery:{" "}
+                      <Text style={{ fontWeight: "700" }}>
+                        {item.delivery_method === "association"
+                          ? "Association Pickup"
+                          : "Donor will deliver"}
+                      </Text>
+                    </Text>
+                  </View>
+                </View>
 
-          <TouchableOpacity
-            style={[styles.btn, styles.rejectBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => rejectDonation(item)}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Reject</Text>
-          </TouchableOpacity>
+                {/* Item Action Buttons */}
+                <View style={styles.itemActionButtons}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.acceptBtn, isSubmitting && { opacity: 0.6 }]}
+                    onPress={() => acceptDonation(item)}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.btnText}>Accept</Text>
+                  </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => {
-              setSelected(item);
-              setDetailsVisible(true);
-            }}
-            disabled={isSubmitting}
-          >
-            <Text style={styles.btnText}>Details</Text>
-          </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.rejectBtn, isSubmitting && { opacity: 0.6 }]}
+                    onPress={() => rejectDonation(item)}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.btnText}>Reject</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
+                    onPress={() => {
+                      setSelectedItem(item);
+                      setDetailsVisible(true);
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.btnText}>Details</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
         </View>
       </View>
     );
@@ -294,8 +351,8 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
           </View>
         ) : (
           <FlatList
-            data={filteredPending}
-            keyExtractor={(item) => String(item.donation_id)}
+            data={groupedPending}
+            keyExtractor={(item, idx) => `group-${idx}`}
             renderItem={renderItem}
             contentContainerStyle={{ paddingBottom: 30, paddingHorizontal: 20 }}
             ListEmptyComponent={
@@ -350,64 +407,102 @@ console.log("delivery_method RAW:", res.data?.[0]?.delivery_method);
           style={styles.modalOverlay}
           onPress={() => {
             setDetailsVisible(false);
-            setSelected(null);
+            setSelectedItem(null);
           }}
         >
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Donation Details</Text>
 
-            {selected?.item_image ? (
-              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+            {selectedItem && (
+              <>
+                {/* Clickable Image */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedImage(selectedItem.item_image);
+                    setImageViewerVisible(true);
+                  }}
+                >
+                  {selectedItem.item_image ? (
+                    <Image source={{ uri: selectedItem.item_image }} style={styles.modalImage} />
+                  ) : (
+                    <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+                  )}
+                  <Text style={{ fontSize: 12, color: "#8b6f69", marginBottom: 8, fontWeight: "600", textAlign: "center" }}>👆 Tap to zoom</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.modalName}>{selectedItem.donor_name || "Donor"}</Text>
+                <Text style={styles.modalDesc}>{selectedItem.note?.trim() ? selectedItem.note : "No description"}</Text>
+                <Text style={styles.modalDate}>Date: {getYMD(selectedItem.created_at) || "-"}</Text>
+                <Text style={styles.modalDate}>
+                  Delivery:{" "}
+                  <Text style={{ fontWeight: "700" }}>
+                    {selectedItem.delivery_method === "association"
+                      ? "Association Pickup"
+                      : "Donor will deliver"}
+                  </Text>
+                </Text>
+
+                {/* Modal Actions */}
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.acceptBtn]}
+                    onPress={() => {
+                      setDetailsVisible(false);
+                      if (selectedItem) acceptDonation(selectedItem);
+                      setSelectedItem(null);
+                    }}
+                  >
+                    <Text style={styles.btnText}>Accept</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.rejectBtn]}
+                    onPress={() => {
+                      setDetailsVisible(false);
+                      if (selectedItem) rejectDonation(selectedItem);
+                      setSelectedItem(null);
+                    }}
+                  >
+                    <Text style={styles.btnText}>Reject</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.btn, styles.closeBtn]}
+                    onPress={() => {
+                      setDetailsVisible(false);
+                      setSelectedItem(null);
+                    }}
+                  >
+                    <Text style={styles.btnText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Full-Screen Image Viewer */}
+      <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)}>
+        <Pressable
+          style={styles.imageViewerOverlay}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <View style={styles.imageViewerContent}>
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage }} style={styles.imageViewerImage} resizeMode="contain" />
             ) : (
-              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+              <Image source={require("../assets/icon.png")} style={styles.imageViewerImage} resizeMode="contain" />
             )}
 
-            <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
-            <Text style={styles.modalDesc}>{selected?.note?.trim() ? selected.note : "No description"}</Text>
-            <Text style={styles.modalDate}>Date: {getYMD(selected?.created_at) || "-"}</Text>
-            <Text style={styles.modalDate}>
-              Delivery:{" "}
-              <Text style={{ fontWeight: "700" }}>
-                {selected?.delivery_method === "association"
-                  ? "Association Pickup"
-                  : "Donor will deliver"}
-              </Text>
-            </Text>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.btn, styles.acceptBtn]}
-                onPress={() => {
-                  setDetailsVisible(false);
-                  if (selected) acceptDonation(selected);
-                  setSelected(null);
-                }}
-              >
-                <Text style={styles.btnText}>Accept</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.btn, styles.rejectBtn]}
-                onPress={() => {
-                  setDetailsVisible(false);
-                  if (selected) rejectDonation(selected);
-                  setSelected(null);
-                }}
-              >
-                <Text style={styles.btnText}>Reject</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.btn, styles.closeBtn]}
-                onPress={() => {
-                  setDetailsVisible(false);
-                  setSelected(null);
-                }}
-              >
-                <Text style={styles.btnText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
+            {/* Close Button */}
+            <TouchableOpacity
+              style={styles.imageCloseBtn}
+              onPress={() => setImageViewerVisible(false)}
+            >
+              <Text style={styles.imageCloseBtnText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -437,19 +532,25 @@ const styles = StyleSheet.create({
   clearBtnText: { color: "#fff", fontWeight: "800" },
   content: { flex: 1, backgroundColor: "#EBE1D7" },
   card: { backgroundColor: "#fff", padding: 15, borderRadius: 15, marginBottom: 20, elevation: 3 },
-  itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 10 },
+  groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  itemCount: { fontSize: 12, color: "#666", marginTop: 3 },
+  itemsContainer: { marginBottom: 15 },
+  groupItem: { paddingVertical: 10 },
+  groupItemBorder: { borderTopWidth: 1, borderTopColor: "#e0e0e0" },
+  itemContent: { flexDirection: "row", alignItems: "flex-start" },
+  itemImage: { width: 70, height: 70, borderRadius: 10 },
+  itemActionButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, gap: 5 },
   title: { fontSize: 18, fontWeight: "700", color: "#333" },
   subtitle: { fontSize: 14, color: "#666", marginVertical: 5, width: "90%" },
   deadline: { marginTop: 5, fontSize: 14, color: "#333" },
-  statusContainer: { position: "absolute", right: 10, top: 10 },
+  statusContainer: { position: "absolute", right: 15, top: 15 },
   statusPending: { backgroundColor: "#6ea8fe", color: "#fff", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, fontWeight: "700" },
-  actionButtons: { flexDirection: "row", justifyContent: "space-between", marginTop: 15 },
-  btn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, alignItems: "center" },
+  btn: { paddingVertical: 5, paddingHorizontal: 8, borderRadius: 8, alignItems: "center", flex: 1 },
   acceptBtn: { backgroundColor: "#4CAF50" },
   rejectBtn: { backgroundColor: "#f44336" },
   detailsBtn: { backgroundColor: "#A27571" },
   closeBtn: { backgroundColor: "#8b6f69" },
-  btnText: { color: "#fff", fontWeight: "700" },
+  btnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", padding: 20 },
   filterModalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
   sep: { height: 10 },
@@ -460,8 +561,41 @@ const styles = StyleSheet.create({
   modalCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", borderRadius: 16, padding: 16, elevation: 10 },
   modalTitle: { fontSize: 18, fontWeight: "800", color: "#8b6f69", marginBottom: 12, textAlign: "center", fontFamily: "Times New Roman" },
   modalImage: { width: "100%", height: 180, borderRadius: 12, marginBottom: 12, backgroundColor: "#f2f2f2" },
+  modalItemsList: { marginVertical: 12, maxHeight: 280 },
+  modalItem: { flexDirection: "row", alignItems: "flex-start" },
+  modalItemImage: { width: 60, height: 60, borderRadius: 8, backgroundColor: "#f2f2f2" },
   modalName: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 6 },
   modalDesc: { fontSize: 14, color: "#555", marginBottom: 10, lineHeight: 20 },
   modalDate: { fontSize: 13, color: "#666", marginBottom: 14 },
   modalActions: { flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  // Image Viewer Styles
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  imageViewerContent: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerImage: {
+    width: "100%",
+    height: "80%",
+  },
+  imageCloseBtn: {
+    backgroundColor: "#8b6f69",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  imageCloseBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 });

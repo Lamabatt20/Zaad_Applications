@@ -119,18 +119,18 @@ export default function DonationHistoryScreen({ navigation }) {
                 </TouchableOpacity>
               )}
 
-              {isAccepted && !isCompleted && isDonor && (
-                <TouchableOpacity
-                  style={styles.deliverBtn}
-                  onPress={() =>
-                    navigation.navigate("DonationDeliverScreen", {
-                      donation_id: item.donation_id,
-                    })
-                  }
-                >
-                  <Text style={styles.btnText}>Mark as Delivered</Text>
-                </TouchableOpacity>
-              )}
+              {/* Mark as Delivered - DISABLED: DonationDeliverScreen uses react-native-maps
+              <TouchableOpacity
+                style={styles.deliverBtn}
+                onPress={() =>
+                  navigation.navigate("DonationDeliverScreen", {
+                    donation_id: item.donation_id,
+                  })
+                }
+              >
+                <Text style={styles.btnText}>Mark as Delivered</Text>
+              </TouchableOpacity>
+              */}
 
               {isCompleted && !isRated && (
                 <TouchableOpacity

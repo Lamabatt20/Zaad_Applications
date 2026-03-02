@@ -27,6 +27,8 @@ export default function AcceptedClothesScreen({ navigation }) {
   const [selected, setSelected] = useState(null);
   const [selectedDate, setSelectedDate] = useState("ALL");
   const [filterVisible, setFilterVisible] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const buildImageUrl = (raw) => {
     if (!raw) return null;
@@ -53,6 +55,7 @@ export default function AcceptedClothesScreen({ navigation }) {
 
   const normalizeDonation = (x) => ({
     donation_id: x.donation_id,
+    donor_id: x.donor_id,
     donor_name: x.donor_name ?? "Donor",
     item_image: buildImageUrl(x.item_image),
     note: x.note ?? "",
@@ -116,6 +119,80 @@ export default function AcceptedClothesScreen({ navigation }) {
     }
   };
 
+  const groupDonations = (donations) => {
+    // Group by donor_id first
+    const byDonor = {};
+    donations.forEach((d) => {
+      if (!byDonor[d.donor_id]) {
+        byDonor[d.donor_id] = [];
+      }
+      byDonor[d.donor_id].push(d);
+    });
+
+    // Within each donor, group by time (5 minute windows)
+    const groups = [];
+    Object.values(byDonor).forEach((donorDonations) => {
+      const sorted = donorDonations.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      let currentGroup = [sorted[0]];
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = new Date(sorted[i - 1].created_at).getTime();
+        const curr = new Date(sorted[i].created_at).getTime();
+        const diffMinutes = (curr - prev) / (1000 * 60);
+
+        if (diffMinutes <= 5) {
+          currentGroup.push(sorted[i]);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = [sorted[i]];
+        }
+      }
+      if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+      }
+    });
+
+    return groups;
+  };
+
+  const approveGroup = async (group) => {
+    try {
+      const groupKey = group.map((d) => d.donation_id).join(",");
+      setSubmitting((s) => ({ ...s, [groupKey]: true }));
+
+      // Approve all in group
+      await Promise.all(
+        group.map((d) => axios.post(`${config.API_URL}/assoc/donations/${d.donation_id}/approve`, {}))
+      );
+
+      // Remove from UI
+      const idsToRemove = new Set(group.map((d) => d.donation_id));
+      setItems((prev) => prev.filter((d) => !idsToRemove.has(d.donation_id)));
+
+      console.log("✅ Group approved successfully");
+    } catch (e) {
+      console.error("❌ Approve error:", e);
+      Alert.alert("Error", "Could not approve group");
+    } finally {
+      const groupKey = group.map((d) => d.donation_id).join(",");
+      setSubmitting((s) => {
+        const c = { ...s };
+        delete c[groupKey];
+        return c;
+      });
+    }
+  };
+
+  const assignGroup = async (group) => {
+    // Navigate to assign screen with first donation_id
+    // In a real scenario, you might want to assign all at once
+    if (group.length > 0) {
+      navigation.navigate("AssignDeliveryPerson", {
+        donation_id: group[0].donation_id,
+      });
+    }
+  };
+
   const allDates = useMemo(() => {
     const set = new Set(items.map((d) => getYMD(d.created_at)));
     return ["ALL", ...Array.from(set).filter(Boolean).sort().reverse()];
@@ -126,45 +203,73 @@ export default function AcceptedClothesScreen({ navigation }) {
       ? items
       : items.filter((d) => getYMD(d.created_at) === selectedDate);
 
-  const renderItem = ({ item }) => {
-    const isSubmitting = !!submitting[item.donation_id];
+  // Group the filtered items
+  const groupedItems = useMemo(() => {
+    return groupDonations(filteredItems);
+  }, [filteredItems]);
 
-    const isAssocPickup = String(item.delivery_method).toLowerCase() === "association";
-    const isNeedsAssign = String(item.delivery_status || "").toUpperCase() === "NEEDS_ASSIGNMENT";
+  const renderItem = ({ item: group }) => {
+    const firstDonation = group[0];
+    const groupKey = group.map((d) => d.donation_id).join(",");
+    const isSubmitting = !!submitting[groupKey];
 
-    const showAssignBtn = isAssocPickup && isNeedsAssign;
+    // Check if any item needs assignment
+    const anyNeedsAssign = group.some((item) => {
+      const isAssocPickup = String(item.delivery_method).toLowerCase() === "association";
+      const isNeedsAssign = String(item.delivery_status || "").toUpperCase() === "NEEDS_ASSIGNMENT";
+      return isAssocPickup && isNeedsAssign;
+    });
 
     return (
       <View style={styles.card}>
-        <Image
-          source={
-            item.item_image
-              ? { uri: item.item_image }
-              : require("../assets/icon.png")
-          }
-          style={styles.itemImage}
-        />
+        {/* Group Header */}
+        <View style={styles.groupHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{firstDonation.donor_name}</Text>
+            <Text style={styles.itemCount}>
+              {group.length} item{group.length > 1 ? "s" : ""}
+            </Text>
+          </View>
+        </View>
 
-        <Text style={styles.title}>{item.donor_name}</Text>
-        <Text style={styles.subtitle} numberOfLines={2}>
-          {item.note || "No description"}
-        </Text>
-        <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
+        {/* Items in Group */}
+        <View style={styles.itemsContainer}>
+          {group.map((item, idx) => (
+            <View key={item.donation_id} style={[styles.groupItem, idx > 0 && styles.groupItemBorder]}>
+              <Image
+                source={
+                  item.item_image
+                    ? { uri: item.item_image }
+                    : require("../assets/icon.png")
+                }
+                style={styles.itemImage}
+              />
 
-        {/* Delivery Method & Status */}
-        <Text style={styles.deliveryInfo}>
-          Delivery Method:{" "}
-          {isAssocPickup ? "Association Pickup" : "Donor will deliver"}
-        </Text>
-        <Text style={styles.deliveryInfo}>
-          Delivery Status: {prettyDeliveryStatus(item.delivery_status)}
-        </Text>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.subtitle} numberOfLines={2}>
+                  {item.note || "No description"}
+                </Text>
+                <Text style={styles.deadline}>Date: {getYMD(item.created_at)}</Text>
+                <Text style={styles.deliveryInfo}>
+                  Delivery:{" "}
+                  {String(item.delivery_method).toLowerCase() === "association"
+                    ? "Association Pickup"
+                    : "Donor will deliver"}
+                </Text>
+                <Text style={styles.deliveryInfo}>
+                  Status: {prettyDeliveryStatus(item.delivery_status)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
 
+        {/* Group Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.detailsBtn, isSubmitting && { opacity: 0.6 }]}
             onPress={() => {
-              setSelected(item);
+              setSelected(group);
               setDetailsVisible(true);
             }}
             disabled={isSubmitting}
@@ -172,14 +277,10 @@ export default function AcceptedClothesScreen({ navigation }) {
             <Text style={styles.btnText}>Details</Text>
           </TouchableOpacity>
 
-          {showAssignBtn && (
+          {anyNeedsAssign && (
             <TouchableOpacity
               style={[styles.assignBtn, isSubmitting && { opacity: 0.6 }]}
-              onPress={() => {
-                navigation.navigate("AssignDeliveryPerson", {
-                  donation_id: item.donation_id,
-                });
-              }}
+              onPress={() => assignGroup(group)}
               disabled={isSubmitting}
             >
               <Text style={styles.btnText}>Assign</Text>
@@ -188,7 +289,7 @@ export default function AcceptedClothesScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.approveBtn, isSubmitting && { opacity: 0.6 }]}
-            onPress={() => approveDonation(item.donation_id)}
+            onPress={() => approveGroup(group)}
             disabled={isSubmitting}
           >
             <Text style={styles.btnText}>Approve</Text>
@@ -241,8 +342,8 @@ export default function AcceptedClothesScreen({ navigation }) {
         <ActivityIndicator size="large" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={filteredItems}
-          keyExtractor={(i) => String(i.donation_id)}
+          data={groupedItems}
+          keyExtractor={(item, idx) => `group-${idx}`}
           renderItem={renderItem}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -314,19 +415,90 @@ export default function AcceptedClothesScreen({ navigation }) {
           onPress={() => setDetailsVisible(false)}
         >
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Donation Details</Text>
-            <Text style={{ fontWeight: "700" }}>{selected?.donor_name}</Text>
-            <Text style={{ marginTop: 6 }}>{selected?.note}</Text>
+            <Text style={styles.modalTitle}>Group Details</Text>
 
-            <Text style={{ marginTop: 10 }}>
-              Delivery Method:{" "}
-              {String(selected?.delivery_method).toLowerCase() === "association"
-                ? "Association Pickup"
-                : "Donor will deliver"}
-            </Text>
-            <Text>
-              Delivery Status: {prettyDeliveryStatus(selected?.delivery_status)}
-            </Text>
+            {Array.isArray(selected) ? (
+              <>
+                <Text style={{ fontWeight: "700", marginBottom: 6 }}>{selected[0]?.donor_name}</Text>
+                <Text style={{ marginBottom: 12, color: "#666" }}>{selected.length} items in this group</Text>
+
+                {/* Items List */}
+                <View style={styles.groupDetailsList}>
+                  {selected.map((item, idx) => (
+                    <View key={item.donation_id} style={[idx > 0 && { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#e0e0e0" }]}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedImage(item.item_image);
+                          setImageViewerVisible(true);
+                        }}
+                      >
+                        <Image 
+                          source={item.item_image ? { uri: item.item_image } : require("../assets/icon.png")}
+                          style={{ width: "100%", height: 150, borderRadius: 8, marginBottom: 8 }}
+                        />
+                        <Text style={{ fontSize: 11, color: "#8b6f69", fontWeight: "600" }}>👆 Tap to zoom</Text>
+                      </TouchableOpacity>
+                      <Text style={{ fontWeight: "600", marginBottom: 4, marginTop: 8 }}>{item.note || "No description"}</Text>
+                      <Text style={{ fontSize: 12, color: "#666" }}>
+                        Delivery:{" "}
+                        {String(item.delivery_method).toLowerCase() === "association"
+                          ? "Association Pickup"
+                          : "Donor will deliver"}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: "#666" }}>
+                        Status: {prettyDeliveryStatus(item.delivery_status)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={{ fontWeight: "700" }}>{selected?.donor_name}</Text>
+                <Text style={{ marginTop: 6 }}>{selected?.note}</Text>
+
+                <Text style={{ marginTop: 10 }}>
+                  Delivery Method:{" "}
+                  {String(selected?.delivery_method).toLowerCase() === "association"
+                    ? "Association Pickup"
+                    : "Donor will deliver"}
+                </Text>
+                <Text>
+                  Delivery Status: {prettyDeliveryStatus(selected?.delivery_status)}
+                </Text>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.detailsBtn, { alignSelf: "flex-end", marginTop: 16 }]}
+              onPress={() => setDetailsVisible(false)}
+            >
+              <Text style={styles.btnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Full-Screen Image Viewer */}
+      <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)}>
+        <Pressable
+          style={styles.imageViewerOverlay}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <View style={styles.imageViewerContent}>
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage }} style={styles.imageViewerImage} resizeMode="contain" />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.imageViewerImage} resizeMode="contain" />
+            )}
+
+            {/* Close Button */}
+            <TouchableOpacity
+              style={styles.imageCloseBtn}
+              onPress={() => setImageViewerVisible(false)}
+            >
+              <Text style={styles.imageCloseBtnText}>✕ Close</Text>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -369,7 +541,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     elevation: 3,
   },
-  itemImage: { width: 70, height: 70, borderRadius: 10, marginBottom: 8 },
+  groupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  itemCount: { fontSize: 12, color: "#666", marginTop: 3 },
+  itemsContainer: { marginBottom: 15 },
+  groupItem: { paddingVertical: 10, flexDirection: "row" },
+  groupItemBorder: { borderTopWidth: 1, borderTopColor: "#e0e0e0" },
+  itemImage: { width: 70, height: 70, borderRadius: 10 },
   title: { fontSize: 16, fontWeight: "700" },
   subtitle: { color: "#555", marginVertical: 4 },
   deadline: { fontSize: 13, color: "#333" },
@@ -445,6 +622,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 14,
   },
+  groupDetailsList: { maxHeight: 280, marginVertical: 12 },
   modalTitle: {
     fontSize: 18,
     fontWeight: "800",
@@ -452,5 +630,35 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: "center",
     fontFamily: "Times New Roman",
+  },
+  // Image Viewer Styles
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  imageViewerContent: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageViewerImage: {
+    width: "100%",
+    height: "80%",
+  },
+  imageCloseBtn: {
+    backgroundColor: "#8b6f69",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  imageCloseBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

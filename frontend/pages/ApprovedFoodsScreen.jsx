@@ -32,6 +32,10 @@ export default function ApprovedFoodScreen() {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [selected, setSelected] = useState(null);
 
+  // Image viewer (full-screen zoom)
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+
   // Date filter
   const [selectedDate, setSelectedDate] = useState("ALL");
   const [filterVisible, setFilterVisible] = useState(false);
@@ -315,11 +319,20 @@ export default function ApprovedFoodScreen() {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Donation Details</Text>
 
-            {selected?.item_image ? (
-              <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
-            ) : (
-              <Image source={require("../assets/icon.png")} style={styles.modalImage} />
-            )}
+            {/* Clickable Image */}
+            <TouchableOpacity
+              onPress={() => {
+                setSelectedImage(selected.item_image);
+                setImageViewerVisible(true);
+              }}
+            >
+              {selected?.item_image ? (
+                <Image source={{ uri: selected.item_image }} style={styles.modalImage} />
+              ) : (
+                <Image source={require("../assets/icon.png")} style={styles.modalImage} />
+              )}
+              <Text style={{ fontSize: 12, color: "#8b6f69", marginBottom: 8, fontWeight: "600", textAlign: "center" }}>👆 Tap to zoom</Text>
+            </TouchableOpacity>
 
             <Text style={styles.modalName}>{selected?.donor_name || "Donor"}</Text>
 
@@ -414,6 +427,30 @@ export default function ApprovedFoodScreen() {
               </TouchableOpacity>
             </View>
           </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Full-Screen Image Viewer */}
+      <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)}>
+        <Pressable
+          style={styles.imageViewerOverlay}
+          onPress={() => setImageViewerVisible(false)}
+        >
+          <View style={styles.imageViewerContent}>
+            {selectedImage ? (
+              <Image source={{ uri: selectedImage }} style={styles.imageViewerImage} resizeMode="contain" />
+            ) : (
+              <Image source={require("../assets/icon.png")} style={styles.imageViewerImage} resizeMode="contain" />
+            )}
+
+            {/* Close Button */}
+            <TouchableOpacity
+              style={styles.imageCloseBtn}
+              onPress={() => setImageViewerVisible(false)}
+            >
+              <Text style={styles.imageCloseBtnText}>✕ Close</Text>
+            </TouchableOpacity>
+          </View>
         </Pressable>
       </Modal>
     </SafeAreaView>
@@ -592,5 +629,35 @@ feedbackSend: {
   alignSelf: "flex-end",
   fontWeight: "800",
   color: "#8b6f69",
+},
+// Image Viewer Styles
+imageViewerOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.95)",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: 20,
+},
+imageViewerContent: {
+  width: "100%",
+  height: "100%",
+  justifyContent: "center",
+  alignItems: "center",
+},
+imageViewerImage: {
+  width: "100%",
+  height: "80%",
+},
+imageCloseBtn: {
+  backgroundColor: "#8b6f69",
+  paddingVertical: 10,
+  paddingHorizontal: 20,
+  borderRadius: 8,
+  marginTop: 20,
+},
+imageCloseBtnText: {
+  color: "#fff",
+  fontWeight: "700",
+  fontSize: 14,
 },
 });
