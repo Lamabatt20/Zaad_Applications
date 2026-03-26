@@ -39,7 +39,7 @@ The application also integrates AI technologies to analyze donations, verify foo
   <img src="images/login page.png" width="230"/>
   <img src="images/change password page.png" width="230"/>
   <img src="images/regester page.png" width="230"/>
-  <img src="images/verification email.png" width="230"/>
+  <img src="images/verfication email.png" width="230"/>
 </p>
 
 ---
