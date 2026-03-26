@@ -76,7 +76,7 @@ The application also integrates AI technologies to analyze donations, verify foo
   <img src="images/scan the dairy.png" width="230"/>
   <img src="images/rejected is  cooked.png" width="230"/>
   <img src="images/rejected is damage.png" width="230"/>
-  <img src="images/sucess donation message.png" width="230"/>
+  <img src="images/suceuss donation message.png" width="230"/>
 </p>
 
 ---
